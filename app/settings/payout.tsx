@@ -7,12 +7,21 @@ export default function PayoutPlaceholder() {
 
   return (
     <View style={styles.screen}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={22} color="#0F1E17" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Payouts</Text>
-        <View style={{ width: 22 }} />
+      {/* 🌿 HEADER */}
+      <View style={styles.headerWrap}>
+        <View style={styles.headerRow}>
+          <TouchableOpacity
+            style={styles.headerBtn}
+            onPress={() => router.push("/settings")}
+          >
+            <Ionicons name="arrow-back" size={22} color="#0F1E17" />
+            <Text style={styles.headerSub}>Settings</Text>
+          </TouchableOpacity>
+
+          <Text style={styles.headerTitle}>Payouts</Text>
+
+          <View style={{ width: 60 }} />
+        </View>
       </View>
 
       <View style={styles.card}>
@@ -28,20 +37,43 @@ export default function PayoutPlaceholder() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#EAF4EF" },
-  header: {
+  screen: {
+    flex: 1,
+    backgroundColor: "#EAF4EF",
+  },
+
+  /* 🌿 HEADER */
+  headerWrap: {
+    backgroundColor: "#7FAF9B",
     paddingTop: 60,
     paddingBottom: 12,
     paddingHorizontal: 14,
+  },
+
+  headerRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
+
   headerTitle: {
     fontSize: 18,
     fontWeight: "800",
     color: "#0F1E17",
   },
+
+  headerBtn: {
+    alignItems: "center",
+    minWidth: 60,
+  },
+
+  headerSub: {
+    marginTop: 2,
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#0F1E17",
+  },
+
   card: {
     margin: 20,
     padding: 24,
@@ -49,12 +81,14 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     alignItems: "center",
   },
+
   title: {
     marginTop: 12,
     fontSize: 16,
     fontWeight: "800",
     color: "#0F1E17",
   },
+
   text: {
     marginTop: 8,
     textAlign: "center",

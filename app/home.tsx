@@ -1,6 +1,14 @@
+import { Ionicons } from "@expo/vector-icons"
 import { useFocusEffect, useRouter } from "expo-router"
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { ActivityIndicator, StyleSheet, View } from "react-native"
+import {
+  ActivityIndicator,
+  Alert,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native"
 
 import FilterBar, { FilterKey } from "../components/home/FilterBar"
 import HomeHeader from "../components/home/HomeHeader"
@@ -8,6 +16,7 @@ import ListingsGrid from "../components/home/ListingsGrid"
 import SearchBar from "../components/home/SearchBar"
 
 import { Listing } from "../components/home/ListingCard"
+import { registerForPushNotifications } from "../lib/notifications"
 import { supabase } from "../lib/supabase"
 
 /* ---------------- CATEGORY MAPS ---------------- */
@@ -51,6 +60,7 @@ export default function HomeScreen() {
 
   useEffect(() => {
     loadListings()
+    setupPushTokenIfNeeded()
   }, [])
 
   useFocusEffect(
@@ -88,6 +98,50 @@ export default function HomeScreen() {
     setLoading(false)
   }
 
+  /* ---------------- PUSH TOKEN SETUP ---------------- */
+
+  async function setupPushTokenIfNeeded() {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) return
+
+    const { data: profile, error } = await supabase
+      .from("profiles")
+      .select("expo_push_token")
+      .eq("id", user.id)
+      .single()
+
+    if (error) return
+    if (profile?.expo_push_token) return
+
+    // Optional soft prompt before system prompt
+    const confirm = await new Promise<boolean>((resolve) => {
+      Alert.alert(
+        "Enable Notifications?",
+        "Get notified about messages, offers, and order updates.",
+        [
+          { text: "Not Now", onPress: () => resolve(false) },
+          { text: "Enable", onPress: () => resolve(true) },
+        ]
+      )
+    })
+
+    if (!confirm) return
+
+    const token = await registerForPushNotifications()
+    if (!token) return
+
+    await supabase
+      .from("profiles")
+      .update({
+        expo_push_token: token,
+        notifications_enabled: true,
+      })
+      .eq("id", user.id)
+  }
+
   /* ---------------- UNREAD MESSAGES ---------------- */
 
   async function checkUnreadMessages() {
@@ -100,17 +154,13 @@ export default function HomeScreen() {
       return
     }
 
-    const { count, error } = await supabase
+    const { count } = await supabase
       .from("messages")
       .select("id", { count: "exact", head: true })
       .neq("sender_id", user.id)
       .is("read_at", null)
 
-    if (!error && count && count > 0) {
-      setHasUnreadMessages(true)
-    } else {
-      setHasUnreadMessages(false)
-    }
+    setHasUnreadMessages(!!count && count > 0)
   }
 
   /* ---------------- FILTERING ---------------- */
@@ -153,7 +203,6 @@ export default function HomeScreen() {
             !CASE_CATEGORIES.includes(l.category)
         )
 
-      case "all":
       default:
         return result
     }
@@ -167,9 +216,7 @@ export default function HomeScreen() {
         <HomeHeader
           hasUnreadNotifications={false}
           hasUnreadMessages={hasUnreadMessages}
-          onNotificationsPress={() =>
-            router.push("/notifications")
-          }
+          onNotificationsPress={() => router.push("/notifications")}
           onMessagesPress={() => router.push("/messages")}
           onProfilePress={() => router.push("/profile")}
         />
@@ -191,6 +238,16 @@ export default function HomeScreen() {
       ) : (
         <ListingsGrid listings={filteredListings} />
       )}
+
+      {/* FLOATING CREATE LISTING BUTTON */}
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={() => router.push("/seller-hub/create-listing")}
+        activeOpacity={0.9}
+      >
+        <Ionicons name="add" size={20} color="#0F1E17" />
+        <Text style={styles.fabText}>Create Listing</Text>
+      </TouchableOpacity>
     </View>
   )
 }
@@ -204,7 +261,32 @@ const styles = StyleSheet.create({
   },
 
   headerBlock: {
-    backgroundColor: "#0F1E17",
+    backgroundColor: "#7FAF9B",
     paddingBottom: 10,
+  },
+
+  fab: {
+    position: "absolute",
+    bottom: 55,
+    left: 24,
+    right: 24,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: "#7FAF9B",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    shadowColor: "#000",
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 6,
+  },
+
+  fabText: {
+    fontSize: 15,
+    fontWeight: "900",
+    color: "#0F1E17",
   },
 })

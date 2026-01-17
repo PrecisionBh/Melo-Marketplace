@@ -2,12 +2,12 @@ import { Ionicons } from "@expo/vector-icons"
 import { useRouter } from "expo-router"
 import { useEffect, useState } from "react"
 import {
-    FlatList,
-    Image,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  FlatList,
+  Image,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native"
 
 import { useAuth } from "../../context/AuthContext"
@@ -61,7 +61,6 @@ export default function MessagesScreen() {
   const openConversation = async (conversationId: string) => {
     if (!session?.user) return
 
-    // Mark messages as read
     await supabase
       .from("messages")
       .update({ is_read: true })
@@ -73,63 +72,56 @@ export default function MessagesScreen() {
 
   /* ---------------- RENDER ITEM ---------------- */
 
-  const renderItem = ({ item }: { item: Conversation }) => {
-    return (
-      <TouchableOpacity
-        style={styles.row}
-        onPress={() => openConversation(item.id)}
-      >
-        {/* AVATAR */}
-        <Image
-          source={
-            item.other_user.avatar_url
-              ? { uri: item.other_user.avatar_url }
-              : require("../../assets/images/avatar-placeholder.png")
-          }
-          style={styles.avatar}
-        />
+  const renderItem = ({ item }: { item: Conversation }) => (
+    <TouchableOpacity
+      style={styles.row}
+      onPress={() => openConversation(item.id)}
+    >
+      <Image
+        source={
+          item.other_user.avatar_url
+            ? { uri: item.other_user.avatar_url }
+            : require("../../assets/images/avatar-placeholder.png")
+        }
+        style={styles.avatar}
+      />
 
-        {/* TEXT */}
-        <View style={styles.textWrap}>
-          <Text style={styles.name}>
-            {item.other_user.display_name}
-          </Text>
+      <View style={styles.textWrap}>
+        <Text style={styles.name}>
+          {item.other_user.display_name}
+        </Text>
 
-          <Text
-            style={styles.preview}
-            numberOfLines={1}
-          >
-            {item.last_message}
-          </Text>
-        </View>
+        <Text style={styles.preview} numberOfLines={1}>
+          {item.last_message}
+        </Text>
+      </View>
 
-        {/* RIGHT SIDE */}
-        <View style={styles.rightWrap}>
-          <Text style={styles.time}>
-            {formatTime(item.last_message_at)}
-          </Text>
+      <View style={styles.rightWrap}>
+        <Text style={styles.time}>
+          {formatTime(item.last_message_at)}
+        </Text>
 
-          {item.unread_count > 0 && (
-            <View style={styles.unreadBadge}>
-              <Text style={styles.unreadText}>
-                {item.unread_count}
-              </Text>
-            </View>
-          )}
-        </View>
-      </TouchableOpacity>
-    )
-  }
+        {item.unread_count > 0 && (
+          <View style={styles.unreadBadge}>
+            <Text style={styles.unreadText}>
+              {item.unread_count}
+            </Text>
+          </View>
+        )}
+      </View>
+    </TouchableOpacity>
+  )
 
   return (
     <View style={styles.screen}>
-      {/* HEADER */}
-      <View style={styles.topBar}>
+      {/* SAGE HEADER */}
+      <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={22} color="#0F1E17" />
         </TouchableOpacity>
 
-        <Text style={styles.title}>Messages</Text>
+        <Text style={styles.headerTitle}>Messages</Text>
+
         <View style={{ width: 22 }} />
       </View>
 
@@ -161,16 +153,18 @@ const styles = StyleSheet.create({
     backgroundColor: "#EAF4EF",
   },
 
-  topBar: {
-    paddingTop: 50,
+  /* SAGE HEADER */
+  header: {
+    paddingTop: 60,
+    paddingBottom: 14,
     paddingHorizontal: 14,
-    paddingBottom: 10,
+    backgroundColor: "#7FAF9B", // 🌿 sage green
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
 
-  title: {
+  headerTitle: {
     fontSize: 18,
     fontWeight: "800",
     color: "#0F1E17",
@@ -183,6 +177,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: "#D6E6DE",
+    backgroundColor: "#fff",
   },
 
   avatar: {

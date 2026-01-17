@@ -2,15 +2,15 @@ import { Ionicons } from "@expo/vector-icons"
 import { useRouter } from "expo-router"
 import { useEffect, useState } from "react"
 import {
-    Alert,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native"
 
 import { useAuth } from "../../context/AuthContext"
@@ -99,21 +99,24 @@ export default function AddressScreen() {
     }
 
     Alert.alert("Saved", "Shipping address updated.")
-    router.back()
+    router.push("/settings")
   }
 
   /* ---------------- UI ---------------- */
 
   return (
     <View style={styles.screen}>
-      {/* HEADER */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={22} color="#0F1E17" />
+      {/* 🌿 HEADER */}
+      <View style={styles.headerWrap}>
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={() => router.push("/settings")}
+        >
+          <Ionicons name="arrow-back" size={20} color="#0F1E17" />
+          <Text style={styles.backText}>Settings</Text>
         </TouchableOpacity>
 
         <Text style={styles.headerTitle}>Shipping Address</Text>
-        <View style={{ width: 22 }} />
       </View>
 
       <KeyboardAvoidingView
@@ -218,13 +221,27 @@ const styles = StyleSheet.create({
     backgroundColor: "#EAF4EF",
   },
 
-  header: {
+  /* 🌿 PREMIUM HEADER */
+  headerWrap: {
+    backgroundColor: "#7FAF9B",
     paddingTop: 60,
-    paddingBottom: 12,
-    paddingHorizontal: 14,
-    flexDirection: "row",
-    justifyContent: "space-between",
+    paddingBottom: 14,
     alignItems: "center",
+  },
+
+  backBtn: {
+    position: "absolute",
+    left: 14,
+    bottom: 14,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  backText: {
+    marginLeft: 6,
+    color: "#0F1E17",
+    fontWeight: "600",
+    fontSize: 13,
   },
 
   headerTitle: {

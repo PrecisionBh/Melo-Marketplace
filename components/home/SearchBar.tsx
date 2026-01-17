@@ -14,12 +14,12 @@ export default function SearchBar({
 }: Props) {
   return (
     <View style={styles.searchBox}>
-      <Ionicons name="search" size={18} color="#9FB8AC" />
+      <Ionicons name="search" size={18} color="#6B8F7D" />
       <TextInput
         value={value}
         onChangeText={onChange}
         placeholder={placeholder}
-        placeholderTextColor="#9FB8AC"
+        placeholderTextColor="#6B8F7D"
         style={styles.searchInput}
       />
     </View>
@@ -29,7 +29,7 @@ export default function SearchBar({
 const styles = StyleSheet.create({
   searchBox: {
     marginTop: 8,
-    backgroundColor: "#24352D",
+    backgroundColor: "#ffffff", // 🔥 sage green background
     borderRadius: 16,
     height: 44,
     flexDirection: "row",
@@ -38,7 +38,7 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     marginLeft: 8,
-    color: "#E8F5EE",
+    color: "#0F1E17", // 🔥 dark green text
     flex: 1,
   },
 })

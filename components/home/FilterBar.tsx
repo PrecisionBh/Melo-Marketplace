@@ -1,9 +1,9 @@
 import {
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native"
 
 export type FilterKey =
@@ -58,7 +58,7 @@ export default function FilterBar({ active, onChange }: Props) {
 
 const styles = StyleSheet.create({
   wrap: {
-    backgroundColor: "#0F1E17", // same as header
+    backgroundColor: "#7FAF9B", // 🔥 sage green (matches header)
     paddingVertical: 8,
     paddingLeft: 12,
   },
@@ -69,23 +69,23 @@ const styles = StyleSheet.create({
   },
 
   pill: {
-    backgroundColor: "#24352D",
+    backgroundColor: "#fdfdfd", // 🔥 soft sage pill
     paddingHorizontal: 14,
     paddingVertical: 6,
     borderRadius: 999,
   },
 
   activePill: {
-    backgroundColor: "#7FAF9B",
+    backgroundColor: "#bcf9e0", // 🔥 active sage
   },
 
   text: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#CFE3D8",
+    color: "#000000", // 🔥 calm muted green
   },
 
   activeText: {
-    color: "#0F1E17",
+    color: "#0F1E17", // 🔥 dark contrast
   },
 })

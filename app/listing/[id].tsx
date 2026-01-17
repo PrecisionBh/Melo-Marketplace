@@ -2,15 +2,15 @@ import { Ionicons } from "@expo/vector-icons"
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { useEffect, useMemo, useState } from "react"
 import {
-    ActivityIndicator,
-    Dimensions,
-    Image,
-    Modal,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Dimensions,
+  Image,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native"
 
 import { useAuth } from "../../context/AuthContext"
@@ -126,83 +126,77 @@ export default function ListingDetailScreen() {
   /* ---------------- MESSAGE SELLER ---------------- */
 
   const handleMessageSeller = async () => {
-  if (!session?.user || !listing) return
+    if (!session?.user || !listing) return
 
-  const buyerId = session.user.id
-  const sellerId = listing.user_id
-  if (buyerId === sellerId) return
+    const buyerId = session.user.id
+    const sellerId = listing.user_id
+    if (buyerId === sellerId) return
 
-  let conversationId: string | null = null
+    let conversationId: string | null = null
 
-  // 1️⃣ Try buyer → seller
-  const { data: direct } = await supabase
-    .from("conversations")
-    .select("id")
-    .eq("user_one", buyerId)
-    .eq("user_two", sellerId)
-    .order("created_at", { ascending: true })
-    .limit(1)
-
-  if (direct && direct.length > 0) {
-    conversationId = direct[0].id
-  } else {
-    // 2️⃣ Try seller → buyer
-    const { data: reverse } = await supabase
+    const { data: direct } = await supabase
       .from("conversations")
       .select("id")
-      .eq("user_one", sellerId)
-      .eq("user_two", buyerId)
+      .eq("user_one", buyerId)
+      .eq("user_two", sellerId)
       .order("created_at", { ascending: true })
       .limit(1)
 
-    if (reverse && reverse.length > 0) {
-      conversationId = reverse[0].id
-    }
-  }
+    if (direct && direct.length > 0) {
+      conversationId = direct[0].id
+    } else {
+      const { data: reverse } = await supabase
+        .from("conversations")
+        .select("id")
+        .eq("user_one", sellerId)
+        .eq("user_two", buyerId)
+        .order("created_at", { ascending: true })
+        .limit(1)
 
-  // 3️⃣ Create conversation only if none exists
-  if (!conversationId) {
-    const { data: created, error } = await supabase
-      .from("conversations")
-      .insert({
-        user_one: buyerId,
-        user_two: sellerId,
-      })
+      if (reverse && reverse.length > 0) {
+        conversationId = reverse[0].id
+      }
+    }
+
+    if (!conversationId) {
+      const { data: created, error } = await supabase
+        .from("conversations")
+        .insert({
+          user_one: buyerId,
+          user_two: sellerId,
+        })
+        .select("id")
+        .single()
+
+      if (error || !created) {
+        console.error("conversation create error:", error)
+        return
+      }
+
+      conversationId = created.id
+    }
+
+    const { data: existingCard } = await supabase
+      .from("messages")
       .select("id")
-      .single()
+      .eq("conversation_id", conversationId)
+      .eq("listing_id", listing.id)
+      .limit(1)
 
-    if (error || !created) {
-      console.error("conversation create error:", error)
-      return
+    if (!existingCard || existingCard.length === 0) {
+      await supabase.from("messages").insert({
+        conversation_id: conversationId,
+        sender_id: buyerId,
+        listing_id: listing.id,
+        body: "Interested in this item",
+      })
     }
 
-    conversationId = created.id
-  }
-
-  // 4️⃣ Insert listing card ONLY if not already in chat
-  const { data: existingCard } = await supabase
-    .from("messages")
-    .select("id")
-    .eq("conversation_id", conversationId)
-    .eq("listing_id", listing.id)
-    .limit(1)
-
-  if (!existingCard || existingCard.length === 0) {
-    await supabase.from("messages").insert({
-      conversation_id: conversationId,
-      sender_id: buyerId,
-      listing_id: listing.id,
-      body: "Interested in this item",
+    router.push({
+      pathname: "/messages/[id]",
+      params: { id: conversationId! },
     })
   }
-
-  // 5️⃣ Open chat
-  router.push({
-    pathname: "/messages/[id]",
-    params: { id: conversationId! },
-  })
-}
-
 
   /* ---------------- WATCHLIST ---------------- */
 
@@ -304,6 +298,21 @@ export default function ListingDetailScreen() {
           </ScrollView>
         )}
 
+        {/* SELLER (MOVED ABOVE TITLE, CLICKABLE, BUTTON REMOVED) */}
+        {!isSeller && (
+          <View style={styles.sellerRowTop}>
+            <TouchableOpacity
+              onPress={() =>
+                router.push(`/public-profile/${listing.user_id}`)
+              }
+            >
+              <Text style={styles.sellerTextTop}>
+                Sold by {sellerName ?? "Seller"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* CONTENT */}
         <View style={styles.content}>
           {/* TITLE + HEART */}
@@ -381,29 +390,6 @@ export default function ListingDetailScreen() {
                 {listing.description}
               </Text>
             </>
-          )}
-
-          {/* SELLER + MESSAGE BUTTON */}
-          {!isSeller && (
-            <View style={styles.sellerRow}>
-              <Text style={styles.sellerText}>
-                Sold by {sellerName ?? "Seller"}
-              </Text>
-
-              <TouchableOpacity
-                style={styles.messageSellerBtn}
-                onPress={handleMessageSeller}
-              >
-                <Ionicons
-                  name="chatbubble-ellipses-outline"
-                  size={16}
-                  color="#0F1E17"
-                />
-                <Text style={styles.messageSellerText}>
-                  Message seller
-                </Text>
-              </TouchableOpacity>
-            </View>
           )}
         </View>
       </ScrollView>
@@ -612,6 +598,20 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#6B8F7D",
     fontWeight: "600",
+  },
+
+  /* ✅ NEW: seller line ABOVE title (below image) */
+  sellerRowTop: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 2,
+  },
+
+  /* ✅ NEW: seller text style for the top placement */
+  sellerTextTop: {
+    fontSize: 13,
+    color: "#6B8F7D",
+    fontWeight: "700",
   },
 
   messageSellerBtn: {

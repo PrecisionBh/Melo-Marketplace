@@ -4,19 +4,19 @@ import * as ImagePicker from "expo-image-picker"
 import { useRouter } from "expo-router"
 import { useState } from "react"
 import {
-    Alert,
-    Image,
-    ScrollView,
-    StyleSheet,
-    Switch,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native"
 
-import { useAuth } from "../context/AuthContext"
-import { supabase } from "../lib/supabase"
+import { useAuth } from "@/context/AuthContext"
+import { supabase } from "@/lib/supabase"
 
 const CATEGORIES = [
   { label: "Hard Case", value: "hard_case" },
@@ -176,7 +176,7 @@ export default function CreateListing() {
         .eq("id", listing.id)
 
       Alert.alert("Success", "Listing created!")
-      router.replace("/selling")
+      router.replace("/seller-hub")
     } catch (err: any) {
       Alert.alert("Error", err?.message ?? "Failed to create listing")
     } finally {

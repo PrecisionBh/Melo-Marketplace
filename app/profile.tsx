@@ -10,6 +10,7 @@ import {
 } from "react-native"
 
 import { useAuth } from "../context/AuthContext"
+import { isAdmin } from "../lib/admin"
 import { supabase } from "../lib/supabase"
 
 export default function ProfileScreen() {
@@ -19,20 +20,22 @@ export default function ProfileScreen() {
   const [displayName, setDisplayName] = useState<string | null>(null)
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
 
-  /* ---------------- LOAD PROFILE (REFRESH ON FOCUS) ---------------- */
+  const showAdmin = isAdmin(session?.user?.id)
+
+  /* ---------------- LOAD PROFILE ---------------- */
 
   useFocusEffect(
     useCallback(() => {
       if (!session?.user?.id) return
 
       const loadProfile = async () => {
-        const { data, error } = await supabase
+        const { data } = await supabase
           .from("profiles")
           .select("display_name, avatar_url")
           .eq("id", session.user.id)
           .single()
 
-        if (!error && data) {
+        if (data) {
           setDisplayName(data.display_name ?? null)
           setAvatarUrl(data.avatar_url ?? null)
         }
@@ -57,16 +60,11 @@ export default function ProfileScreen() {
         >
           <View style={styles.avatarWrap}>
             {avatarUrl ? (
-              <Image
-                source={{ uri: avatarUrl }}
-                style={styles.avatar}
-                resizeMode="cover"
-              />
+              <Image source={{ uri: avatarUrl }} style={styles.avatar} />
             ) : (
               <Image
                 source={require("../assets/images/avatar-placeholder.png")}
                 style={styles.avatar}
-                resizeMode="contain"
               />
             )}
           </View>
@@ -74,7 +72,6 @@ export default function ProfileScreen() {
 
         <TouchableOpacity
           onPress={() => router.push("/settings/edit-profile")}
-          activeOpacity={0.8}
         >
           <Text style={styles.name}>
             {displayName ?? "Your Name"}
@@ -89,15 +86,15 @@ export default function ProfileScreen() {
       {/* MENU */}
       <View style={styles.menu}>
         <MenuItem
-          icon="pricetag-outline"
-          label="Selling"
-          onPress={() => router.push("/selling")}
+          icon="bag-outline"
+          label="Purchases"
+          onPress={() => router.push("/buyer-hub")}
         />
 
         <MenuItem
-          icon="bag-outline"
-          label="Buying"
-          onPress={() => router.push("/buying")}
+          icon="pricetag-outline"
+          label="Seller Hub"
+          onPress={() => router.push("/seller-hub")}
         />
 
         <MenuItem
@@ -111,12 +108,21 @@ export default function ProfileScreen() {
           label="Settings"
           onPress={() => router.push("/settings")}
         />
+
+        {/* ADMIN PANEL (ADMIN ONLY) */}
+        {showAdmin && (
+          <MenuItem
+            icon="shield-checkmark-outline"
+            label="Admin Panel"
+            onPress={() => router.push("/admin")}
+          />
+        )}
       </View>
 
       {/* BACK */}
       <TouchableOpacity
         style={styles.backBtn}
-        onPress={() => router.replace("/home")}
+        onPress={() => router.replace("/")}
       >
         <Text style={styles.backText}>← Back to Home</Text>
       </TouchableOpacity>
@@ -124,7 +130,7 @@ export default function ProfileScreen() {
   )
 }
 
-/* ================= MENU ITEM ================= */
+/* ---------------- MENU ITEM ---------------- */
 
 function MenuItem({
   icon,
@@ -149,31 +155,27 @@ function MenuItem({
   )
 }
 
-/* ================= STYLES ================= */
+/* ---------------- STYLES ---------------- */
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: "#EAF4EF",
-  },
+  screen: { flex: 1, backgroundColor: "#EAF4EF" },
 
   header: {
     paddingTop: 60,
     paddingBottom: 12,
     alignItems: "center",
-    backgroundColor: "#0F1E17",
+    backgroundColor: "#7FAF9B",
   },
 
   headerTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#E8F5EE",
+    color: "#000000",
   },
 
   profileCard: {
     alignItems: "center",
     paddingVertical: 20,
-    backgroundColor: "#EAF4EF",
   },
 
   avatarWrap: {
@@ -181,8 +183,6 @@ const styles = StyleSheet.create({
     height: 90,
     borderRadius: 45,
     backgroundColor: "#24352D",
-    alignItems: "center",
-    justifyContent: "center",
     overflow: "hidden",
   },
 

@@ -3,8 +3,8 @@ import { useEffect, useRef } from "react"
 import { Image, StyleSheet, Text, View } from "react-native"
 import { useAuth } from "../context/AuthContext"
 
-const MIN_SPLASH_TIME = 3000 // 3s minimum
-const MAX_SPLASH_TIME = 5000 // 5s hard cap
+const MIN_SPLASH_TIME = 1500 // 3s minimum
+const MAX_SPLASH_TIME = 4000 // 5s hard cap
 
 export default function Index() {
   const router = useRouter()
@@ -50,7 +50,7 @@ export default function Index() {
   return (
     <View style={styles.container}>
       <Image
-        source={require("../assets/images/splash-icon.png")}
+        source={require("../assets/splash-icon.png")}
         style={styles.logo}
         resizeMode="contain"
       />

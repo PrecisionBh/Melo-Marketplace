@@ -2,13 +2,13 @@ import { Ionicons } from "@expo/vector-icons"
 import { useFocusEffect, useRouter } from "expo-router"
 import { useCallback, useState } from "react"
 import {
-    ActivityIndicator,
-    FlatList,
-    Image,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  FlatList,
+  Image,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native"
 
 import { useAuth } from "../context/AuthContext"
@@ -77,26 +77,22 @@ export default function WatchingScreen() {
   return (
     <View style={styles.screen}>
       {/* HEADER */}
-      <View style={styles.topBar}>
-        {/* HOME */}
-        <TouchableOpacity
-          style={styles.headerBtn}
-          onPress={() => router.replace("/")}
-        >
-          <Ionicons name="arrow-back" size={22} color="#0F1E17" />
-          <Text style={styles.headerSub}>Home</Text>
-        </TouchableOpacity>
+      <View style={styles.headerWrap}>
+        <View style={styles.headerRow}>
+          {/* BACK TO PROFILE */}
+          <TouchableOpacity
+            style={styles.headerBtn}
+            onPress={() => router.replace("/profile")}
+          >
+            <Ionicons name="arrow-back" size={22} color="#0F1E17" />
+            <Text style={styles.headerSub}>Profile</Text>
+          </TouchableOpacity>
 
-        <Text style={styles.headerTitle}>Watching</Text>
+          <Text style={styles.headerTitle}>Watching</Text>
 
-        {/* PROFILE */}
-        <TouchableOpacity
-          style={styles.headerBtn}
-          onPress={() => router.push("/profile")}
-        >
-          <Ionicons name="arrow-forward" size={22} color="#0F1E17" />
-          <Text style={styles.headerSub}>Profile</Text>
-        </TouchableOpacity>
+          {/* RIGHT SPACER (keeps title centered) */}
+          <View style={{ width: 60 }} />
+        </View>
       </View>
 
       {/* CONTENT */}
@@ -160,10 +156,15 @@ const styles = StyleSheet.create({
     backgroundColor: "#EAF4EF",
   },
 
-  topBar: {
+  /* 🌿 PREMIUM SAGE HEADER */
+  headerWrap: {
+    backgroundColor: "#7FAF9B",
     paddingTop: 50,
+    paddingBottom: 12,
     paddingHorizontal: 14,
-    paddingBottom: 10,
+  },
+
+  headerRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
@@ -184,7 +185,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontSize: 11,
     fontWeight: "600",
-    color: "#6B8F7D",
+    color: "#0F1E17",
   },
 
   empty: {

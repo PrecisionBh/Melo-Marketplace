@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "164324171687",
+    "project_id": "melomp-2026",
+    "storage_bucket": "melomp-2026.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:164324171687:android:bc31cabbbd299c7a9de082",
+        "android_client_info": {
+          "package_name": "com.bhoffman4.MeloMP"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC30ZJDoP7BeQ4RMr2Y4PKgvCkn3198oU4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

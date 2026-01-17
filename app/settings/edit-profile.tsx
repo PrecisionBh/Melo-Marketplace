@@ -3,14 +3,14 @@ import * as ImagePicker from "expo-image-picker"
 import { useRouter } from "expo-router"
 import { useEffect, useState } from "react"
 import {
-    Alert,
-    Image,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native"
 
 import { useAuth } from "../../context/AuthContext"
@@ -38,8 +38,6 @@ export default function EditProfileScreen() {
         .eq("id", userId)
         .single()
 
-      console.log("LOAD PROFILE:", { data, error })
-
       if (!error && data) {
         setDisplayName(data.display_name ?? "")
         setBio(data.bio ?? "")
@@ -53,16 +51,12 @@ export default function EditProfileScreen() {
   /* ---------------- IMAGE PICK ---------------- */
 
   const pickImage = async () => {
-    console.log("PICK IMAGE CLICKED")
-
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ["images"],
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.9,
     })
-
-    console.log("IMAGE PICKER RESULT:", result)
 
     if (result.canceled) return
 
@@ -78,8 +72,6 @@ export default function EditProfileScreen() {
       setUploading(true)
 
       const path = `${userId}.jpg`
-      console.log("UPLOAD PATH:", path)
-      console.log("UPLOAD URI:", uri)
 
       const formData = new FormData()
       formData.append("file", {
@@ -88,15 +80,9 @@ export default function EditProfileScreen() {
         type: "image/jpeg",
       } as any)
 
-      console.log("FORMDATA READY")
-
-      const { data, error } = await supabase.storage
+      const { error } = await supabase.storage
         .from("profile-images")
-        .upload(path, formData, {
-          upsert: true,
-        })
-
-      console.log("UPLOAD RESPONSE:", { data, error })
+        .upload(path, formData, { upsert: true })
 
       if (error) {
         Alert.alert("Upload failed", error.message)
@@ -107,11 +93,8 @@ export default function EditProfileScreen() {
         .from("profile-images")
         .getPublicUrl(path)
 
-      console.log("PUBLIC URL:", urlData)
-
       setAvatarUrl(urlData.publicUrl)
-    } catch (err) {
-      console.error("UPLOAD CRASH:", err)
+    } catch {
       Alert.alert("Upload error", "Unexpected upload error")
     } finally {
       setUploading(false)
@@ -132,8 +115,6 @@ export default function EditProfileScreen() {
       })
       .eq("id", userId)
 
-    console.log("SAVE PROFILE ERROR:", error)
-
     if (error) {
       Alert.alert("Save failed", error.message)
       return
@@ -148,13 +129,23 @@ export default function EditProfileScreen() {
     <ScrollView
       style={styles.screen}
       contentContainerStyle={{ paddingBottom: 40 }}
+      showsVerticalScrollIndicator={false}
     >
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={22} color="#0F1E17" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Edit Profile</Text>
-        <View style={{ width: 22 }} />
+      {/* 🌿 HEADER */}
+      <View style={styles.headerWrap}>
+        <View style={styles.headerRow}>
+          <TouchableOpacity
+            style={styles.headerBtn}
+            onPress={() => router.push("/settings")}
+          >
+            <Ionicons name="arrow-back" size={22} color="#0F1E17" />
+            <Text style={styles.headerSub}>Settings</Text>
+          </TouchableOpacity>
+
+          <Text style={styles.headerTitle}>Edit Profile</Text>
+
+          <View style={{ width: 60 }} />
+        </View>
       </View>
 
       <View style={styles.avatarSection}>
@@ -198,12 +189,20 @@ export default function EditProfileScreen() {
 /* ---------------- STYLES ---------------- */
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#EAF4EF" },
+  screen: {
+    flex: 1,
+    backgroundColor: "#EAF4EF",
+  },
 
-  header: {
+  /* 🌿 HEADER */
+  headerWrap: {
+    backgroundColor: "#7FAF9B",
     paddingTop: 60,
     paddingBottom: 12,
     paddingHorizontal: 14,
+  },
+
+  headerRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
@@ -212,6 +211,18 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: "800",
+    color: "#0F1E17",
+  },
+
+  headerBtn: {
+    alignItems: "center",
+    minWidth: 60,
+  },
+
+  headerSub: {
+    marginTop: 2,
+    fontSize: 11,
+    fontWeight: "600",
     color: "#0F1E17",
   },
 

@@ -1,11 +1,11 @@
 import { Ionicons } from "@expo/vector-icons"
 import { useRouter } from "expo-router"
 import {
-    Alert,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Alert,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native"
 
 import { supabase } from "../lib/supabase"
@@ -24,7 +24,7 @@ export default function SettingsScreen() {
           style: "destructive",
           onPress: async () => {
             await supabase.auth.signOut()
-            router.replace("/signinscreen") // adjust if needed
+            router.replace("/signinscreen")
           },
         },
       ]
@@ -33,70 +33,73 @@ export default function SettingsScreen() {
 
   return (
     <View style={styles.screen}>
-      {/* HEADER */}
-      <View style={styles.topBar}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={22} color="#0F1E17" />
+      {/* 🌿 HEADER */}
+      <View style={styles.headerWrap}>
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={() => router.push("/profile")}
+        >
+          <Ionicons name="arrow-back" size={20} color="#0F1E17" />
+          <Text style={styles.backText}>Profile</Text>
         </TouchableOpacity>
 
-        <Text style={styles.title}>Settings</Text>
-        <View style={{ width: 22 }} />
+        <Text style={styles.headerTitle}>Settings</Text>
       </View>
 
-      {/* SETTINGS LIST */}
+      {/* ACCOUNT */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Account</Text>
 
         <SettingsItem
           icon="person-outline"
           label="Edit account"
-          onPress={() =>
-            router.push("/settings/edit-account")
-          }
+          onPress={() => router.push("/settings/edit-account")}
         />
 
         <SettingsItem
           icon="image-outline"
           label="Edit profile"
-          onPress={() =>
-            router.push("/settings/edit-profile")
-          }
+          onPress={() => router.push("/settings/edit-profile")}
         />
 
         <SettingsItem
           icon="notifications-outline"
           label="Notifications"
-          onPress={() =>
-            router.push("/settings/edit-notifications")
-          }
+          onPress={() => router.push("/settings/edit-notifications")}
         />
       </View>
 
+      {/* PAYMENTS */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Payments</Text>
 
         <SettingsItem
           icon="home-outline"
           label="Shipping address"
-          onPress={() =>
-            router.push("/settings/address")
-          }
+          onPress={() => router.push("/settings/address")}
         />
 
         <SettingsItem
           icon="card-outline"
           label="Payment method"
-          onPress={() =>
-            router.push("/settings/payment")
-          }
+          onPress={() => router.push("/settings/payment")}
         />
 
         <SettingsItem
           icon="cash-outline"
           label="Payouts"
-          onPress={() =>
-            router.push("/settings/payout")
-          }
+          onPress={() => router.push("/settings/payout")}
+        />
+      </View>
+
+      {/* LEGAL */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Legal</Text>
+
+        <SettingsItem
+          icon="document-text-outline"
+          label="Legal & Policies"
+          onPress={() => router.push("/legal")}
         />
       </View>
 
@@ -130,15 +133,8 @@ function SettingsItem({
   onPress: () => void
 }) {
   return (
-    <TouchableOpacity
-      style={styles.item}
-      onPress={onPress}
-    >
-      <Ionicons
-        name={icon}
-        size={20}
-        color="#0F1E17"
-      />
+    <TouchableOpacity style={styles.item} onPress={onPress}>
+      <Ionicons name={icon} size={20} color="#0F1E17" />
       <Text style={styles.itemText}>{label}</Text>
       <Ionicons
         name="chevron-forward"
@@ -158,16 +154,30 @@ const styles = StyleSheet.create({
     backgroundColor: "#EAF4EF",
   },
 
-  topBar: {
-    paddingTop: 50,
-    paddingHorizontal: 14,
-    paddingBottom: 10,
-    flexDirection: "row",
-    justifyContent: "space-between",
+  /* 🌿 PREMIUM HEADER */
+  headerWrap: {
+    backgroundColor: "#7FAF9B",
+    paddingTop: 60,
+    paddingBottom: 14,
     alignItems: "center",
   },
 
-  title: {
+  backBtn: {
+    position: "absolute",
+    left: 14,
+    bottom: 14,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  backText: {
+    marginLeft: 6,
+    color: "#0F1E17",
+    fontWeight: "600",
+    fontSize: 13,
+  },
+
+  headerTitle: {
     fontSize: 18,
     fontWeight: "800",
     color: "#0F1E17",

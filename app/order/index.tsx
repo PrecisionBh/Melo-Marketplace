@@ -10,20 +10,28 @@ import {
     View,
 } from "react-native"
 
-import { useAuth } from "../context/AuthContext"
-import { supabase } from "../lib/supabase"
+import { supabase } from "../../lib/supabase"
+
+/* ---------------- TYPES ---------------- */
 
 type Order = {
   id: string
-  listing_title: string
-  total_paid: number
-  status: "pending" | "confirmed" | "shipped" | "completed"
+  status:
+    | "created"
+    | "paid"
+    | "shipped"
+    | "delivered"
+    | "issue_open"
+    | "disputed"
+    | "completed"
+  amount_cents: number
   created_at: string
 }
 
-export default function BuyingScreen() {
+/* ---------------- SCREEN ---------------- */
+
+export default function OrderIndexScreen() {
   const router = useRouter()
-  const { session } = useAuth()
 
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
@@ -33,19 +41,21 @@ export default function BuyingScreen() {
   }, [])
 
   const loadOrders = async () => {
-    if (!session?.user) return
-
     setLoading(true)
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("orders")
-      .select("id, listing_title, total_paid, status, created_at")
-      .eq("buyer_id", session.user.id)
+      .select("id,status,amount_cents,created_at")
       .order("created_at", { ascending: false })
 
-    if (data) setOrders(data as Order[])
+    if (!error && data) {
+      setOrders(data as Order[])
+    }
+
     setLoading(false)
   }
+
+  /* ---------------- GROUPING ---------------- */
 
   const inProgress = useMemo(
     () => orders.filter((o) => o.status !== "completed"),
@@ -57,6 +67,8 @@ export default function BuyingScreen() {
     [orders]
   )
 
+  /* ---------------- UI ---------------- */
+
   if (loading) {
     return <ActivityIndicator style={{ marginTop: 60 }} />
   }
@@ -65,25 +77,14 @@ export default function BuyingScreen() {
     <View style={styles.screen}>
       {/* HEADER */}
       <View style={styles.topBar}>
-        {/* HOME */}
-        <TouchableOpacity
-          style={styles.navBtn}
-          onPress={() => router.replace("/")}
-        >
+        <TouchableOpacity onPress={() => router.replace("/profile")}>
           <Ionicons name="arrow-back" size={22} color="#0F1E17" />
-          <Text style={styles.navText}>Home</Text>
-        </TouchableOpacity>
-
-        <Text style={styles.title}>Buying</Text>
-
-        {/* PROFILE */}
-        <TouchableOpacity
-          style={styles.navBtn}
-          onPress={() => router.push("/profile")}
-        >
-          <Ionicons name="arrow-forward" size={22} color="#0F1E17" />
           <Text style={styles.navText}>Profile</Text>
         </TouchableOpacity>
+
+        <Text style={styles.title}>My Orders</Text>
+
+        <View style={{ width: 40 }} />
       </View>
 
       {orders.length === 0 ? (
@@ -101,18 +102,22 @@ export default function BuyingScreen() {
         </View>
       ) : (
         <FlatList
+          data={[]}
+          renderItem={null}
           ListHeaderComponent={
             <>
               {inProgress.length > 0 && (
                 <Section title="In Progress" data={inProgress} />
               )}
               {completed.length > 0 && (
-                <Section title="Completed" data={completed} muted />
+                <Section
+                  title="Completed"
+                  data={completed}
+                  muted
+                />
               )}
             </>
           }
-          data={[]}
-          renderItem={null}
         />
       )}
     </View>
@@ -149,18 +154,43 @@ function Section({
         >
           <View>
             <Text style={styles.cardTitle}>
-              {order.listing_title}
+              Order #{order.id.slice(0, 8)}
             </Text>
             <Text style={styles.subText}>
-              ${order.total_paid.toFixed(2)}
+              ${(order.amount_cents / 100).toFixed(2)}
             </Text>
           </View>
 
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>{order.status}</Text>
-          </View>
+          <StatusBadge status={order.status} />
         </TouchableOpacity>
       ))}
+    </View>
+  )
+}
+
+/* ---------------- STATUS BADGE ---------------- */
+
+function StatusBadge({ status }: { status: Order["status"] }) {
+  const map: Record<string, string> = {
+    created: "#BDBDBD",
+    paid: "#56CCF2",
+    shipped: "#9B51E0",
+    delivered: "#27AE60",
+    issue_open: "#F2C94C",
+    disputed: "#EB5757",
+    completed: "#2D9CDB",
+  }
+
+  return (
+    <View
+      style={[
+        styles.badge,
+        { backgroundColor: map[status] ?? "#999" },
+      ]}
+    >
+      <Text style={styles.badgeText}>
+        {status.replace("_", " ").toUpperCase()}
+      </Text>
     </View>
   )
 }
@@ -180,11 +210,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-  },
-
-  navBtn: {
-    alignItems: "center",
-    width: 60,
   },
 
   navText: {
@@ -260,7 +285,6 @@ const styles = StyleSheet.create({
   },
 
   badge: {
-    backgroundColor: "#7FAF9B",
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 10,
@@ -269,7 +293,6 @@ const styles = StyleSheet.create({
   badgeText: {
     fontSize: 11,
     fontWeight: "800",
-    color: "#0F1E17",
-    textTransform: "capitalize",
+    color: "#fff",
   },
 })

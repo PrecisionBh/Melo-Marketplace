@@ -38,7 +38,7 @@ export default function HomeHeader({
             <Ionicons
               name="notifications-outline"
               size={24}
-              color="#E8F5EE"
+              color="#0F1E17"
             />
             {hasUnreadNotifications && <View style={styles.redDot} />}
           </TouchableOpacity>
@@ -51,7 +51,7 @@ export default function HomeHeader({
             <Ionicons
               name="chatbubble-ellipses-outline"
               size={22}
-              color="#E8F5EE"
+              color="#0F1E17"
             />
             {hasUnreadMessages && <View style={styles.redDot} />}
           </TouchableOpacity>
@@ -61,7 +61,7 @@ export default function HomeHeader({
             <Ionicons
               name="person-circle-outline"
               size={30}
-              color="#E8F5EE"
+              color="#0F1E17"
             />
           </TouchableOpacity>
         </View>
@@ -72,7 +72,7 @@ export default function HomeHeader({
 
 const styles = StyleSheet.create({
   headerWrap: {
-    backgroundColor: "#0F1E17",
+    backgroundColor: "#7FAF9B", // 🔥 sage green
     paddingHorizontal: 16,
     paddingBottom: 12,
     zIndex: 10,
@@ -92,7 +92,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontSize: 22,
     fontWeight: "700",
-    color: "#E8F5EE",
+    color: "#0F1E17", // 🔥 dark text
   },
 
   headerIcons: {
