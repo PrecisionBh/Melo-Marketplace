@@ -60,6 +60,9 @@
     },
 
     "extra": {
+    
+      "stripePublishableKey": "pk_test_51SpqdDDrYUL6FG4RCzhN6GkOapTn3rscgruuDDHeSJPfLFwY8LlSDNtZhXRrXXEkZKjj1GJs4GOrtILeSCcMd0OR00Bx8vmJCf",
+
       "router": {},
       "eas": {
         "projectId": "d3c5c61c-a428-41f5-b2cd-ce9bc35b2f3c"
