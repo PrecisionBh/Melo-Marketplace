@@ -13,7 +13,7 @@ import {
   View,
 } from "react-native"
 
-
+import { useAuth } from "../context/AuthContext"
 import { supabase } from "../lib/supabase"
 
 type Listing = {
@@ -29,6 +29,7 @@ type Listing = {
 export default function CheckoutScreen() {
   const router = useRouter()
   const { listingId } = useLocalSearchParams<{ listingId: string }>()
+  const { session } = useAuth()
 
   const [listing, setListing] = useState<Listing | null>(null)
   const [loading, setLoading] = useState(true)
@@ -78,15 +79,18 @@ export default function CheckoutScreen() {
   /* ---------------- QUICK BUY ---------------- */
 
   const quickBuy = async () => {
+    if (!session?.user) return
+
     setPaying(true)
 
     try {
-      const { data, error } = await supabase.functions.invoke(
+      const { error } = await supabase.functions.invoke(
         "create-payment-intent",
         {
           body: {
             listing_id: listing.id,
             amount: Math.round(total * 100),
+            customer_id: session.user.id,
           },
         }
       )
@@ -98,8 +102,8 @@ export default function CheckoutScreen() {
         "Your order has been placed."
       )
 
-      router.replace("/buyers-hub/orders/in-progress")
-    } catch (err: any) {
+      router.replace("/checkout/success")
+    } catch {
       Alert.alert(
         "Payment failed",
         "Unable to use default payment method."
@@ -112,6 +116,11 @@ export default function CheckoutScreen() {
   /* ---------------- PAY WITH ANOTHER CARD ---------------- */
 
   const payWithAnotherCard = async () => {
+    if (!session?.user?.email) {
+      Alert.alert("Error", "No email found for this account.")
+      return
+    }
+
     setPaying(true)
 
     try {
@@ -121,6 +130,7 @@ export default function CheckoutScreen() {
           body: {
             listing_id: listing.id,
             amount: Math.round(total * 100),
+            email: session.user.email, // ✅ FIX
           },
         }
       )
@@ -153,7 +163,6 @@ export default function CheckoutScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
-        {/* IMAGE CAROUSEL */}
         {images.length > 0 && (
           <ScrollView
             horizontal
@@ -169,7 +178,6 @@ export default function CheckoutScreen() {
           </ScrollView>
         )}
 
-        {/* ITEM INFO */}
         <View style={styles.card}>
           <View style={styles.titleRow}>
             <Text style={styles.itemTitle}>{listing.title}</Text>
@@ -185,7 +193,6 @@ export default function CheckoutScreen() {
           )}
         </View>
 
-        {/* SUMMARY */}
         <View style={styles.summary}>
           <Row label="Item price" value={`$${listing.price.toFixed(2)}`} />
           <Row
@@ -202,7 +209,6 @@ export default function CheckoutScreen() {
           <Row label="Total" value={`$${total.toFixed(2)}`} bold />
         </View>
 
-        {/* BUTTONS */}
         <TouchableOpacity
           style={styles.primaryBtn}
           onPress={quickBuy}
@@ -301,7 +307,6 @@ const styles = StyleSheet.create({
     width: "100%",
     height: "100%",
     resizeMode: "contain",
-    alignSelf: "center",
   },
 
   card: {
@@ -315,7 +320,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    gap: 8,
   },
 
   itemTitle: {
@@ -335,7 +339,6 @@ const styles = StyleSheet.create({
     marginTop: 6,
     fontSize: 13,
     color: "#6B8F7D",
-    lineHeight: 18,
   },
 
   summary: {

@@ -4,39 +4,50 @@ import { serve } from "https://deno.land/std@0.203.0/http/server.ts"
 import Stripe from "https://esm.sh/stripe@13.11.0?target=deno"
 
 const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY")
-if (!STRIPE_SECRET_KEY) throw new Error("Missing STRIPE_SECRET_KEY")
+if (!STRIPE_SECRET_KEY) {
+  throw new Error("Missing STRIPE_SECRET_KEY")
+}
 
 const stripe = new Stripe(STRIPE_SECRET_KEY, {
   apiVersion: "2023-10-16",
 })
 
 serve(async (req) => {
-  if (req.method !== "POST") {
-    return new Response("Method Not Allowed", { status: 405 })
-  }
-
   try {
-    const { user_id, email } = await req.json()
+    if (req.method !== "POST") {
+      return new Response("Method Not Allowed", { status: 405 })
+    }
 
-    if (!user_id || !email) {
+    const { listing_id, amount, email } = await req.json()
+
+    if (!listing_id || !amount || !email) {
       return new Response(
-        JSON.stringify({ error: "Missing user_id or email" }),
+        JSON.stringify({ error: "Missing listing_id, amount, or email" }),
         { status: 400 }
       )
     }
 
-    // Create a Stripe Checkout session in SETUP mode
     const session = await stripe.checkout.sessions.create({
-      mode: "setup",
+      mode: "payment",
       payment_method_types: ["card"],
       customer_email: email,
-
-      success_url: "melomp://payment/success",
-      cancel_url: "melomp://payment/cancel",
-
+      line_items: [
+        {
+          price_data: {
+            currency: "usd",
+            product_data: {
+              name: "Marketplace Purchase",
+            },
+            unit_amount: amount,
+          },
+          quantity: 1,
+        },
+      ],
       metadata: {
-        user_id,
+        listing_id,
       },
+      success_url: "melomp://checkout/success",
+      cancel_url: "melomp://checkout/cancel",
     })
 
     return new Response(
@@ -49,7 +60,7 @@ serve(async (req) => {
   } catch (err: any) {
     return new Response(
       JSON.stringify({ error: err.message }),
-      { status: 500 }
+      { status: 400 }
     )
   }
 })

@@ -16,37 +16,50 @@ serve(async (req) => {
   }
 
   try {
-    const { user_id, email } = await req.json()
+    const { listing_id, amount, customer_id } = await req.json()
 
-    if (!user_id || !email) {
+    if (!amount || !customer_id || !listing_id) {
       return new Response(
-        JSON.stringify({ error: "Missing user_id or email" }),
+        JSON.stringify({
+          error: "Missing listing_id, amount, or customer_id",
+        }),
         { status: 400 }
       )
     }
 
-    // Create a Stripe Checkout session in SETUP mode
-    const session = await stripe.checkout.sessions.create({
-      mode: "setup",
-      payment_method_types: ["card"],
-      customer_email: email,
+    const intent = await stripe.paymentIntents.create({
+      amount, // already in cents
+      currency: "usd",
+      customer: customer_id,
 
-      success_url: "melomp://payment/success",
-      cancel_url: "melomp://payment/cancel",
+      // 🔑 REQUIRED for default saved card
+      payment_method: "pm_card_visa", // placeholder fallback
+      off_session: true,
+      confirm: true,
+
+      automatic_payment_methods: {
+        enabled: true,
+        allow_redirects: "never",
+      },
 
       metadata: {
-        user_id,
+        listing_id,
       },
     })
 
     return new Response(
-      JSON.stringify({ url: session.url }),
+      JSON.stringify({
+        success: true,
+        payment_intent_id: intent.id,
+      }),
       {
         status: 200,
         headers: { "Content-Type": "application/json" },
       }
     )
   } catch (err: any) {
+    console.error("Quick buy error:", err)
+
     return new Response(
       JSON.stringify({ error: err.message }),
       { status: 500 }
