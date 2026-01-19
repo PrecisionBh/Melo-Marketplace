@@ -1,8 +1,5 @@
 import { Ionicons } from "@expo/vector-icons"
-import {
-  initPaymentSheet,
-  presentPaymentSheet,
-} from "@stripe/stripe-react-native"
+import * as Linking from "expo-linking"
 import { useRouter } from "expo-router"
 import { useEffect, useState } from "react"
 import {
@@ -21,99 +18,63 @@ export default function PaymentMethodsScreen() {
   const { session } = useAuth()
 
   const [loading, setLoading] = useState(false)
-  const [card, setCard] = useState<{
-    brand: string
-    last4: string
-  } | null>(null)
-  const [customerId, setCustomerId] = useState<string | null>(null)
+  const [hasPaymentMethod, setHasPaymentMethod] = useState(false)
+
+  /* ---------------- LOAD PROFILE ---------------- */
 
   useEffect(() => {
     if (!session?.user) return
     loadProfile()
   }, [session])
 
-  /* ---------------- LOAD PROFILE ---------------- */
-
   const loadProfile = async () => {
-    const { data } = await supabase
-      .from("profiles")
-      .select("stripe_customer_id, card_brand, card_last4")
-      .eq("id", session!.user.id)
-      .single()
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("has_payment_method")
+        .eq("id", session!.user.id)
+        .single()
 
-    if (data?.stripe_customer_id) {
-      setCustomerId(data.stripe_customer_id)
-
-      if (data.card_last4) {
-        setCard({
-          brand: data.card_brand,
-          last4: data.card_last4,
-        })
+      if (error) {
+        console.warn("Profile load error:", error.message)
+        setHasPaymentMethod(false)
+        return
       }
+
+      setHasPaymentMethod(!!data?.has_payment_method)
+    } catch {
+      setHasPaymentMethod(false)
     }
   }
 
   /* ---------------- ADD / CHANGE CARD ---------------- */
 
   const addOrChangeCard = async () => {
-    if (!session?.user?.email) return
+    if (!session?.user) return
 
     setLoading(true)
 
     try {
       const { data, error } = await supabase.functions.invoke(
-        "create-setup-intent",
+        "create-payment-setup",
         {
           body: {
             user_id: session.user.id,
             email: session.user.email,
-            stripe_customer_id: customerId,
           },
         }
       )
 
-      if (error) throw error
+      if (error || !data?.url) {
+        throw error || new Error("No Stripe URL returned")
+      }
 
-      const {
-        customerId: newCustomerId,
-        ephemeralKey,
-        setupIntentClientSecret,
-      } = data
-
-      /* ✅ FORCE MANUAL CARD ENTRY */
-      const init = await initPaymentSheet({
-        merchantDisplayName: "Melo Marketplace",
-
-        customerId: newCustomerId,
-        customerEphemeralKeySecret: ephemeralKey,
-        setupIntentClientSecret,
-
-        allowsDelayedPaymentMethods: false,
-
-        defaultBillingDetails: {
-          email: session.user.email,
-        },
-      })
-
-      if (init.error) throw init.error
-
-      const result = await presentPaymentSheet()
-      if (result.error) throw result.error
-
-      await supabase
-        .from("profiles")
-        .update({
-          stripe_customer_id: newCustomerId,
-        })
-        .eq("id", session.user.id)
-
-      await loadProfile()
-
-      Alert.alert("Success", "Payment method saved.")
+      // 🚀 OPEN STRIPE HOSTED SETUP PAGE
+      await Linking.openURL(data.url)
     } catch (err: any) {
       Alert.alert(
         "Payment error",
-        err?.message || "Unable to add payment method."
+        err?.message || "Unable to open Stripe"
       )
     } finally {
       setLoading(false)
@@ -144,19 +105,21 @@ export default function PaymentMethodsScreen() {
       {/* CARD */}
       <View style={styles.card}>
         <Ionicons
-          name={card ? "checkmark-circle" : "card-outline"}
+          name={hasPaymentMethod ? "checkmark-circle" : "card-outline"}
           size={44}
-          color={card ? "#2E5F4F" : "#7FAF9B"}
+          color={hasPaymentMethod ? "#2E5F4F" : "#7FAF9B"}
         />
 
         <Text style={styles.title}>
-          {card ? "Payment method on file" : "Add a payment method"}
+          {hasPaymentMethod
+            ? "Payment method on file"
+            : "No payment method added"}
         </Text>
 
         <Text style={styles.text}>
-          {card
-            ? `${card.brand.toUpperCase()} ending in ${card.last4}`
-            : "A saved card is required to place orders or submit offers."}
+          {hasPaymentMethod
+            ? "You’re ready to place orders and submit offers."
+            : "Add a payment method to continue."}
         </Text>
 
         <TouchableOpacity
@@ -167,7 +130,7 @@ export default function PaymentMethodsScreen() {
           <Text style={styles.buttonText}>
             {loading
               ? "Processing..."
-              : card
+              : hasPaymentMethod
               ? "Change payment method"
               : "Add payment method"}
           </Text>
