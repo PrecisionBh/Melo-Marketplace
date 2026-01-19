@@ -31,8 +31,9 @@ serve(async (req) => {
       payment_method_types: ["card"],
       customer_email: email,
 
-      success_url: "melomp://payment/success",
-      cancel_url: "melomp://payment/cancel",
+      // ✅ FIXED ROUTES (must exist in app)
+      success_url: "melomp://settings/payment",
+      cancel_url: "melomp://settings/payment",
 
       metadata: {
         user_id,

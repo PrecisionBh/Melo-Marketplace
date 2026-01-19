@@ -16,8 +16,11 @@ import {
 import { useAuth } from "../context/AuthContext"
 import { supabase } from "../lib/supabase"
 
+/* ---------------- TYPES ---------------- */
+
 type Listing = {
   id: string
+  user_id: string // seller
   title: string
   description?: string | null
   price: number
@@ -25,6 +28,8 @@ type Listing = {
   shipping_type: "free" | "buyer_pays"
   shipping_price: number | null
 }
+
+/* ---------------- SCREEN ---------------- */
 
 export default function CheckoutScreen() {
   const router = useRouter()
@@ -35,22 +40,32 @@ export default function CheckoutScreen() {
   const [loading, setLoading] = useState(true)
   const [paying, setPaying] = useState(false)
 
+  /* ---------------- LOAD LISTING ---------------- */
+
   useEffect(() => {
     if (listingId) loadListing()
   }, [listingId])
 
   const loadListing = async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("listings")
       .select(
-        "id,title,description,price,image_urls,shipping_type,shipping_price"
+        "id,user_id,title,description,price,image_urls,shipping_type,shipping_price"
       )
       .eq("id", listingId)
       .single()
 
-    if (data) setListing(data)
+    if (error || !data) {
+      Alert.alert("Error", "Listing not found.")
+      setLoading(false)
+      return
+    }
+
+    setListing(data)
     setLoading(false)
   }
+
+  /* ---------------- STATE ---------------- */
 
   if (loading) {
     return <ActivityIndicator style={{ marginTop: 60 }} />
@@ -76,48 +91,11 @@ export default function CheckoutScreen() {
   const buyerProtectionFee = listing.price * 0.03
   const total = listing.price + shipping + buyerProtectionFee
 
-  /* ---------------- QUICK BUY ---------------- */
+  /* ---------------- PAY NOW ---------------- */
 
-  const quickBuy = async () => {
-    if (!session?.user) return
-
-    setPaying(true)
-
-    try {
-      const { error } = await supabase.functions.invoke(
-        "create-payment-intent",
-        {
-          body: {
-            listing_id: listing.id,
-            amount: Math.round(total * 100),
-            customer_id: session.user.id,
-          },
-        }
-      )
-
-      if (error) throw error
-
-      Alert.alert(
-        "Payment successful",
-        "Your order has been placed."
-      )
-
-      router.replace("/checkout/success")
-    } catch {
-      Alert.alert(
-        "Payment failed",
-        "Unable to use default payment method."
-      )
-    } finally {
-      setPaying(false)
-    }
-  }
-
-  /* ---------------- PAY WITH ANOTHER CARD ---------------- */
-
-  const payWithAnotherCard = async () => {
-    if (!session?.user?.email) {
-      Alert.alert("Error", "No email found for this account.")
+  const payNow = async () => {
+    if (!session?.user?.id || !session.user.email) {
+      Alert.alert("Error", "You must be logged in to continue.")
       return
     }
 
@@ -130,7 +108,9 @@ export default function CheckoutScreen() {
           body: {
             listing_id: listing.id,
             amount: Math.round(total * 100),
-            email: session.user.email, // ✅ FIX
+            email: session.user.email,
+            buyer_id: session.user.id,
+            seller_id: listing.user_id,
           },
         }
       )
@@ -143,12 +123,14 @@ export default function CheckoutScreen() {
     } catch (err: any) {
       Alert.alert(
         "Checkout error",
-        err?.message || "Unable to open Stripe checkout."
+        err?.message || "Unable to start checkout."
       )
     } finally {
       setPaying(false)
     }
   }
+
+  /* ---------------- RENDER ---------------- */
 
   return (
     <View style={styles.screen}>
@@ -163,6 +145,7 @@ export default function CheckoutScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
+        {/* IMAGES */}
         {images.length > 0 && (
           <ScrollView
             horizontal
@@ -178,6 +161,7 @@ export default function CheckoutScreen() {
           </ScrollView>
         )}
 
+        {/* ITEM */}
         <View style={styles.card}>
           <View style={styles.titleRow}>
             <Text style={styles.itemTitle}>{listing.title}</Text>
@@ -193,6 +177,7 @@ export default function CheckoutScreen() {
           )}
         </View>
 
+        {/* SUMMARY */}
         <View style={styles.summary}>
           <Row label="Item price" value={`$${listing.price.toFixed(2)}`} />
           <Row
@@ -205,27 +190,17 @@ export default function CheckoutScreen() {
           />
 
           <View style={styles.divider} />
-
           <Row label="Total" value={`$${total.toFixed(2)}`} bold />
         </View>
 
+        {/* PAY NOW */}
         <TouchableOpacity
           style={styles.primaryBtn}
-          onPress={quickBuy}
+          onPress={payNow}
           disabled={paying}
         >
           <Text style={styles.primaryText}>
-            Quick Buy • ${total.toFixed(2)}
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.secondaryBtn}
-          onPress={payWithAnotherCard}
-          disabled={paying}
-        >
-          <Text style={styles.secondaryText}>
-            Pay with another card
+            Pay Now • ${total.toFixed(2)}
           </Text>
         </TouchableOpacity>
 
@@ -233,22 +208,13 @@ export default function CheckoutScreen() {
           Secure checkout powered by Stripe
         </Text>
 
-        <View style={styles.trustBox}>
-          <Ionicons name="shield-checkmark" size={18} color="#2E5F4F" />
-          <Text style={styles.trustText}>
-            Buyer protection includes escrow, fraud prevention, and delivery
-            confirmation. Funds are only released once your item arrives as
-            described.
-          </Text>
-        </View>
-
         <View style={{ height: 90 }} />
       </ScrollView>
     </View>
   )
 }
 
-/* ---------- HELPERS ---------- */
+/* ---------------- HELPERS ---------------- */
 
 function Row({
   label,
@@ -271,7 +237,7 @@ function Row({
   )
 }
 
-/* ---------- STYLES ---------- */
+/* ---------------- STYLES ---------------- */
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#EAF4EF" },
@@ -379,42 +345,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 
-  secondaryBtn: {
-    height: 46,
-    borderRadius: 23,
-    borderWidth: 2,
-    borderColor: "#0F1E17",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 12,
-  },
-
-  secondaryText: {
-    color: "#0F1E17",
-    fontWeight: "800",
-    fontSize: 14,
-  },
-
   reassurance: {
     fontSize: 12,
     textAlign: "center",
     color: "#6B8F7D",
     fontWeight: "600",
-    marginBottom: 12,
-  },
-
-  trustBox: {
-    flexDirection: "row",
-    gap: 8,
-    padding: 12,
-    borderRadius: 12,
-    backgroundColor: "#DFF0E8",
-  },
-
-  trustText: {
-    flex: 1,
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#2E5F4F",
   },
 })

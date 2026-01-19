@@ -35,11 +35,19 @@ refresh_token_reuse_interval = 10
 # EDGE FUNCTIONS
 # -----------------------------
 
+# 🔹 Save / change payment method (Stripe Setup)
 [functions.create-payment-setup]
 enabled = true
 verify_jwt = false
 entrypoint = "./functions/create-payment-setup/index.ts"
 
+# 🔹 Quick Buy (charge default saved card)
+[functions.create-payment-intent]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/create-payment-intent/index.ts"
+
+# 🔹 Pay with another card (Stripe Checkout)
 [functions.create-checkout-session]
 enabled = true
 verify_jwt = false
