@@ -31,16 +31,21 @@ yarn-error.*
 *.pem
 
 # local env files
+.env*
 .env*.local
 
 # typescript
 *.tsbuildinfo
 
-app-example
-
 # generated native folders
 /ios
 /android
 
+# Firebase
 *-firebase-adminsdk-*.json
 
+# Supabase local temp
+supabase/.temp/
+
+# Local Stripe experiments (DO NOT COMMIT)
+stripe-backend/

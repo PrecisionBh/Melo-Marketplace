@@ -1,15 +1,18 @@
 import { Ionicons } from "@expo/vector-icons"
+import * as Linking from "expo-linking"
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { useEffect, useState } from "react"
 import {
-    ActivityIndicator,
-    Image,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native"
+
 
 import { supabase } from "../lib/supabase"
 
@@ -29,6 +32,7 @@ export default function CheckoutScreen() {
 
   const [listing, setListing] = useState<Listing | null>(null)
   const [loading, setLoading] = useState(true)
+  const [paying, setPaying] = useState(false)
 
   useEffect(() => {
     if (listingId) loadListing()
@@ -71,6 +75,71 @@ export default function CheckoutScreen() {
   const buyerProtectionFee = listing.price * 0.03
   const total = listing.price + shipping + buyerProtectionFee
 
+  /* ---------------- QUICK BUY ---------------- */
+
+  const quickBuy = async () => {
+    setPaying(true)
+
+    try {
+      const { data, error } = await supabase.functions.invoke(
+        "create-payment-intent",
+        {
+          body: {
+            listing_id: listing.id,
+            amount: Math.round(total * 100),
+          },
+        }
+      )
+
+      if (error) throw error
+
+      Alert.alert(
+        "Payment successful",
+        "Your order has been placed."
+      )
+
+      router.replace("/buyers-hub/orders/in-progress")
+    } catch (err: any) {
+      Alert.alert(
+        "Payment failed",
+        "Unable to use default payment method."
+      )
+    } finally {
+      setPaying(false)
+    }
+  }
+
+  /* ---------------- PAY WITH ANOTHER CARD ---------------- */
+
+  const payWithAnotherCard = async () => {
+    setPaying(true)
+
+    try {
+      const { data, error } = await supabase.functions.invoke(
+        "create-checkout-session",
+        {
+          body: {
+            listing_id: listing.id,
+            amount: Math.round(total * 100),
+          },
+        }
+      )
+
+      if (error || !data?.url) {
+        throw error || new Error("No checkout URL returned")
+      }
+
+      await Linking.openURL(data.url)
+    } catch (err: any) {
+      Alert.alert(
+        "Checkout error",
+        err?.message || "Unable to open Stripe checkout."
+      )
+    } finally {
+      setPaying(false)
+    }
+  }
+
   return (
     <View style={styles.screen}>
       {/* HEADER */}
@@ -83,8 +152,7 @@ export default function CheckoutScreen() {
         <View style={{ width: 22 }} />
       </View>
 
-      {/* CONTENT */}
-      <View style={styles.content}>
+      <ScrollView contentContainerStyle={styles.content}>
         {/* IMAGE CAROUSEL */}
         {images.length > 0 && (
           <ScrollView
@@ -103,14 +171,15 @@ export default function CheckoutScreen() {
 
         {/* ITEM INFO */}
         <View style={styles.card}>
-          <Text style={styles.itemTitle}>{listing.title}</Text>
-
-          <Text style={styles.itemPrice}>
-            ${listing.price.toFixed(2)}
-          </Text>
+          <View style={styles.titleRow}>
+            <Text style={styles.itemTitle}>{listing.title}</Text>
+            <Text style={styles.itemPrice}>
+              ${listing.price.toFixed(2)}
+            </Text>
+          </View>
 
           {!!listing.description && (
-            <Text style={styles.itemDescription} numberOfLines={2}>
+            <Text style={styles.itemDescription}>
               {listing.description}
             </Text>
           )}
@@ -133,10 +202,24 @@ export default function CheckoutScreen() {
           <Row label="Total" value={`$${total.toFixed(2)}`} bold />
         </View>
 
-        {/* CONFIRM */}
-        <TouchableOpacity style={styles.payBtn}>
-          <Text style={styles.payText}>
-            Confirm & Pay • ${total.toFixed(2)}
+        {/* BUTTONS */}
+        <TouchableOpacity
+          style={styles.primaryBtn}
+          onPress={quickBuy}
+          disabled={paying}
+        >
+          <Text style={styles.primaryText}>
+            Quick Buy • ${total.toFixed(2)}
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.secondaryBtn}
+          onPress={payWithAnotherCard}
+          disabled={paying}
+        >
+          <Text style={styles.secondaryText}>
+            Pay with another card
           </Text>
         </TouchableOpacity>
 
@@ -152,10 +235,9 @@ export default function CheckoutScreen() {
             described.
           </Text>
         </View>
-      </View>
 
-      {/* SAFE FOOTER */}
-      <View style={styles.footerSpacer} />
+        <View style={{ height: 90 }} />
+      </ScrollView>
     </View>
   )
 }
@@ -186,16 +268,8 @@ function Row({
 /* ---------- STYLES ---------- */
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: "#EAF4EF",
-  },
-
-  center: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  screen: { flex: 1, backgroundColor: "#EAF4EF" },
+  center: { flex: 1, alignItems: "center", justifyContent: "center" },
 
   topBar: {
     paddingTop: 50,
@@ -212,27 +286,22 @@ const styles = StyleSheet.create({
     color: "#0F1E17",
   },
 
-  content: {
-    paddingHorizontal: 20,
-  },
+  content: { paddingHorizontal: 20 },
 
-  imageCarousel: {
-    marginBottom: 12,
-  },
+  imageCarousel: { marginBottom: 12 },
 
   imageWrap: {
     width: 300,
-    height: 200,
-    marginRight: 12,
-    borderRadius: 14,
-    overflow: "hidden",
-    backgroundColor: "#000",
+    height: 220,
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   image: {
     width: "100%",
     height: "100%",
     resizeMode: "contain",
+    alignSelf: "center",
   },
 
   card: {
@@ -242,14 +311,21 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
 
+  titleRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 8,
+  },
+
   itemTitle: {
+    flex: 1,
     fontSize: 15,
     fontWeight: "800",
     color: "#0F1E17",
   },
 
   itemPrice: {
-    marginTop: 4,
     fontSize: 17,
     fontWeight: "900",
     color: "#2E5F4F",
@@ -275,20 +351,9 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
   },
 
-  rowLabel: {
-    color: "#6B8F7D",
-    fontWeight: "600",
-  },
-
-  rowValue: {
-    color: "#0F1E17",
-    fontWeight: "700",
-  },
-
-  boldText: {
-    fontWeight: "900",
-    color: "#0F1E17",
-  },
+  rowLabel: { color: "#6B8F7D", fontWeight: "600" },
+  rowValue: { color: "#0F1E17", fontWeight: "700" },
+  boldText: { fontWeight: "900" },
 
   divider: {
     height: 1,
@@ -296,18 +361,34 @@ const styles = StyleSheet.create({
     marginVertical: 8,
   },
 
-  payBtn: {
+  primaryBtn: {
     height: 50,
     borderRadius: 25,
     backgroundColor: "#0F1E17",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 8,
+    marginBottom: 10,
   },
 
-  payText: {
+  primaryText: {
     color: "#fff",
     fontWeight: "900",
+    fontSize: 14,
+  },
+
+  secondaryBtn: {
+    height: 46,
+    borderRadius: 23,
+    borderWidth: 2,
+    borderColor: "#0F1E17",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+  },
+
+  secondaryText: {
+    color: "#0F1E17",
+    fontWeight: "800",
     fontSize: 14,
   },
 
@@ -332,9 +413,5 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
     color: "#2E5F4F",
-  },
-
-  footerSpacer: {
-    height: 80,
   },
 })
