@@ -52,3 +52,9 @@ entrypoint = "./functions/create-payment-intent/index.ts"
 enabled = true
 verify_jwt = false
 entrypoint = "./functions/create-checkout-session/index.ts"
+
+# 🔹 Stripe Webhook (payment confirmation + shipping capture)
+[functions.stripe-webhook]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/stripe-webhook/index.ts"
