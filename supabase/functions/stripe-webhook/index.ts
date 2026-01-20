@@ -43,7 +43,7 @@ serve(async (req) => {
   let event: Stripe.Event
 
   try {
-    // 🔑 CRITICAL FIX — ASYNC VERSION FOR DENO
+    // 🔑 DENO-SAFE async verification
     event = await stripe.webhooks.constructEventAsync(
       body,
       signature,
@@ -64,7 +64,11 @@ serve(async (req) => {
       return new Response("Missing order_id", { status: 400 })
     }
 
-    const shipping = session.shipping_details
+    // ✅ CORRECT STRIPE CHECKOUT SHIPPING SOURCE
+    const shipping =
+      session.collected_information?.shipping_details
+        ?? session.shipping_details
+
     const address = shipping?.address
 
     const { error } = await supabase
@@ -72,7 +76,7 @@ serve(async (req) => {
       .update({
         status: "paid",
         stripe_session_id: session.id,
-        stripe_payment_intent: session.payment_intent,
+        stripe_payment_intent: session.payment_intent ?? null,
         shipping_name: shipping?.name ?? null,
         shipping_line1: address?.line1 ?? null,
         shipping_line2: address?.line2 ?? null,
