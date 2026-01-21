@@ -43,7 +43,6 @@ serve(async (req) => {
   let event: Stripe.Event
 
   try {
-    // 🔑 DENO-SAFE async verification
     event = await stripe.webhooks.constructEventAsync(
       body,
       signature,
@@ -63,6 +62,9 @@ serve(async (req) => {
       console.error("Missing order_id in metadata")
       return new Response("Missing order_id", { status: 400 })
     }
+
+    // ✅ READ IMAGE URL FROM METADATA (ADDED)
+    const imageUrl = session.metadata?.image_url ?? null
 
     // ✅ CORRECT STRIPE CHECKOUT SHIPPING SOURCE
     const shipping =
@@ -85,6 +87,10 @@ serve(async (req) => {
         shipping_postal_code: address?.postal_code ?? null,
         shipping_country: address?.country ?? null,
         shipping_phone: session.customer_details?.phone ?? null,
+
+        // ✅ WRITE IMAGE URL (ADDED)
+        image_url: imageUrl,
+
         updated_at: new Date().toISOString(),
       })
       .eq("id", orderId)

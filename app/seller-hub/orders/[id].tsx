@@ -2,13 +2,15 @@ import { Ionicons } from "@expo/vector-icons"
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { useEffect, useState } from "react"
 import {
-    ActivityIndicator,
-    Image,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native"
 
 import { useAuth } from "@/context/AuthContext"
@@ -16,43 +18,47 @@ import { supabase } from "@/lib/supabase"
 
 /* ---------------- TYPES ---------------- */
 
-type OrderStatus =
-  | "created"
-  | "paid"
-  | "shipped"
-  | "delivered"
-  | "issue_open"
-  | "disputed"
-  | "completed"
+type OrderStatus = "paid" | "shipped" | "delivered" | "completed"
 
 type Order = {
   id: string
   seller_id: string
   status: OrderStatus
   amount_cents: number
-  listing_snapshot: {
-    title: string
-    image_urls?: string[]
-  }
+
+  image_url: string | null
+
   carrier: string | null
   tracking_number: string | null
-  created_at: string
+
+  shipping_name: string | null
+  shipping_line1: string | null
+  shipping_line2: string | null
+  shipping_city: string | null
+  shipping_state: string | null
+  shipping_postal_code: string | null
+  shipping_country: string | null
 }
 
 /* ---------------- SCREEN ---------------- */
 
-export default function SellerOrderDetail() {
+export default function SellerOrderDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const router = useRouter()
   const { session } = useAuth()
-  const user = session?.user
 
   const [order, setOrder] = useState<Order | null>(null)
   const [loading, setLoading] = useState(true)
 
+  const [carrier, setCarrier] = useState("")
+  const [tracking, setTracking] = useState("")
+  const [saving, setSaving] = useState(false)
+
   useEffect(() => {
-    if (id && user) loadOrder()
-  }, [id, user])
+    if (id && session?.user?.id) {
+      loadOrder()
+    }
+  }, [id, session?.user?.id])
 
   const loadOrder = async () => {
     setLoading(true)
@@ -63,13 +69,52 @@ export default function SellerOrderDetail() {
       .eq("id", id)
       .single()
 
-    if (!data || data.seller_id !== user?.id) {
+    if (!data || data.seller_id !== session?.user?.id) {
       router.back()
       return
     }
 
     setOrder(data)
+    setCarrier(data.carrier ?? "")
+    setTracking(data.tracking_number ?? "")
     setLoading(false)
+  }
+
+  const submitTracking = async () => {
+    if (!carrier || !tracking || !order) return
+
+    setSaving(true)
+
+    const { error } = await supabase
+      .from("orders")
+      .update({
+        carrier,
+        tracking_number: tracking,
+        status: "shipped",
+        shipped_at: new Date().toISOString(),
+      })
+      .eq("id", order.id)
+
+    console.log("UPDATE ERROR:", error)
+
+    setSaving(false)
+
+    if (error) {
+      Alert.alert("Error", "Failed to mark order as shipped.")
+      return
+    }
+
+    Alert.alert(
+      "Order Shipped",
+      "Tracking has been added and the order is now in progress.",
+      [
+        {
+          text: "OK",
+          onPress: () =>
+            router.replace("/seller-hub/orders/orders-to-ship"),
+        },
+      ]
+    )
   }
 
   if (loading) {
@@ -78,103 +123,181 @@ export default function SellerOrderDetail() {
 
   if (!order) return null
 
+  const gross = order.amount_cents / 100
+  const sellerFee = +(gross * 0.035).toFixed(2)
+  const escrow = +(gross - sellerFee).toFixed(2)
+
   return (
     <View style={styles.screen}>
       {/* HEADER */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={20} color="#1F7A63" />
+          <Ionicons name="arrow-back" size={22} color="#0F1E17" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Order</Text>
-        <View style={{ width: 24 }} />
+        <View style={{ width: 22 }} />
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
-        {/* ORDER CARD */}
+        {/* PRODUCT */}
         <View style={styles.card}>
-          {order.listing_snapshot?.image_urls?.[0] && (
+          {order.image_url && (
             <Image
-              source={{ uri: order.listing_snapshot.image_urls[0] }}
+              source={{ uri: encodeURI(order.image_url) }}
               style={styles.image}
             />
           )}
 
-          <Text style={styles.title}>
-            {order.listing_snapshot.title}
+          <View style={styles.titleRow}>
+            <Text style={styles.title}>
+              Order #{order.id.slice(0, 8)}
+            </Text>
+
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>
+                {order.status.toUpperCase()}
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        {/* SHIPPING ADDRESS */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Ship To</Text>
+
+          <Text style={styles.addressText}>
+            {order.shipping_name}
           </Text>
-
-          <StatusBadge status={order.status} />
-
-          <Text style={styles.price}>
-            ${(order.amount_cents / 100).toFixed(2)}
+          <Text style={styles.addressText}>
+            {order.shipping_line1}
+          </Text>
+          {order.shipping_line2 && (
+            <Text style={styles.addressText}>
+              {order.shipping_line2}
+            </Text>
+          )}
+          <Text style={styles.addressText}>
+            {order.shipping_city}, {order.shipping_state}{" "}
+            {order.shipping_postal_code}
+          </Text>
+          <Text style={styles.addressText}>
+            {order.shipping_country}
           </Text>
         </View>
 
-        {/* SHIPPING */}
+        {/* TRACKING */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Shipping</Text>
+          <Text style={styles.sectionTitle}>Tracking</Text>
 
-          {order.tracking_number ? (
+          {order.status === "paid" ? (
             <>
-              <DetailRow label="Carrier" value={order.carrier ?? "—"} />
-              <DetailRow label="Tracking #" value={order.tracking_number} />
+              <View style={styles.carrierRow}>
+                {["USPS", "UPS", "FedEx", "DHL"].map((c) => (
+                  <TouchableOpacity
+                    key={c}
+                    style={[
+                      styles.carrierBtn,
+                      carrier === c && styles.carrierActive,
+                    ]}
+                    onPress={() => setCarrier(c)}
+                  >
+                    <Text
+                      style={[
+                        styles.carrierText,
+                        carrier === c &&
+                          styles.carrierTextActive,
+                      ]}
+                    >
+                      {c}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <TextInput
+                placeholder="Enter tracking number"
+                value={tracking}
+                onChangeText={setTracking}
+                style={styles.input}
+              />
             </>
           ) : (
-            <Text style={styles.muted}>
-              Shipping info has not been added yet.
-            </Text>
+            <>
+              <Text style={styles.infoText}>
+                Carrier: {order.carrier}
+              </Text>
+              <Text style={styles.infoText}>
+                Tracking: {order.tracking_number}
+              </Text>
+            </>
           )}
         </View>
 
-        {/* DISPUTE ACTION */}
-        {order.status === "disputed" && (
-          <View style={styles.actions}>
-            <TouchableOpacity
-              style={styles.dangerBtn}
-              onPress={() =>
-                router.push(
-                  `../disputes-issue?orderId=${order.id}`
-                )
-              }
-            >
-              <Text style={styles.dangerText}>
-                Respond to Dispute
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
+        {/* RECEIPT */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>
+            Sale Breakdown
+          </Text>
+
+          <Row
+            label="Sale Price"
+            value={`$${gross.toFixed(2)}`}
+          />
+          <Row
+            label="Seller Fee (3.5%)"
+            value={`-$${sellerFee}`}
+          />
+          <Row
+            label="Held in Escrow / Your Payment"
+            value={`$${escrow}`}
+            bold
+          />
+        </View>
       </ScrollView>
+
+      {/* ACTION BAR */}
+      {order.status === "paid" && (
+        <View style={styles.actionBar}>
+          <TouchableOpacity
+            style={[
+              styles.primaryBtn,
+              (!carrier || !tracking) &&
+                styles.primaryDisabled,
+            ]}
+            disabled={!carrier || !tracking || saving}
+            onPress={submitTracking}
+          >
+            <Text style={styles.primaryText}>
+              {saving
+                ? "Saving…"
+                : "Add Tracking & Mark Shipped"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
   )
 }
 
 /* ---------------- COMPONENTS ---------------- */
 
-function StatusBadge({ status }: { status: OrderStatus }) {
-  const map: Record<OrderStatus, string> = {
-    created: "#BDBDBD",
-    paid: "#56CCF2",
-    shipped: "#9B51E0",
-    delivered: "#27AE60",
-    issue_open: "#F2C94C",
-    disputed: "#EB5757",
-    completed: "#2D9CDB",
-  }
-
-  return (
-    <View style={[styles.badge, { backgroundColor: map[status] }]}>
-      <Text style={styles.badgeText}>
-        {status.replace("_", " ").toUpperCase()}
-      </Text>
-    </View>
-  )
-}
-
-function DetailRow({ label, value }: { label: string; value: string }) {
+function Row({
+  label,
+  value,
+  bold,
+}: {
+  label: string
+  value: string
+  bold?: boolean
+}) {
   return (
     <View style={styles.row}>
-      <Text style={styles.label}>{label}</Text>
-      <Text style={styles.value}>{value}</Text>
+      <Text style={styles.rowLabel}>{label}</Text>
+      <Text
+        style={[styles.rowValue, bold && { fontWeight: "900" }]}
+      >
+        {value}
+      </Text>
     </View>
   )
 }
@@ -186,72 +309,121 @@ const styles = StyleSheet.create({
 
   header: {
     height: 56,
-    backgroundColor: "#E8F5EE",
+    backgroundColor: "#EAF4EF",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     borderBottomWidth: 1,
-    borderBottomColor: "#D1E9DD",
+    borderBottomColor: "#DCEDE4",
   },
 
   headerTitle: {
     fontSize: 16,
-    fontWeight: "800",
-    color: "#1F7A63",
+    fontWeight: "900",
+    color: "#0F1E17",
   },
 
-  content: { padding: 16, paddingBottom: 120 },
+  content: { padding: 16, paddingBottom: 180 },
 
   card: {
     backgroundColor: "#fff",
-    borderRadius: 14,
+    borderRadius: 16,
     padding: 16,
   },
 
   image: {
     width: "100%",
     height: 220,
-    borderRadius: 12,
+    borderRadius: 14,
     marginBottom: 12,
+  },
+
+  titleRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
 
   title: {
     fontSize: 18,
     fontWeight: "900",
     color: "#0F1E17",
-  },
-
-  price: {
-    marginTop: 8,
-    fontSize: 22,
-    fontWeight: "900",
-    color: "#0F1E17",
+    flex: 1,
+    marginRight: 10,
   },
 
   badge: {
-    marginTop: 10,
-    paddingHorizontal: 12,
+    backgroundColor: "#7FAF9B",
+    paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 14,
-    alignSelf: "flex-start",
+    borderRadius: 12,
   },
 
   badgeText: {
-    color: "#fff",
-    fontWeight: "900",
     fontSize: 11,
+    fontWeight: "900",
+    color: "#fff",
   },
 
   section: { marginTop: 24 },
 
   sectionTitle: {
     fontSize: 15,
-    fontWeight: "800",
+    fontWeight: "900",
     marginBottom: 10,
   },
 
-  muted: { color: "#6B8F7D" },
+  addressText: {
+    fontSize: 13,
+    fontWeight: "600",
+    marginBottom: 2,
+  },
+
+  carrierRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 12,
+  },
+
+  carrierBtn: {
+    borderWidth: 1,
+    borderColor: "#D1E9DD",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+
+  carrierActive: {
+    backgroundColor: "#7FAF9B",
+    borderColor: "#7FAF9B",
+  },
+
+  carrierText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#0F1E17",
+  },
+
+  carrierTextActive: {
+    color: "#fff",
+  },
+
+  input: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: "#D1E9DD",
+  },
+
+  infoText: {
+    fontSize: 13,
+    fontWeight: "700",
+    marginBottom: 4,
+  },
 
   row: {
     flexDirection: "row",
@@ -259,20 +431,37 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
 
-  label: { color: "#6B8F7D", fontWeight: "600" },
-  value: { fontWeight: "700" },
-
-  actions: { marginTop: 24 },
-
-  dangerBtn: {
-    backgroundColor: "#EB5757",
-    padding: 14,
-    borderRadius: 14,
+  rowLabel: {
+    color: "#6B8F7D",
+    fontWeight: "600",
   },
 
-  dangerText: {
+  rowValue: {
+    fontWeight: "700",
+  },
+
+  actionBar: {
+    position: "absolute",
+    bottom: 85,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 16,
+  },
+
+  primaryBtn: {
+    backgroundColor: "#1F7A63",
+    paddingVertical: 14,
+    borderRadius: 16,
+  },
+
+  primaryDisabled: {
+    backgroundColor: "#A7C8BB",
+  },
+
+  primaryText: {
     color: "#fff",
     fontWeight: "900",
+    fontSize: 15,
     textAlign: "center",
   },
 })

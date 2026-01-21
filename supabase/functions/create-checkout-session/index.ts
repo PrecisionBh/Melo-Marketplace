@@ -38,6 +38,7 @@ serve(async (req) => {
       email,
       buyer_id,
       seller_id,
+      image_url, // ✅ ADDED
     } = await req.json()
 
     if (!listing_id || !amount || !email || !buyer_id || !seller_id) {
@@ -112,6 +113,7 @@ serve(async (req) => {
         listing_id,
         buyer_id,
         seller_id,
+        image_url: image_url ?? "", // ✅ ADDED
       },
 
       success_url: "melomp://checkout/success",

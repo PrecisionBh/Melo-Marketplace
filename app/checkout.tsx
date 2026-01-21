@@ -65,8 +65,6 @@ export default function CheckoutScreen() {
     setLoading(false)
   }
 
-  /* ---------------- STATE ---------------- */
-
   if (loading) {
     return <ActivityIndicator style={{ marginTop: 60 }} />
   }
@@ -82,6 +80,9 @@ export default function CheckoutScreen() {
   const images = Array.isArray(listing.image_urls)
     ? listing.image_urls
     : []
+
+  // ✅ MAIN IMAGE SNAPSHOT FOR ORDER
+  const mainImageUrl = images[0] ?? null
 
   const shipping =
     listing.shipping_type === "free"
@@ -111,6 +112,9 @@ export default function CheckoutScreen() {
             email: session.user.email,
             buyer_id: session.user.id,
             seller_id: listing.user_id,
+
+            // ✅ NEW — snapshot image stored on order
+            image_url: mainImageUrl,
           },
         }
       )
@@ -134,7 +138,6 @@ export default function CheckoutScreen() {
 
   return (
     <View style={styles.screen}>
-      {/* HEADER */}
       <View style={styles.topBar}>
         <TouchableOpacity onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={22} color="#0F1E17" />
@@ -145,7 +148,6 @@ export default function CheckoutScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
-        {/* IMAGES */}
         {images.length > 0 && (
           <ScrollView
             horizontal
@@ -161,7 +163,6 @@ export default function CheckoutScreen() {
           </ScrollView>
         )}
 
-        {/* ITEM */}
         <View style={styles.card}>
           <View style={styles.titleRow}>
             <Text style={styles.itemTitle}>{listing.title}</Text>
@@ -177,7 +178,6 @@ export default function CheckoutScreen() {
           )}
         </View>
 
-        {/* SUMMARY */}
         <View style={styles.summary}>
           <Row label="Item price" value={`$${listing.price.toFixed(2)}`} />
           <Row
@@ -188,12 +188,10 @@ export default function CheckoutScreen() {
             label="Buyer protection (3%)"
             value={`$${buyerProtectionFee.toFixed(2)}`}
           />
-
           <View style={styles.divider} />
           <Row label="Total" value={`$${total.toFixed(2)}`} bold />
         </View>
 
-        {/* PAY NOW */}
         <TouchableOpacity
           style={styles.primaryBtn}
           onPress={payNow}

@@ -3,27 +3,49 @@ import { useFocusEffect, useRouter } from "expo-router"
 import { useCallback, useState } from "react"
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native"
 
+import { useAuth } from "@/context/AuthContext"
 import { supabase } from "@/lib/supabase"
 
 export default function SellerHubScreen() {
   const router = useRouter()
-  const [ordersToShipCount, setOrdersToShipCount] = useState(0)
+  const { session } = useAuth()
+  const sellerId = session?.user?.id
 
-  /* ---------------- LOAD COUNT ---------------- */
+  const [ordersToShipCount, setOrdersToShipCount] = useState(0)
+  const [unreadMessagesCount, setUnreadMessagesCount] = useState(0)
+
+  /* ---------------- LOAD COUNTS ---------------- */
 
   useFocusEffect(
     useCallback(() => {
+      if (!sellerId) return
       loadOrdersToShipCount()
-    }, [])
+      loadUnreadMessagesCount()
+    }, [sellerId])
   )
 
   const loadOrdersToShipCount = async () => {
+    if (!sellerId) return
+
     const { count } = await supabase
       .from("orders")
       .select("id", { count: "exact", head: true })
       .eq("status", "paid")
+      .eq("seller_id", sellerId)
 
     setOrdersToShipCount(count ?? 0)
+  }
+
+  const loadUnreadMessagesCount = async () => {
+    if (!sellerId) return
+
+    const { count } = await supabase
+      .from("messages")
+      .select("id", { count: "exact", head: true })
+      .is("read_at", null)
+      .eq("receiver_id", sellerId)
+
+    setUnreadMessagesCount(count ?? 0)
   }
 
   return (
@@ -59,6 +81,7 @@ export default function SellerHubScreen() {
         <MenuItem
           icon="chatbubble-ellipses-outline"
           label="Messages"
+          badgeCount={unreadMessagesCount}
           onPress={() => router.push("/messages")}
         />
 
@@ -100,6 +123,10 @@ function MenuItem({
       <Ionicons name={icon} size={22} color="#0F1E17" />
       <Text style={styles.menuText}>{label}</Text>
 
+      {/* PUSH CONTENT RIGHT */}
+      <View style={{ flex: 1 }} />
+
+      {/* BADGE */}
       {typeof badgeCount === "number" && badgeCount > 0 && (
         <View style={styles.countBadge}>
           <Text style={styles.countText}>{badgeCount}</Text>
@@ -110,7 +137,6 @@ function MenuItem({
         name="chevron-forward"
         size={18}
         color="#9FB8AC"
-        style={{ marginLeft: "auto" }}
       />
     </TouchableOpacity>
   )
@@ -189,7 +215,6 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
 
-  /* FLOATING BUTTON */
   fab: {
     position: "absolute",
     bottom: 55,
