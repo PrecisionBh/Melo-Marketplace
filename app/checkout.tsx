@@ -20,7 +20,7 @@ import { supabase } from "../lib/supabase"
 
 type Listing = {
   id: string
-  user_id: string // seller
+  user_id: string
   title: string
   description?: string | null
   price: number
@@ -81,7 +81,6 @@ export default function CheckoutScreen() {
     ? listing.image_urls
     : []
 
-  // ✅ MAIN IMAGE SNAPSHOT FOR ORDER
   const mainImageUrl = images[0] ?? null
 
   const shipping =
@@ -89,8 +88,9 @@ export default function CheckoutScreen() {
       ? 0
       : listing.shipping_price ?? 0
 
-  const buyerProtectionFee = listing.price * 0.03
-  const total = listing.price + shipping + buyerProtectionFee
+  // ✅ Buyer protection fee (locked)
+  const buyerProtectionFee = +(listing.price * 0.029 + 0.3).toFixed(2)
+  const total = +(listing.price + shipping + buyerProtectionFee).toFixed(2)
 
   /* ---------------- PAY NOW ---------------- */
 
@@ -112,8 +112,6 @@ export default function CheckoutScreen() {
             email: session.user.email,
             buyer_id: session.user.id,
             seller_id: listing.user_id,
-
-            // ✅ NEW — snapshot image stored on order
             image_url: mainImageUrl,
           },
         }
@@ -138,11 +136,11 @@ export default function CheckoutScreen() {
 
   return (
     <View style={styles.screen}>
-      <View style={styles.topBar}>
+      {/* HEADER */}
+      <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={22} color="#0F1E17" />
         </TouchableOpacity>
-
         <Text style={styles.headerTitle}>Checkout</Text>
         <View style={{ width: 22 }} />
       </View>
@@ -163,6 +161,7 @@ export default function CheckoutScreen() {
           </ScrollView>
         )}
 
+        {/* ITEM CARD */}
         <View style={styles.card}>
           <View style={styles.titleRow}>
             <Text style={styles.itemTitle}>{listing.title}</Text>
@@ -178,6 +177,7 @@ export default function CheckoutScreen() {
           )}
         </View>
 
+        {/* SUMMARY */}
         <View style={styles.summary}>
           <Row label="Item price" value={`$${listing.price.toFixed(2)}`} />
           <Row
@@ -185,13 +185,14 @@ export default function CheckoutScreen() {
             value={shipping === 0 ? "Free" : `$${shipping.toFixed(2)}`}
           />
           <Row
-            label="Buyer protection (3%)"
+            label="Buyer protection & processing"
             value={`$${buyerProtectionFee.toFixed(2)}`}
           />
           <View style={styles.divider} />
           <Row label="Total" value={`$${total.toFixed(2)}`} bold />
         </View>
 
+        {/* PAY NOW */}
         <TouchableOpacity
           style={styles.primaryBtn}
           onPress={payNow}
@@ -202,11 +203,22 @@ export default function CheckoutScreen() {
           </Text>
         </TouchableOpacity>
 
+        {/* STRIPE REASSURANCE */}
         <Text style={styles.reassurance}>
           Secure checkout powered by Stripe
         </Text>
 
-        <View style={{ height: 90 }} />
+        {/* 🟢 BUYER PROTECTION PILL */}
+        <View style={styles.protectionPill}>
+          <Ionicons name="shield-checkmark" size={18} color="#1F7A63" />
+          <Text style={styles.protectionText}>
+            Melo Buyer Protection — payments are held securely in escrow until
+            delivery. Disputes supported if anything goes wrong.
+          </Text>
+        </View>
+
+        {/* SAFE BOTTOM SPACE */}
+        <View style={{ height: 120 }} />
       </ScrollView>
     </View>
   )
@@ -241,13 +253,14 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#EAF4EF" },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
 
-  topBar: {
+  header: {
     paddingTop: 50,
+    paddingBottom: 12,
     paddingHorizontal: 14,
-    paddingBottom: 10,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    backgroundColor: "#7FAF9B",
   },
 
   headerTitle: {
@@ -334,7 +347,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#0F1E17",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 10,
+    marginBottom: 6,
   },
 
   primaryText: {
@@ -348,5 +361,24 @@ const styles = StyleSheet.create({
     textAlign: "center",
     color: "#6B8F7D",
     fontWeight: "600",
+    marginBottom: 10,
+  },
+
+  protectionPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#E8F5EE",
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+  },
+
+  protectionText: {
+    flex: 1,
+    fontSize: 12,
+    color: "#1F7A63",
+    fontWeight: "600",
+    lineHeight: 16,
   },
 })
