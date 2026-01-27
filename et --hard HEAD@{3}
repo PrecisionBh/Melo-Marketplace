@@ -1,0 +1,24 @@
+[33m3a9ab09[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/stripe-chaos-backup[m[33m, [m[1;31morigin/main[m[33m, [m[1;32mstripe-chaos-backup[m[33m)[m HEAD@{0}: reset: moving to origin/main
+[33m3a9ab09[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/stripe-chaos-backup[m[33m, [m[1;31morigin/main[m[33m, [m[1;32mstripe-chaos-backup[m[33m)[m HEAD@{1}: merge stripe-chaos-backup: Fast-forward
+[33m998e9b3[m[33m ([m[1;33mtag: [m[1;33mmvp-pre-payments[m[33m, [m[1;31morigin/stripe-integration[m[33m, [m[1;32mstripe-integration[m[33m)[m HEAD@{2}: checkout: moving from stripe-chaos-backup to main
+[33m3a9ab09[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/stripe-chaos-backup[m[33m, [m[1;31morigin/main[m[33m, [m[1;32mstripe-chaos-backup[m[33m)[m HEAD@{3}: commit: Fix seller order flow, images rendering, and dispute handling
+[33md65fbac[m[33m ([m[1;33mtag: [m[1;33mstripe-orders-shipping-working[m[33m)[m HEAD@{4}: commit: Stripe checkout + webhook complete (orders + shipping fully wired)
+[33mbbf87cf[m[33m ([m[1;33mtag: [m[1;33mstripe-checkout-webhook-working[m[33m)[m HEAD@{5}: commit: Stripe Checkout + webhook working: orders update to paid
+[33m09fd48e[m[33m ([m[1;33mtag: [m[1;33mstripe-checkout-mvp[m[33m)[m HEAD@{6}: commit: MVP checkout flow: Stripe Checkout, order creation, webhook wiring
+[33m3e16edd[m[33m ([m[1;33mtag: [m[1;33mstripe-checkout-working-v1[m[33m)[m HEAD@{7}: commit: feat: working Stripe checkout + success screen + admin index restore
+[33mc79d1b9[m HEAD@{8}: commit: checkpoint: checkout UI + payment setup wired
+[33mf0e903b[m[33m ([m[1;33mtag: [m[1;33mstripe-working-v1[m[33m)[m HEAD@{9}: commit: Fix Stripe payment setup via Edge Function (hosted checkout)
+[33m634197c[m HEAD@{10}: commit: Stabilize app after Stripe experiments; preserve feature progress
+[33md357ee2[m HEAD@{11}: checkout: moving from stripe-integration to stripe-chaos-backup
+[33m998e9b3[m[33m ([m[1;33mtag: [m[1;33mmvp-pre-payments[m[33m, [m[1;31morigin/stripe-integration[m[33m, [m[1;32mstripe-integration[m[33m)[m HEAD@{12}: reset: moving to origin/stripe-integration
+[33md357ee2[m HEAD@{13}: checkout: moving from stripe-chaos-backup to stripe-integration
+[33md357ee2[m HEAD@{14}: checkout: moving from stripe-integration to stripe-chaos-backup
+[33md357ee2[m HEAD@{15}: commit: Add Stripe publishable key to app.json for native init
+[33mbb27e45[m HEAD@{16}: commit: Android notifications working (FCM V1), admin hub, buyer/seller hubs, EAS setup
+[33m998e9b3[m[33m ([m[1;33mtag: [m[1;33mmvp-pre-payments[m[33m, [m[1;31morigin/stripe-integration[m[33m, [m[1;32mstripe-integration[m[33m)[m HEAD@{17}: checkout: moving from main to stripe-integration
+[33m998e9b3[m[33m ([m[1;33mtag: [m[1;33mmvp-pre-payments[m[33m, [m[1;31morigin/stripe-integration[m[33m, [m[1;32mstripe-integration[m[33m)[m HEAD@{18}: checkout: moving from stripe-integration to main
+[33m998e9b3[m[33m ([m[1;33mtag: [m[1;33mmvp-pre-payments[m[33m, [m[1;31morigin/stripe-integration[m[33m, [m[1;32mstripe-integration[m[33m)[m HEAD@{19}: checkout: moving from main to stripe-integration
+[33m998e9b3[m[33m ([m[1;33mtag: [m[1;33mmvp-pre-payments[m[33m, [m[1;31morigin/stripe-integration[m[33m, [m[1;32mstripe-integration[m[33m)[m HEAD@{20}: commit: MVP checkout + make-offer flows ready (pre-Stripe)
+[33m37579a5[m[33m ([m[1;33mtag: [m[1;33mmvp-baseline[m[33m)[m HEAD@{21}: Branch: renamed refs/heads/master to refs/heads/main
+[33m37579a5[m[33m ([m[1;33mtag: [m[1;33mmvp-baseline[m[33m)[m HEAD@{23}: commit: MVP baseline – working messaging, profiles, settings
+[33m5825e09[m HEAD@{24}: commit (initial): Initial commit

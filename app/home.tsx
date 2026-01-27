@@ -81,16 +81,25 @@ export default function HomeScreen() {
       .order("created_at", { ascending: false })
 
     if (!error && data) {
-      const normalized: Listing[] = (data as ListingRow[]).map(
-        (l) => ({
+      const rows = data as ListingRow[]
+
+      const normalized: Listing[] = rows
+        // ⛔ filter out review / seed / empty listings
+        .filter(
+          (l) =>
+            Array.isArray(l.image_urls) &&
+            l.image_urls.length > 0 &&
+            l.title?.trim().length > 0 &&
+            l.price > 0
+        )
+        .map((l) => ({
           id: l.id,
           title: l.title,
           price: l.price,
           category: l.category,
-          image_url: l.image_urls?.[0] ?? null,
+          image_url: l.image_urls![0],
           allow_offers: l.allow_offers ?? false,
-        })
-      )
+        }))
 
       setListings(normalized)
     }
@@ -107,16 +116,14 @@ export default function HomeScreen() {
 
     if (!user) return
 
-    const { data: profile, error } = await supabase
+    const { data: profile } = await supabase
       .from("profiles")
       .select("expo_push_token")
       .eq("id", user.id)
       .single()
 
-    if (error) return
     if (profile?.expo_push_token) return
 
-    // Optional soft prompt before system prompt
     const confirm = await new Promise<boolean>((resolve) => {
       Alert.alert(
         "Enable Notifications?",
@@ -239,7 +246,6 @@ export default function HomeScreen() {
         <ListingsGrid listings={filteredListings} />
       )}
 
-      {/* FLOATING CREATE LISTING BUTTON */}
       <TouchableOpacity
         style={styles.fab}
         onPress={() => router.push("/seller-hub/create-listing")}
@@ -259,12 +265,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#EAF4EF",
   },
-
   headerBlock: {
     backgroundColor: "#7FAF9B",
     paddingBottom: 10,
   },
-
   fab: {
     position: "absolute",
     bottom: 55,
@@ -283,7 +287,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
     elevation: 6,
   },
-
   fabText: {
     fontSize: 15,
     fontWeight: "900",
