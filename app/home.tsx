@@ -40,6 +40,7 @@ type ListingRow = {
   condition: string
   image_urls: string[] | null
   allow_offers?: boolean | null
+  shipping_type?: "seller_pays" | "buyer_pays" | null
 }
 
 /* ---------------- SCREEN ---------------- */
@@ -75,7 +76,7 @@ export default function HomeScreen() {
     const { data, error } = await supabase
       .from("listings")
       .select(
-        "id,title,price,category,condition,image_urls,allow_offers"
+        "id,title,price,category,condition,image_urls,allow_offers,shipping_type"
       )
       .eq("status", "active")
       .order("created_at", { ascending: false })
@@ -99,6 +100,7 @@ export default function HomeScreen() {
           category: l.category,
           image_url: l.image_urls![0],
           allow_offers: l.allow_offers ?? false,
+          shipping_type: l.shipping_type ?? null,
         }))
 
       setListings(normalized)

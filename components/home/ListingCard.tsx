@@ -1,10 +1,10 @@
 import { Ionicons } from "@expo/vector-icons"
 import {
-    Image,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Image,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native"
 
 export type Listing = {
@@ -14,6 +14,7 @@ export type Listing = {
   category: string
   image_url: string | null
   allow_offers?: boolean
+  shipping_type?: "seller_pays" | "buyer_pays" | null
 }
 
 type Props = {
@@ -29,52 +30,90 @@ export default function ListingCard({
   onEdit,
   onPress,
 }: Props) {
+  const showFreeShipping =
+    listing.shipping_type === "seller_pays"
+
   return (
     <TouchableOpacity
-      style={styles.tile}
+      style={styles.card}
       onPress={onPress}
       activeOpacity={0.85}
     >
-      {/* IMAGE */}
-      {listing.image_url ? (
-        <Image source={{ uri: listing.image_url }} style={styles.image} />
-      ) : (
-        <View style={styles.placeholder}>
-          <Ionicons name="image-outline" size={20} color="#9FB8AC" />
-        </View>
-      )}
+      {/* IMAGE WRAP */}
+      <View style={styles.imageWrap}>
+        {listing.image_url ? (
+          <Image
+            source={{ uri: listing.image_url }}
+            style={styles.image}
+          />
+        ) : (
+          <View style={styles.placeholder}>
+            <Ionicons
+              name="image-outline"
+              size={22}
+              color="#9FB8AC"
+            />
+          </View>
+        )}
 
-      {/* PRICE */}
-      <View style={styles.priceBadge}>
-        <Text style={styles.priceText}>${listing.price}</Text>
+        {/* FREE SHIPPING BADGE */}
+        {showFreeShipping && (
+          <View style={styles.freeShipBadge}>
+            <Text style={styles.freeShipText}>
+              FREE SHIPPING
+            </Text>
+          </View>
+        )}
+
+        {/* SELLER ACTIONS */}
+        {mode === "seller" && (
+          <View style={styles.sellerActions}>
+            <TouchableOpacity
+              style={styles.actionBtn}
+              onPress={onEdit}
+            >
+              <Text style={styles.actionText}>Edit</Text>
+            </TouchableOpacity>
+
+            {listing.allow_offers && (
+              <View style={styles.offerBadge}>
+                <Text style={styles.offerText}>Offers</Text>
+              </View>
+            )}
+          </View>
+        )}
       </View>
 
-      {/* SELLER ACTIONS */}
-      {mode === "seller" && (
-        <View style={styles.sellerActions}>
-          <TouchableOpacity
-            style={styles.actionBtn}
-            onPress={onEdit}
-          >
-            <Text style={styles.actionText}>Edit</Text>
-          </TouchableOpacity>
+      {/* TEXT BELOW IMAGE */}
+      <View style={styles.meta}>
+        <Text
+          style={styles.title}
+          numberOfLines={2}
+        >
+          {listing.title}
+        </Text>
 
-          {listing.allow_offers && (
-            <View style={styles.offerBadge}>
-              <Text style={styles.offerText}>Offers</Text>
-            </View>
-          )}
-        </View>
-      )}
+        <Text style={styles.price}>
+          ${listing.price}
+        </Text>
+      </View>
     </TouchableOpacity>
   )
 }
 
 const styles = StyleSheet.create({
-  tile: {
+  card: {
     flex: 1,
-    aspectRatio: 1,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    overflow: "hidden",
+  },
+
+  /* IMAGE */
+  imageWrap: {
     position: "relative",
+    aspectRatio: 1,
+    backgroundColor: "#24352D",
   },
 
   image: {
@@ -83,40 +122,41 @@ const styles = StyleSheet.create({
   },
 
   placeholder: {
-    width: "100%",
-    height: "100%",
-    backgroundColor: "#24352D",
+    flex: 1,
     alignItems: "center",
     justifyContent: "center",
   },
 
-  priceBadge: {
+  /* FREE SHIPPING */
+  freeShipBadge: {
     position: "absolute",
-    bottom: 6,
+    top: 6,
     left: 6,
-    backgroundColor: "rgba(15,30,23,0.85)",
-    paddingHorizontal: 6,
-    paddingVertical: 4,
-    borderRadius: 6,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: "#EB5757",
   },
 
-  priceText: {
-    color: "#E8F5EE",
-    fontSize: 11,
-    fontWeight: "800",
+  freeShipText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#EB5757",
   },
 
-  /* SELLER UI */
+  /* SELLER */
   sellerActions: {
     position: "absolute",
     top: 6,
     right: 6,
-    alignItems: "flex-end",
     gap: 6,
+    alignItems: "flex-end",
   },
 
   actionBtn: {
-    backgroundColor: "rgba(0,0,0,0.65)",
+    backgroundColor: "rgba(0,0,0,0.6)",
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
@@ -138,6 +178,24 @@ const styles = StyleSheet.create({
   offerText: {
     fontSize: 10,
     fontWeight: "800",
+    color: "#0F1E17",
+  },
+
+  /* META */
+  meta: {
+    padding: 8,
+    gap: 4,
+  },
+
+  title: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#0F1E17",
+  },
+
+  price: {
+    fontSize: 13,
+    fontWeight: "900",
     color: "#0F1E17",
   },
 })
