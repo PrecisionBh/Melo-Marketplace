@@ -4,48 +4,70 @@ import { useEffect, useState } from "react"
 import {
   ActivityIndicator,
   FlatList,
+  Image,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native"
 
+import { useAuth } from "@/context/AuthContext"
 import { supabase } from "@/lib/supabase"
 
 /* ---------------- TYPES ---------------- */
 
+type OrderStatus =
+  | "created"
+  | "paid"
+  | "shipped"
+  | "delivered"
+  | "issue_open"
+  | "disputed"
+  | "completed"
+
 type Order = {
   id: string
-  status:
-    | "created"
-    | "paid"
-    | "shipped"
-    | "delivered"
-    | "issue_open"
-    | "disputed"
-    | "completed"
+  buyer_id: string
+  status: OrderStatus
   amount_cents: number
   created_at: string
+  image_url: string | null
+  listing_snapshot: {
+    image_url?: string | null
+    title?: string | null
+  }
 }
 
 /* ---------------- SCREEN ---------------- */
 
 export default function BuyerInProgressOrdersScreen() {
   const router = useRouter()
+  const { session } = useAuth()
 
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    loadOrders()
-  }, [])
+    if (session?.user?.id) {
+      loadOrders()
+    }
+  }, [session?.user?.id])
 
   const loadOrders = async () => {
     setLoading(true)
 
     const { data, error } = await supabase
       .from("orders")
-      .select("id,status,amount_cents,created_at")
+      .select(`
+        id,
+        buyer_id,
+        status,
+        amount_cents,
+        created_at,
+        image_url,
+        listing_snapshot
+      `)
+      .eq("buyer_id", session!.user.id) // ✅ ONLY this user's orders
       .neq("status", "completed")
       .order("created_at", { ascending: false })
 
@@ -65,22 +87,27 @@ export default function BuyerInProgressOrdersScreen() {
   return (
     <View style={styles.screen}>
       {/* HEADER */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backBtn}
-          onPress={() => router.replace("/buyer-hub/orders")}
-        >
-          <Ionicons name="arrow-back" size={20} color="#E8F5EE" />
-          <Text style={styles.backText}>My Orders</Text>
-        </TouchableOpacity>
+      <View style={styles.headerWrap}>
+        <View style={styles.headerRow}>
+          <TouchableOpacity
+            style={styles.headerBtn}
+            onPress={() => router.replace("/buyer-hub/orders")}
+          >
+            <Ionicons name="arrow-back" size={22} color="#0F1E17" />
+            <Text style={styles.headerSub}>My Orders</Text>
+          </TouchableOpacity>
 
-        <Text style={styles.headerTitle}>In-Progress Orders</Text>
+          <Text style={styles.headerTitle}>In-Progress</Text>
+
+          <View style={{ width: 60 }} />
+        </View>
       </View>
 
+      {/* CONTENT */}
       {orders.length === 0 ? (
-        <View style={styles.emptyWrap}>
+        <View style={styles.empty}>
           <Text style={styles.emptyText}>
-            You don’t have any active orders right now.
+            You don’t have any active orders.
           </Text>
 
           <TouchableOpacity
@@ -94,29 +121,55 @@ export default function BuyerInProgressOrdersScreen() {
         <FlatList
           data={orders}
           keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={styles.card}
-              onPress={() =>
-                router.push({
-                  pathname: "/order/[id]",
-                  params: { id: item.id },
-                })
-              }
-            >
-              <View>
-                <Text style={styles.cardTitle}>
-                  Order #{item.id.slice(0, 8)}
-                </Text>
+          contentContainerStyle={{ padding: 16, paddingBottom: 140 }}
+          renderItem={({ item }) => {
+            const imageUri =
+              item.image_url ||
+              item.listing_snapshot?.image_url ||
+              null
 
-                <Text style={styles.subText}>
-                  ${(item.amount_cents / 100).toFixed(2)}
-                </Text>
-              </View>
+            return (
+              <TouchableOpacity
+                style={styles.card}
+                onPress={() =>
+                  router.push({
+                    pathname: "./[id]", // ✅ FIXED ROUTING
+                    params: { id: item.id },
+                  })
+                }
+              >
+                {/* IMAGE */}
+                {imageUri ? (
+                  <Image
+                    source={{ uri: imageUri }}
+                    style={styles.image}
+                  />
+                ) : (
+                  <View style={styles.imagePlaceholder}>
+                    <Ionicons
+                      name="image-outline"
+                      size={22}
+                      color="#7FAF9B"
+                    />
+                  </View>
+                )}
 
-              <StatusBadge status={item.status} />
-            </TouchableOpacity>
-          )}
+                {/* INFO */}
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.title} numberOfLines={2}>
+                    {item.listing_snapshot?.title ??
+                      `Order #${item.id.slice(0, 8)}`}
+                  </Text>
+
+                  <Text style={styles.price}>
+                    ${(item.amount_cents / 100).toFixed(2)}
+                  </Text>
+                </View>
+
+                <StatusBadge status={item.status} />
+              </TouchableOpacity>
+            )
+          }}
         />
       )}
     </View>
@@ -125,18 +178,19 @@ export default function BuyerInProgressOrdersScreen() {
 
 /* ---------------- STATUS BADGE ---------------- */
 
-function StatusBadge({ status }: { status: Order["status"] }) {
-  const map: Record<string, string> = {
+function StatusBadge({ status }: { status: OrderStatus }) {
+  const map: Record<OrderStatus, string> = {
     created: "#BDBDBD",
     paid: "#56CCF2",
     shipped: "#9B51E0",
     delivered: "#27AE60",
     issue_open: "#F2C94C",
     disputed: "#EB5757",
+    completed: "#999",
   }
 
   return (
-    <View style={[styles.badge, { backgroundColor: map[status] ?? "#999" }]}>
+    <View style={[styles.badge, { backgroundColor: map[status] }]}>
       <Text style={styles.badgeText}>
         {status.replace("_", " ").toUpperCase()}
       </Text>
@@ -152,35 +206,38 @@ const styles = StyleSheet.create({
     backgroundColor: "#EAF4EF",
   },
 
-  header: {
-    paddingTop: 60,
-    paddingBottom: 14,
-    alignItems: "center",
+  headerWrap: {
     backgroundColor: "#7FAF9B",
+    paddingTop: 50,
+    paddingBottom: 12,
+    paddingHorizontal: 14,
   },
 
-  backBtn: {
-    position: "absolute",
-    left: 14,
-    bottom: 14,
+  headerRow: {
     flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
-  },
-
-  backText: {
-    marginLeft: 6,
-    color: "#E8F5EE",
-    fontWeight: "600",
-    fontSize: 13,
   },
 
   headerTitle: {
     fontSize: 18,
     fontWeight: "800",
-    color: "#E8F5EE",
+    color: "#0F1E17",
   },
 
-  emptyWrap: {
+  headerBtn: {
+    alignItems: "center",
+    minWidth: 60,
+  },
+
+  headerSub: {
+    marginTop: 2,
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#0F1E17",
+  },
+
+  empty: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
@@ -189,10 +246,10 @@ const styles = StyleSheet.create({
 
   emptyText: {
     fontSize: 16,
-    fontWeight: "700",
+    fontWeight: "800",
     color: "#0F1E17",
+    marginBottom: 14,
     textAlign: "center",
-    marginBottom: 16,
   },
 
   browseBtn: {
@@ -208,32 +265,49 @@ const styles = StyleSheet.create({
   },
 
   card: {
-    backgroundColor: "#fff",
-    marginHorizontal: 14,
-    marginBottom: 10,
-    padding: 14,
-    borderRadius: 14,
     flexDirection: "row",
-    justifyContent: "space-between",
+    gap: 12,
+    backgroundColor: "#FFFFFF",
+    padding: 12,
+    borderRadius: 14,
+    marginBottom: 12,
     alignItems: "center",
   },
 
-  cardTitle: {
-    fontSize: 14,
+  image: {
+    width: 90,
+    height: 90,
+    borderRadius: 10,
+    backgroundColor: "#D6E6DE",
+  },
+
+  imagePlaceholder: {
+    width: 90,
+    height: 90,
+    borderRadius: 10,
+    backgroundColor: "#E8F5EE",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  title: {
+    fontSize: 15,
     fontWeight: "800",
     color: "#0F1E17",
   },
 
-  subText: {
-    marginTop: 4,
-    fontSize: 13,
-    color: "#6B8F7D",
+  price: {
+    marginTop: 6,
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#0F1E17",
   },
 
   badge: {
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 10,
+    marginLeft: 6,
   },
 
   badgeText: {

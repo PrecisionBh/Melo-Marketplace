@@ -6,7 +6,7 @@ import {
   Alert,
   Image,
   Linking,
-  ScrollView,
+  Modal,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -16,46 +16,30 @@ import {
 import { useAuth } from "@/context/AuthContext"
 import { supabase } from "@/lib/supabase"
 
-/* ---------------- HELPERS ---------------- */
-
-const formatMoney = (value?: number | null) => {
-  if (typeof value !== "number") return "$0.00"
-  return `$${value.toFixed(2)}`
-}
-
 /* ---------------- TYPES ---------------- */
 
 type OrderStatus =
+  | "created"
   | "paid"
   | "shipped"
   | "delivered"
+  | "issue_open"
+  | "disputed"
   | "completed"
-
-type ShippingType = "seller_pays" | "buyer_pays"
 
 type Order = {
   id: string
   buyer_id: string
   status: OrderStatus
-
   amount_cents: number
-
-  shipping_type: ShippingType | null
-  shipping_amount_cents: number | null
-
   image_url: string | null
-
-  listing_snapshot?: {
-    title?: string
-    image_urls?: string[]
-  }
-
-  item_price: number | null
-  buyer_fee: number | null
-
-  carrier: string | null
-  tracking_number: string | null
   tracking_url: string | null
+  carrier: string | null
+  completed_at: string | null
+  listing_snapshot: {
+    title?: string | null
+    shipping_amount_cents?: number | null
+  }
 }
 
 /* ---------------- SCREEN ---------------- */
@@ -67,25 +51,31 @@ export default function BuyerOrderDetailScreen() {
 
   const [order, setOrder] = useState<Order | null>(null)
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
+  const [confirmVisible, setConfirmVisible] = useState(false)
 
   useEffect(() => {
-    if (id && session?.user?.id) {
-      loadOrder()
-    }
-  }, [id, session?.user?.id])
+    if (id && session?.user?.id) loadOrder()
+  }, [id])
 
   const loadOrder = async () => {
-    setLoading(true)
-
     const { data, error } = await supabase
       .from("orders")
-      .select("*")
+      .select(`
+        id,
+        buyer_id,
+        status,
+        amount_cents,
+        image_url,
+        tracking_url,
+        carrier,
+        completed_at,
+        listing_snapshot
+      `)
       .eq("id", id)
       .single()
 
-    if (error || !data || data.buyer_id !== session?.user?.id) {
-      router.back()
+    if (error || !data || data.buyer_id !== session!.user.id) {
+      router.replace("/buyer-hub/orders")
       return
     }
 
@@ -93,41 +83,23 @@ export default function BuyerOrderDetailScreen() {
     setLoading(false)
   }
 
-  if (loading) {
-    return <ActivityIndicator style={{ marginTop: 80 }} />
-  }
-
-  if (!order) return null
-
-  /* ---------------- IMAGE ---------------- */
-
-  const imageSrc =
-    order.listing_snapshot?.image_urls?.[0] ??
-    order.image_url ??
-    null
-
   /* ---------------- ACTIONS ---------------- */
 
-  const confirmDelivery = async () => {
+  const cancelOrder = async () => {
     Alert.alert(
-      "Confirm Delivery",
-      "Only confirm after receiving and inspecting the item.",
+      "Cancel Order",
+      "Item price and shipping will be refunded. Buyer Protection & Processing fees (2.9% + $0.30) are non-refundable.",
       [
-        { text: "Cancel" },
+        { text: "Never mind" },
         {
-          text: "Confirm",
+          text: "Cancel Order",
+          style: "destructive",
           onPress: async () => {
-            setSaving(true)
-
             await supabase
               .from("orders")
-              .update({
-                status: "completed",
-                completed_at: new Date().toISOString(),
-              })
-              .eq("id", order.id)
+              .update({ status: "completed" })
+              .eq("id", order!.id)
 
-            setSaving(false)
             router.replace("/buyer-hub/orders")
           },
         },
@@ -135,11 +107,36 @@ export default function BuyerOrderDetailScreen() {
     )
   }
 
-  const openIssue = () => {
-    router.push(`/buyer-hub/orders/dispute-issue?orderId=${order.id}`)
+  const completeOrder = async () => {
+    await supabase
+      .from("orders")
+      .update({
+        status: "completed",
+        completed_at: new Date().toISOString(),
+      })
+      .eq("id", order!.id)
+
+    setConfirmVisible(false)
+    loadOrder()
   }
 
-  /* ---------------- UI ---------------- */
+  if (loading || !order) {
+    return <ActivityIndicator style={{ marginTop: 60 }} />
+  }
+
+  const isCompleted = order.status === "completed"
+  const canCancel = order.status === "paid"
+  const canTrack = !!order.tracking_url && !isCompleted
+
+  /* ---------------- RECEIPT MATH ---------------- */
+
+  const itemTotal = order.amount_cents / 100
+  const shipping =
+    (order.listing_snapshot?.shipping_amount_cents ?? 0) / 100
+  const buyerFee = +(itemTotal * 0.029 + 0.3).toFixed(2)
+  const totalPaid = +(itemTotal + shipping + buyerFee).toFixed(2)
+
+  /* ---------------- RENDER ---------------- */
 
   return (
     <View style={styles.screen}>
@@ -152,157 +149,140 @@ export default function BuyerOrderDetailScreen() {
         <View style={{ width: 22 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.card}>
-          {imageSrc && (
-            <Image
-              source={{ uri: encodeURI(imageSrc) }}
-              style={styles.image}
-            />
-          )}
+      {/* IMAGE */}
+      <Image
+        source={{ uri: order.image_url ?? undefined }}
+        style={styles.image}
+      />
 
-          <Text style={styles.title}>
-            Order #{order.id.slice(0, 8)}
+      <View style={styles.content}>
+        <Text style={styles.title}>
+          {order.listing_snapshot?.title ?? `Order #${order.id.slice(0, 8)}`}
+        </Text>
+
+        {/* STATUS BADGE */}
+        <View
+          style={[
+            styles.badge,
+            isCompleted && { backgroundColor: "#27AE60" },
+          ]}
+        >
+          <Text style={styles.badgeText}>
+            {isCompleted
+              ? "COMPLETED"
+              : order.status === "paid"
+              ? "WAITING FOR SELLER TO SHIP"
+              : order.status.replace("_", " ").toUpperCase()}
           </Text>
-
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>
-              {order.status.toUpperCase()}
-            </Text>
-          </View>
         </View>
 
-        {/* STATUS */}
-        {order.status === "paid" && (
-          <View style={styles.section}>
-            <View style={styles.pendingBox}>
-              <Text style={styles.pendingTitle}>
-                Waiting for shipment
-              </Text>
-              <Text style={styles.pendingText}>
-                Tracking will appear once the seller ships.
-              </Text>
-            </View>
-          </View>
-        )}
-
-        {/* TRACKING */}
-        {order.tracking_number && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Tracking</Text>
-
-            <Text style={styles.infoText}>
-              Carrier: {order.carrier}
-            </Text>
-            <Text style={styles.infoText}>
-              Tracking: {order.tracking_number}
-            </Text>
-
-            {order.tracking_url && (
-              <TouchableOpacity
-                style={styles.trackBtn}
-                onPress={() =>
-                  Linking.openURL(order.tracking_url!)
-                }
-              >
-                <Text style={styles.trackBtnText}>
-                  Track Order
-                </Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
-
-        {/* PAYMENT */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Payment</Text>
-
-          {typeof order.item_price === "number" && (
-            <Row
-              label="Item"
-              value={formatMoney(order.item_price)}
-            />
-          )}
-
-          {order.shipping_type === "seller_pays" && (
-            <Row label="Shipping" value="Free" />
-          )}
-
-          {order.shipping_type === "buyer_pays" &&
-            typeof order.shipping_amount_cents ===
-              "number" && (
-              <Row
-                label="Shipping"
-                value={formatMoney(
-                  order.shipping_amount_cents / 100
-                )}
-              />
-            )}
-
-          {typeof order.buyer_fee === "number" && (
-            <Row
-              label="Buyer Protection"
-              value={formatMoney(order.buyer_fee)}
-            />
-          )}
-
-          <View style={styles.divider} />
-
-          <Row
-            label="Total Paid"
-            value={formatMoney(order.amount_cents / 100)}
+        {/* RECEIPT */}
+        <View style={styles.receipt}>
+          <ReceiptRow label="Item price" value={`$${itemTotal.toFixed(2)}`} />
+          <ReceiptRow label="Shipping" value={`$${shipping.toFixed(2)}`} />
+          <ReceiptRow
+            label="Buyer protection & processing"
+            value={`$${buyerFee.toFixed(2)}`}
+            subtle
+          />
+          <View style={styles.receiptDivider} />
+          <ReceiptRow
+            label="Total paid"
+            value={`$${totalPaid.toFixed(2)}`}
             bold
           />
         </View>
-      </ScrollView>
 
-      {/* ACTIONS */}
-      {order.status === "shipped" && (
-        <View style={styles.actionBar}>
-          <TouchableOpacity
-            style={styles.primaryBtn}
-            onPress={confirmDelivery}
-            disabled={saving}
-          >
-            <Text style={styles.primaryText}>
-              Confirm Delivery
-            </Text>
-          </TouchableOpacity>
+        {/* ACTIONS (HIDDEN WHEN COMPLETED) */}
+        {!isCompleted && (
+          <>
+            <View style={styles.pillRow}>
+              {canCancel && (
+                <TouchableOpacity
+                  style={[styles.pill, styles.cancelPill]}
+                  onPress={cancelOrder}
+                >
+                  <Text style={styles.cancelText}>Cancel</Text>
+                </TouchableOpacity>
+              )}
 
-          <TouchableOpacity
-            style={styles.issueBtn}
-            onPress={openIssue}
-          >
-            <Text style={styles.issueText}>
-              Report a Problem
+              <TouchableOpacity
+                style={[styles.pill, styles.disputePill]}
+                onPress={() =>
+                  router.push(
+                    `/buyer-hub/orders/dispute-issue?orderId=${order.id}`
+                  )
+                }
+              >
+                <Text style={styles.disputeText}>Dispute</Text>
+              </TouchableOpacity>
+
+              {canTrack && (
+                <TouchableOpacity
+                  style={[styles.pill, styles.trackPill]}
+                  onPress={() => Linking.openURL(order.tracking_url!)}
+                >
+                  <Text style={styles.trackText}>Track</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <TouchableOpacity
+              style={styles.completeBtn}
+              onPress={() => setConfirmVisible(true)}
+            >
+              <Text style={styles.completeText}>Complete Order</Text>
+            </TouchableOpacity>
+          </>
+        )}
+      </View>
+
+      {/* CONFIRM MODAL */}
+      <Modal transparent visible={confirmVisible} animationType="fade">
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modal}>
+            <Text style={styles.modalTitle}>Complete Order?</Text>
+            <Text style={styles.modalText}>
+              Once completed, escrow will be released and disputes will no longer
+              be possible.
             </Text>
-          </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.completeBtn}
+              onPress={completeOrder}
+            >
+              <Text style={styles.completeText}>Yes, Complete</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={() => setConfirmVisible(false)}>
+              <Text style={styles.modalCancel}>Go Back</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      )}
+      </Modal>
     </View>
   )
 }
 
-/* ---------------- ROW ---------------- */
+/* ---------------- COMPONENTS ---------------- */
 
-function Row({
+function ReceiptRow({
   label,
   value,
   bold,
+  subtle,
 }: {
   label: string
   value: string
   bold?: boolean
+  subtle?: boolean
 }) {
   return (
-    <View style={styles.row}>
-      <Text style={styles.rowLabel}>{label}</Text>
-      <Text
-        style={[
-          styles.rowValue,
-          bold && { fontWeight: "900" },
-        ]}
-      >
+    <View style={styles.receiptRow}>
+      <Text style={[styles.receiptLabel, subtle && { color: "#6B8F7D" }]}>
+        {label}
+      </Text>
+      <Text style={[styles.receiptValue, bold && { fontWeight: "900" }]}>
         {value}
       </Text>
     </View>
@@ -312,17 +292,15 @@ function Row({
 /* ---------------- STYLES ---------------- */
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#F6F7F8" },
+  screen: { flex: 1, backgroundColor: "#EAF4EF" },
 
   header: {
-    height: 90,
-    backgroundColor: "#EAF4EF",
+    height: 85,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: "#DCEDE4",
+    backgroundColor: "#7FAF9B",
   },
 
   headerTitle: {
@@ -331,20 +309,13 @@ const styles = StyleSheet.create({
     color: "#0F1E17",
   },
 
-  content: { padding: 16, paddingBottom: 220 },
-
-  card: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 16,
-  },
-
   image: {
     width: "100%",
-    height: 220,
-    borderRadius: 14,
-    marginBottom: 12,
+    height: 260,
+    backgroundColor: "#D6E6DE",
   },
+
+  content: { padding: 16 },
 
   title: {
     fontSize: 18,
@@ -353,121 +324,130 @@ const styles = StyleSheet.create({
   },
 
   badge: {
+    marginTop: 8,
     backgroundColor: "#7FAF9B",
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
     alignSelf: "flex-start",
-    marginTop: 8,
   },
 
   badgeText: {
     fontSize: 11,
     fontWeight: "900",
-    color: "#fff",
+    color: "#0F1E17",
   },
 
-  section: { marginTop: 24 },
-
-  sectionTitle: {
-    fontSize: 15,
-    fontWeight: "900",
-    marginBottom: 10,
-  },
-
-  pendingBox: {
-    backgroundColor: "#FFF8E1",
+  receipt: {
+    marginTop: 20,
+    backgroundColor: "#fff",
     borderRadius: 14,
     padding: 14,
-    borderWidth: 1,
-    borderColor: "#F2C94C",
   },
 
-  pendingTitle: {
-    fontWeight: "900",
-    fontSize: 14,
-    color: "#7A5C00",
+  receiptRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 6,
   },
 
-  pendingText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#5F4B00",
-  },
-
-  infoText: {
-    fontSize: 13,
+  receiptLabel: {
     fontWeight: "700",
-    marginBottom: 4,
+    color: "#0F1E17",
   },
 
-  trackBtn: {
-    marginTop: 10,
+  receiptValue: {
+    fontWeight: "800",
+  },
+
+  receiptDivider: {
+    height: 1,
+    backgroundColor: "#E0E0E0",
+    marginVertical: 8,
+  },
+
+  pillRow: {
+    marginTop: 20,
+    flexDirection: "row",
+    gap: 8,
+  },
+
+  pill: {
+    flex: 1,
     paddingVertical: 10,
-    borderRadius: 12,
-    backgroundColor: "#E8F5EE",
-    borderWidth: 1,
-    borderColor: "#1F7A63",
+    borderRadius: 999,
+    alignItems: "center",
   },
 
-  trackBtnText: {
-    textAlign: "center",
+  cancelPill: {
+    backgroundColor: "#FDE2E2",
+  },
+
+  cancelText: {
+    fontWeight: "900",
+    color: "#C0392B",
+  },
+
+  disputePill: {
+    backgroundColor: "#FFF3CD",
+  },
+
+  disputeText: {
+    fontWeight: "900",
+    color: "#B8860B",
+  },
+
+  trackPill: {
+    backgroundColor: "#E8F5EE",
+  },
+
+  trackText: {
     fontWeight: "900",
     color: "#1F7A63",
   },
 
-  row: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingVertical: 6,
-  },
-
-  rowLabel: {
-    color: "#6B8F7D",
-    fontWeight: "600",
-  },
-
-  rowValue: {
-    fontWeight: "700",
-  },
-
-  divider: {
-    height: 1,
-    backgroundColor: "#DCEDE4",
-    marginVertical: 8,
-  },
-
-  actionBar: {
-    position: "absolute",
-    bottom: 85,
-    left: 0,
-    right: 0,
-    paddingHorizontal: 16,
-  },
-
-  primaryBtn: {
+  completeBtn: {
+    marginTop: 16,
     backgroundColor: "#1F7A63",
     paddingVertical: 14,
+    borderRadius: 14,
+  },
+
+  completeText: {
+    textAlign: "center",
+    fontWeight: "900",
+    color: "#fff",
+  },
+
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "center",
+    padding: 20,
+  },
+
+  modal: {
+    backgroundColor: "#fff",
     borderRadius: 16,
+    padding: 20,
+  },
+
+  modalTitle: {
+    fontSize: 17,
+    fontWeight: "900",
     marginBottom: 10,
   },
 
-  primaryText: {
-    color: "#fff",
-    fontWeight: "900",
-    textAlign: "center",
+  modalText: {
+    fontSize: 14,
+    color: "#555",
+    marginBottom: 20,
   },
 
-  issueBtn: {
-    paddingVertical: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#EB5757",
-  },
-
-  issueText: {
+  modalCancel: {
+    marginTop: 10,
     textAlign: "center",
-    fontWeight: "900",
-    color: "#EB5757",
+    fontWeight: "700",
+    color: "#999",
   },
 })
