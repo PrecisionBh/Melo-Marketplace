@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons"
 import { useFocusEffect, useRouter } from "expo-router"
-import { useCallback, useState } from "react"
+import { useCallback, useMemo, useState } from "react"
 import {
   ActivityIndicator,
   FlatList,
@@ -16,10 +16,13 @@ import { supabase } from "@/lib/supabase"
 
 /* ---------------- TYPES ---------------- */
 
+type OrderStatus = "completed" | "cancelled" | "refunded"
+
 type Order = {
   id: string
   amount_cents: number
   completed_at: string
+  status: OrderStatus
   image_url: string | null
   listing_snapshot: {
     title?: string | null
@@ -35,6 +38,7 @@ export default function BuyerCompletedOrdersScreen() {
 
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
+  const [filter, setFilter] = useState<"all" | OrderStatus>("all")
 
   useFocusEffect(
     useCallback(() => {
@@ -53,12 +57,13 @@ export default function BuyerCompletedOrdersScreen() {
         id,
         amount_cents,
         completed_at,
+        status,
         image_url,
         listing_snapshot
       `
       )
       .eq("buyer_id", session!.user.id)
-      .eq("status", "completed")
+      .in("status", ["completed", "cancelled", "refunded"])
       .order("completed_at", { ascending: false })
 
     if (!error && data) {
@@ -69,6 +74,13 @@ export default function BuyerCompletedOrdersScreen() {
 
     setLoading(false)
   }
+
+  /* ---------------- FILTERED DATA ---------------- */
+
+  const filteredOrders = useMemo(() => {
+    if (filter === "all") return orders
+    return orders.filter((o) => o.status === filter)
+  }, [orders, filter])
 
   if (loading) {
     return <ActivityIndicator style={{ marginTop: 60 }} />
@@ -88,20 +100,47 @@ export default function BuyerCompletedOrdersScreen() {
           </TouchableOpacity>
 
           <Text style={styles.headerTitle}>Completed Orders</Text>
-
           <View style={{ width: 60 }} />
+        </View>
+
+        {/* FILTER PILLS */}
+        <View style={styles.filterRow}>
+          <FilterPill
+            label="All"
+            active={filter === "all"}
+            onPress={() => setFilter("all")}
+          />
+          <FilterPill
+            label="Completed"
+            active={filter === "completed"}
+            onPress={() => setFilter("completed")}
+          />
+          <FilterPill
+            label="Cancelled"
+            active={filter === "cancelled"}
+            onPress={() => setFilter("cancelled")}
+          />
+          <FilterPill
+            label="Refunded"
+            active={filter === "refunded"}
+            onPress={() => setFilter("refunded")}
+          />
         </View>
       </View>
 
       {/* CONTENT */}
-      {orders.length === 0 ? (
+      {filteredOrders.length === 0 ? (
         <View style={styles.empty}>
-          <Ionicons name="checkmark-circle-outline" size={40} color="#7FAF9B" />
-          <Text style={styles.emptyText}>No completed orders yet</Text>
+          <Ionicons
+            name="checkmark-circle-outline"
+            size={40}
+            color="#7FAF9B"
+          />
+          <Text style={styles.emptyText}>No orders found</Text>
         </View>
       ) : (
         <FlatList
-          data={orders}
+          data={filteredOrders}
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ padding: 16, paddingBottom: 140 }}
           renderItem={({ item }) => {
@@ -117,10 +156,7 @@ export default function BuyerCompletedOrdersScreen() {
                   router.push(`/buyer-hub/orders/${item.id}`)
                 }
               >
-                <Image
-                  source={{ uri: imageUri }}
-                  style={styles.image}
-                />
+                <Image source={{ uri: imageUri }} style={styles.image} />
 
                 <View style={{ flex: 1 }}>
                   <Text style={styles.title} numberOfLines={2}>
@@ -132,13 +168,28 @@ export default function BuyerCompletedOrdersScreen() {
                   </Text>
 
                   <Text style={styles.sub}>
-                    Completed{" "}
+                    {item.status.toUpperCase()} ·{" "}
                     {new Date(item.completed_at).toLocaleDateString()}
                   </Text>
                 </View>
 
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>COMPLETED</Text>
+                <View
+                  style={[
+                    styles.badge,
+                    item.status === "completed" && {
+                      backgroundColor: "#27AE60",
+                    },
+                    item.status === "cancelled" && {
+                      backgroundColor: "#F2C94C",
+                    },
+                    item.status === "refunded" && {
+                      backgroundColor: "#EB5757",
+                    },
+                  ]}
+                >
+                  <Text style={styles.badgeText}>
+                    {item.status.toUpperCase()}
+                  </Text>
                 </View>
               </TouchableOpacity>
             )
@@ -149,15 +200,42 @@ export default function BuyerCompletedOrdersScreen() {
   )
 }
 
+/* ---------------- COMPONENTS ---------------- */
+
+function FilterPill({
+  label,
+  active,
+  onPress,
+}: {
+  label: string
+  active: boolean
+  onPress: () => void
+}) {
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      style={[
+        styles.filterPill,
+        active && styles.filterPillActive,
+      ]}
+    >
+      <Text
+        style={[
+          styles.filterText,
+          active && styles.filterTextActive,
+        ]}
+      >
+        {label}
+      </Text>
+    </TouchableOpacity>
+  )
+}
+
 /* ---------------- STYLES ---------------- */
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: "#EAF4EF",
-  },
+  screen: { flex: 1, backgroundColor: "#EAF4EF" },
 
-  /* HEADER */
   headerWrap: {
     backgroundColor: "#7FAF9B",
     paddingTop: 50,
@@ -189,6 +267,34 @@ const styles = StyleSheet.create({
     color: "#0F1E17",
   },
 
+  /* FILTERS */
+  filterRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 12,
+  },
+
+  filterPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "#E8F5EE",
+  },
+
+  filterPillActive: {
+    backgroundColor: "#1F7A63",
+  },
+
+  filterText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#1F7A63",
+  },
+
+  filterTextActive: {
+    color: "#fff",
+  },
+
   /* EMPTY */
   empty: {
     flex: 1,
@@ -204,7 +310,7 @@ const styles = StyleSheet.create({
     color: "#0F1E17",
   },
 
-  /* CARD (MATCHES WATCHING) */
+  /* CARD */
   card: {
     flexDirection: "row",
     gap: 12,
@@ -213,7 +319,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     marginBottom: 12,
     alignItems: "center",
-    opacity: 0.9,
+    opacity: 0.95,
   },
 
   image: {
@@ -243,7 +349,6 @@ const styles = StyleSheet.create({
   },
 
   badge: {
-    backgroundColor: "#27AE60",
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 10,
