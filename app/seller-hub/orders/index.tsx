@@ -44,8 +44,8 @@ export default function SellerOrdersHubScreen() {
     const { count } = await supabase
       .from("orders")
       .select("id", { count: "exact", head: true })
-      .eq("status", "shipped")
       .eq("seller_id", sellerId)
+      .in("status", ["shipped", "delivered"])
 
     setInProgressCount(count ?? 0)
   }

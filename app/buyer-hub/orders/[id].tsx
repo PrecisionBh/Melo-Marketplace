@@ -117,7 +117,9 @@ export default function BuyerOrderDetailScreen() {
       .eq("id", order!.id)
 
     setConfirmVisible(false)
-    loadOrder()
+
+    // ✅ Redirect so buyer sees result immediately
+    router.replace("/buyer-hub/orders/completed")
   }
 
   if (loading || !order) {
@@ -157,7 +159,8 @@ export default function BuyerOrderDetailScreen() {
 
       <View style={styles.content}>
         <Text style={styles.title}>
-          {order.listing_snapshot?.title ?? `Order #${order.id.slice(0, 8)}`}
+          {order.listing_snapshot?.title ??
+            `Order #${order.id.slice(0, 8)}`}
         </Text>
 
         {/* STATUS BADGE */}
@@ -193,9 +196,17 @@ export default function BuyerOrderDetailScreen() {
           />
         </View>
 
-        {/* ACTIONS (HIDDEN WHEN COMPLETED) */}
-        {!isCompleted && (
+        {/* COMPLETED STATE */}
+        {isCompleted ? (
+          <View style={styles.completedBadge}>
+            <Ionicons name="checkmark-circle" size={18} color="#27AE60" />
+            <Text style={styles.completedText}>
+              This order is completed
+            </Text>
+          </View>
+        ) : (
           <>
+            {/* ACTION PILLS */}
             <View style={styles.pillRow}>
               {canCancel && (
                 <TouchableOpacity
@@ -417,6 +428,21 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontWeight: "900",
     color: "#fff",
+  },
+
+  completedBadge: {
+    marginTop: 20,
+    flexDirection: "row",
+    gap: 8,
+    backgroundColor: "#E8F5EE",
+    padding: 14,
+    borderRadius: 14,
+    alignItems: "center",
+  },
+
+  completedText: {
+    fontWeight: "900",
+    color: "#1F7A63",
   },
 
   modalBackdrop: {
