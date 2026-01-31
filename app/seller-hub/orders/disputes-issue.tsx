@@ -3,15 +3,15 @@ import * as ImagePicker from "expo-image-picker"
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { useEffect, useState } from "react"
 import {
-    ActivityIndicator,
-    Alert,
-    Image,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native"
 
 import { useAuth } from "@/context/AuthContext"
@@ -161,12 +161,13 @@ export default function SellerDisputeIssue() {
         <TouchableOpacity onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={20} color="#1F7A63" />
         </TouchableOpacity>
+
         <Text style={styles.headerTitle}>Dispute Response</Text>
         <View style={{ width: 24 }} />
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
-        {/* BUYER INFO */}
+        {/* BUYER ISSUE */}
         <View style={styles.card}>
           <Text style={styles.label}>Buyer Issue</Text>
           <Text style={styles.reason}>{dispute.reason}</Text>
@@ -203,10 +204,7 @@ export default function SellerDisputeIssue() {
             onChangeText={setResponse}
           />
 
-          <TouchableOpacity
-            style={styles.imageBtn}
-            onPress={pickImage}
-          >
+          <TouchableOpacity style={styles.imageBtn} onPress={pickImage}>
             <Text style={styles.imageText}>
               Add Images / Screenshots
             </Text>
@@ -214,11 +212,7 @@ export default function SellerDisputeIssue() {
 
           <View style={styles.imageRow}>
             {images.map((uri) => (
-              <Image
-                key={uri}
-                source={{ uri }}
-                style={styles.thumb}
-              />
+              <Image key={uri} source={{ uri }} style={styles.thumb} />
             ))}
           </View>
 

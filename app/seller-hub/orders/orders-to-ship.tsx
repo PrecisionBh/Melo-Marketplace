@@ -3,6 +3,8 @@ import { useFocusEffect, useRouter } from "expo-router"
 import { useCallback, useState } from "react"
 import {
   ActivityIndicator,
+  FlatList,
+  Image,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -15,13 +17,15 @@ import { supabase } from "@/lib/supabase"
 
 type Order = {
   id: string
-  status: "paid" | "shipped"
+  status: "paid"
   amount_cents: number
   buyer_id: string
   seller_id: string
+  image_url: string | null
   listing_snapshot: {
-    title: string
-  }
+    title?: string | null
+    image_url?: string | null
+  } | null
 }
 
 /* ---------------- SCREEN ---------------- */
@@ -41,12 +45,10 @@ export default function OrdersToShipScreen() {
   const loadOrders = async () => {
     setLoading(true)
 
-    const {
-      data: authData,
-    } = await supabase.auth.getUser()
+    const { data: authData } = await supabase.auth.getUser()
+    const sellerId = authData?.user?.id
 
-    const userId = authData?.user?.id
-    if (!userId) {
+    if (!sellerId) {
       setOrders([])
       setLoading(false)
       return
@@ -54,9 +56,17 @@ export default function OrdersToShipScreen() {
 
     const { data, error } = await supabase
       .from("orders")
-      .select("id,status,amount_cents,buyer_id,seller_id,listing_snapshot")
+      .select(`
+        id,
+        status,
+        amount_cents,
+        buyer_id,
+        seller_id,
+        image_url,
+        listing_snapshot
+      `)
       .eq("status", "paid")
-      .eq("seller_id", userId) // 🔒 CRITICAL SAFETY FILTER
+      .eq("seller_id", sellerId) // 🔒 seller-only
       .order("created_at", { ascending: true })
 
     if (!error && data) {
@@ -85,7 +95,7 @@ export default function OrdersToShipScreen() {
           <View style={{ width: 22 }} />
         </View>
 
-        {/* 🔴 URGENCY BANNER */}
+        {/* URGENCY BANNER */}
         <View style={styles.urgencyBanner}>
           <Text style={styles.urgencyText}>
             Your funds are waiting — ship to get paid
@@ -95,43 +105,54 @@ export default function OrdersToShipScreen() {
 
       {orders.length === 0 ? (
         <View style={styles.emptyWrap}>
+          <Ionicons name="cube-outline" size={40} color="#7FAF9B" />
           <Text style={styles.emptyText}>
-            No orders waiting to be shipped.
+            No orders waiting to be shipped
           </Text>
         </View>
       ) : (
-        <View>
-          {orders.map((order) => (
-            <TouchableOpacity
-              key={order.id}
-              style={styles.card}
-              onPress={() =>
-                router.push({
-                  pathname: "/seller-hub/orders/[id]",
-                  params: { id: order.id },
-                })
-              }
-            >
-              <View>
-                <Text style={styles.cardTitle}>
-                  {order.listing_snapshot?.title ?? "Item"}
-                </Text>
+        <FlatList
+          data={orders}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={{ padding: 16, paddingBottom: 140 }}
+          renderItem={({ item }) => {
+            const imageUri =
+              item.image_url ||
+              item.listing_snapshot?.image_url ||
+              "https://via.placeholder.com/150"
 
-                <Text style={styles.subText}>
-                  Buyer: {order.buyer_id.slice(0, 8)}
-                </Text>
+            return (
+              <TouchableOpacity
+                style={styles.card}
+                onPress={() =>
+                  router.push(`/seller-hub/orders/${item.id}`)
+                }
+              >
+                {/* IMAGE */}
+                <Image source={{ uri: imageUri }} style={styles.image} />
 
-                <Text style={styles.subText}>
-                  ${(order.amount_cents / 100).toFixed(2)}
-                </Text>
-              </View>
+                {/* INFO */}
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.cardTitle} numberOfLines={2}>
+                    {item.listing_snapshot?.title ?? "Item"}
+                  </Text>
 
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>READY TO SHIP</Text>
-              </View>
-            </TouchableOpacity>
-          ))}
-        </View>
+                  <Text style={styles.subText}>
+                    Buyer: {item.buyer_id.slice(0, 8)}
+                  </Text>
+
+                  <Text style={styles.subText}>
+                    ${(item.amount_cents / 100).toFixed(2)}
+                  </Text>
+                </View>
+
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>READY</Text>
+                </View>
+              </TouchableOpacity>
+            )
+          }}
+        />
       )}
     </View>
   )
@@ -177,19 +198,40 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 
+  emptyWrap: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 30,
+  },
+
+  emptyText: {
+    marginTop: 10,
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#0F1E17",
+    textAlign: "center",
+  },
+
   card: {
-    backgroundColor: "#fff",
-    marginHorizontal: 14,
-    marginBottom: 10,
-    padding: 14,
-    borderRadius: 14,
     flexDirection: "row",
-    justifyContent: "space-between",
+    gap: 12,
+    backgroundColor: "#FFFFFF",
+    padding: 12,
+    borderRadius: 14,
+    marginBottom: 12,
     alignItems: "center",
   },
 
+  image: {
+    width: 90,
+    height: 90,
+    borderRadius: 10,
+    backgroundColor: "#D6E6DE",
+  },
+
   cardTitle: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "800",
     color: "#0F1E17",
   },
@@ -205,25 +247,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 10,
+    marginLeft: 6,
   },
 
   badgeText: {
     fontSize: 11,
     fontWeight: "900",
     color: "#FFFFFF",
-  },
-
-  emptyWrap: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 30,
-  },
-
-  emptyText: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#6B8F7D",
-    textAlign: "center",
   },
 })

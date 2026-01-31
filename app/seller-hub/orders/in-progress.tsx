@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import {
   ActivityIndicator,
   FlatList,
+  Image,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -14,19 +15,20 @@ import { supabase } from "@/lib/supabase"
 
 /* ---------------- TYPES ---------------- */
 
-type OrderStatus =
-  | "shipped"
-  | "delivered"
-  | "issue_reported"
+type OrderStatus = "shipped" | "delivered" | "issue_reported"
 
 type Order = {
   id: string
   status: OrderStatus
   amount_cents: number
   buyer_id: string
+  seller_id: string
   created_at: string
-  carrier?: string | null
-  tracking_number?: string | null
+  image_url: string | null
+  listing_snapshot: {
+    title?: string | null
+    image_url?: string | null
+  } | null
 }
 
 /* ---------------- SCREEN ---------------- */
@@ -44,11 +46,30 @@ export default function SellerInProgressOrdersScreen() {
   const loadOrders = async () => {
     setLoading(true)
 
+    const {
+      data: authData,
+    } = await supabase.auth.getUser()
+
+    const sellerId = authData?.user?.id
+    if (!sellerId) {
+      setOrders([])
+      setLoading(false)
+      return
+    }
+
     const { data, error } = await supabase
       .from("orders")
-      .select(
-        "id,status,amount_cents,buyer_id,created_at,carrier,tracking_number"
-      )
+      .select(`
+        id,
+        status,
+        amount_cents,
+        buyer_id,
+        seller_id,
+        created_at,
+        image_url,
+        listing_snapshot
+      `)
+      .eq("seller_id", sellerId) // 🔒 seller-only
       .in("status", ["shipped", "delivered", "issue_reported"])
       .order("created_at", { ascending: false })
 
@@ -83,65 +104,73 @@ export default function SellerInProgressOrdersScreen() {
 
       {orders.length === 0 ? (
         <View style={styles.emptyWrap}>
+          <Ionicons name="time-outline" size={40} color="#7FAF9B" />
           <Text style={styles.emptyText}>
-            No active orders in progress.
+            No active orders in progress
           </Text>
-
           <Text style={styles.helperText}>
-            Please check Orders to Ship.
+            Orders will appear here after shipment
           </Text>
         </View>
       ) : (
         <FlatList
           data={orders}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={{ paddingTop: 10, paddingBottom: 140 }}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={styles.card}
-              onPress={() =>
-                router.push({
-                  pathname: "/seller-hub/orders/[id]",
-                  params: { id: item.id },
-                })
-              }
-            >
-              <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle}>
-                  Order #{item.id.slice(0, 8)}
-                </Text>
+          contentContainerStyle={{ padding: 16, paddingBottom: 140 }}
+          renderItem={({ item }) => {
+            const imageUri =
+              item.image_url ||
+              item.listing_snapshot?.image_url ||
+              "https://via.placeholder.com/150"
 
-                <Text style={styles.subText}>
-                  Buyer: {item.buyer_id.slice(0, 8)}
-                </Text>
+            return (
+              <TouchableOpacity
+                style={styles.card}
+                onPress={() =>
+                  router.push(`/seller-hub/orders/${item.id}`)
+                }
+              >
+                {/* IMAGE */}
+                <Image source={{ uri: imageUri }} style={styles.image} />
 
-                <Text style={styles.subText}>
-                  ${(item.amount_cents / 100).toFixed(2)}
-                </Text>
+                {/* INFO */}
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.cardTitle} numberOfLines={2}>
+                    {item.listing_snapshot?.title ??
+                      `Order #${item.id.slice(0, 8)}`}
+                  </Text>
 
-                {item.status === "shipped" &&
-                  item.tracking_number && (
+                  <Text style={styles.subText}>
+                    Buyer: {item.buyer_id.slice(0, 8)}
+                  </Text>
+
+                  <Text style={styles.subText}>
+                    ${(item.amount_cents / 100).toFixed(2)}
+                  </Text>
+
+                  {item.status === "shipped" && (
                     <Text style={styles.actionHint}>
-                      Tracking added
+                      Shipped — awaiting delivery
                     </Text>
                   )}
 
-                {item.status === "delivered" && (
-                  <Text style={styles.actionHint}>
-                    Delivered — awaiting buyer confirmation
-                  </Text>
-                )}
+                  {item.status === "delivered" && (
+                    <Text style={styles.actionHint}>
+                      Delivered — awaiting buyer completion
+                    </Text>
+                  )}
 
-                {item.status === "issue_reported" && (
-                  <Text style={styles.actionHint}>
-                    Buyer reported an issue
-                  </Text>
-                )}
-              </View>
+                  {item.status === "issue_reported" && (
+                    <Text style={styles.issueHint}>
+                      Buyer reported an issue
+                    </Text>
+                  )}
+                </View>
 
-              <StatusBadge status={item.status} />
-            </TouchableOpacity>
-          )}
+                <StatusBadge status={item.status} />
+              </TouchableOpacity>
+            )
+          }}
         />
       )}
     </View>
@@ -154,7 +183,7 @@ function StatusBadge({ status }: { status: OrderStatus }) {
   const map: Record<OrderStatus, string> = {
     shipped: "#9B51E0",
     delivered: "#27AE60",
-    issue_reported: "#F2C94C",
+    issue_reported: "#EB5757",
   }
 
   return (
@@ -201,33 +230,40 @@ const styles = StyleSheet.create({
   },
 
   emptyText: {
-    fontSize: 15,
+    marginTop: 10,
+    fontSize: 16,
     fontWeight: "800",
-    color: "#6B8F7D",
+    color: "#0F1E17",
     textAlign: "center",
   },
 
   helperText: {
     marginTop: 6,
     fontSize: 13,
-    fontWeight: "700",
-    color: "#0F1E17",
+    fontWeight: "600",
+    color: "#6B8F7D",
     textAlign: "center",
   },
 
   card: {
-    backgroundColor: "#fff",
-    marginHorizontal: 14,
-    marginBottom: 10,
-    padding: 14,
-    borderRadius: 14,
     flexDirection: "row",
-    justifyContent: "space-between",
+    gap: 12,
+    backgroundColor: "#FFFFFF",
+    padding: 12,
+    borderRadius: 14,
+    marginBottom: 12,
     alignItems: "center",
   },
 
+  image: {
+    width: 90,
+    height: 90,
+    borderRadius: 10,
+    backgroundColor: "#D6E6DE",
+  },
+
   cardTitle: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "800",
     color: "#0F1E17",
   },
@@ -242,19 +278,26 @@ const styles = StyleSheet.create({
     marginTop: 6,
     fontSize: 11,
     fontWeight: "700",
-    color: "#C17C00",
+    color: "#7A5AF8",
+  },
+
+  issueHint: {
+    marginTop: 6,
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#C0392B",
   },
 
   badge: {
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 10,
-    marginLeft: 10,
+    marginLeft: 6,
   },
 
   badgeText: {
     fontSize: 11,
-    fontWeight: "800",
+    fontWeight: "900",
     color: "#fff",
   },
 })

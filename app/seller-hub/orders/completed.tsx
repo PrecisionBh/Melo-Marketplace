@@ -3,6 +3,8 @@ import { useFocusEffect, useRouter } from "expo-router"
 import { useCallback, useState } from "react"
 import {
   ActivityIndicator,
+  FlatList,
+  Image,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -12,15 +14,21 @@ import {
 import { useAuth } from "@/context/AuthContext"
 import { supabase } from "@/lib/supabase"
 
+/* ---------------- TYPES ---------------- */
+
 type Order = {
   id: string
   amount_cents: number
   buyer_id: string
-  listing_snapshot: {
-    title: string
-  } | null
   completed_at: string
+  image_url: string | null
+  listing_snapshot: {
+    title?: string | null
+    image_url?: string | null
+  } | null
 }
+
+/* ---------------- SCREEN ---------------- */
 
 export default function SellerCompletedOrdersScreen() {
   const router = useRouter()
@@ -41,10 +49,15 @@ export default function SellerCompletedOrdersScreen() {
 
     const { data, error } = await supabase
       .from("orders")
-      .select(
-        "id, amount_cents, buyer_id, listing_snapshot, completed_at"
-      )
-      .eq("seller_id", session!.user!.id)
+      .select(`
+        id,
+        amount_cents,
+        buyer_id,
+        completed_at,
+        image_url,
+        listing_snapshot
+      `)
+      .eq("seller_id", session!.user.id)
       .eq("status", "completed")
       .order("completed_at", { ascending: false })
 
@@ -63,7 +76,7 @@ export default function SellerCompletedOrdersScreen() {
 
   return (
     <View style={styles.screen}>
-      {/* 🌿 HEADER WRAP */}
+      {/* HEADER */}
       <View style={styles.headerWrap}>
         <View style={styles.headerRow}>
           <TouchableOpacity onPress={() => router.back()}>
@@ -71,55 +84,69 @@ export default function SellerCompletedOrdersScreen() {
           </TouchableOpacity>
 
           <Text style={styles.headerTitle}>Completed Sales</Text>
-
           <View style={{ width: 22 }} />
         </View>
       </View>
 
       {orders.length === 0 ? (
         <View style={styles.emptyWrap}>
+          <Ionicons
+            name="checkmark-done-outline"
+            size={40}
+            color="#7FAF9B"
+          />
           <Text style={styles.emptyText}>
             You haven’t completed any sales yet.
           </Text>
         </View>
       ) : (
-        <View>
-          {orders.map((order) => (
-            <TouchableOpacity
-              key={order.id}
-              style={styles.card}
-              onPress={() =>
-                router.push({
-                  pathname: "/order/[id]",
-                  params: { id: order.id },
-                })
-              }
-            >
-              <View>
-                <Text style={styles.cardTitle}>
-                  {order.listing_snapshot?.title ?? "Item"}
-                </Text>
+        <FlatList
+          data={orders}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={{ padding: 16, paddingBottom: 140 }}
+          renderItem={({ item }) => {
+            const imageUri =
+              item.image_url ||
+              item.listing_snapshot?.image_url ||
+              "https://via.placeholder.com/150"
 
-                <Text style={styles.subText}>
-                  Buyer: {order.buyer_id.slice(0, 8)}
-                </Text>
+            return (
+              <TouchableOpacity
+                style={styles.card}
+                onPress={() =>
+                  router.push(`/seller-hub/orders/${item.id}`)
+                }
+              >
+                {/* IMAGE */}
+                <Image source={{ uri: imageUri }} style={styles.image} />
 
-                <Text style={styles.subText}>
-                  ${(order.amount_cents / 100).toFixed(2)}
-                </Text>
+                {/* INFO */}
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.cardTitle} numberOfLines={2}>
+                    {item.listing_snapshot?.title ?? "Item"}
+                  </Text>
 
-                <Text style={styles.subText}>
-                  Completed{" "}
-                  {new Date(order.completed_at).toLocaleDateString()}
-                </Text>
-              </View>
+                  <Text style={styles.subText}>
+                    Buyer: {item.buyer_id.slice(0, 8)}
+                  </Text>
 
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>COMPLETED</Text>
-              </View>
-            </TouchableOpacity>
-          ))}
-        </View>
+                  <Text style={styles.subText}>
+                    ${(item.amount_cents / 100).toFixed(2)}
+                  </Text>
+
+                  <Text style={styles.subText}>
+                    Completed{" "}
+                    {new Date(item.completed_at).toLocaleDateString()}
+                  </Text>
+                </View>
+
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>COMPLETED</Text>
+                </View>
+              </TouchableOpacity>
+            )
+          }}
+        />
       )}
     </View>
   )
@@ -133,7 +160,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#EAF4EF",
   },
 
-  /* 🌿 HEADER */
+  /* HEADER */
   headerWrap: {
     backgroundColor: "#7FAF9B",
     paddingTop: 50,
@@ -153,20 +180,43 @@ const styles = StyleSheet.create({
     color: "#0F1E17",
   },
 
-  card: {
-    backgroundColor: "#fff",
-    marginHorizontal: 14,
-    marginBottom: 10,
-    padding: 14,
-    borderRadius: 14,
-    flexDirection: "row",
-    justifyContent: "space-between",
+  /* EMPTY */
+  emptyWrap: {
+    flex: 1,
     alignItems: "center",
-    opacity: 0.8,
+    justifyContent: "center",
+    paddingHorizontal: 30,
+  },
+
+  emptyText: {
+    marginTop: 10,
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#6B8F7D",
+    textAlign: "center",
+  },
+
+  /* CARD */
+  card: {
+    flexDirection: "row",
+    gap: 12,
+    backgroundColor: "#FFFFFF",
+    padding: 12,
+    borderRadius: 14,
+    marginBottom: 12,
+    alignItems: "center",
+    opacity: 0.85,
+  },
+
+  image: {
+    width: 90,
+    height: 90,
+    borderRadius: 10,
+    backgroundColor: "#D6E6DE",
   },
 
   cardTitle: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "800",
     color: "#0F1E17",
   },
@@ -182,25 +232,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 10,
+    marginLeft: 6,
   },
 
   badgeText: {
     fontSize: 11,
     fontWeight: "900",
-    color: "#fff",
-  },
-
-  emptyWrap: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 30,
-  },
-
-  emptyText: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#6B8F7D",
-    textAlign: "center",
+    color: "#FFFFFF",
   },
 })

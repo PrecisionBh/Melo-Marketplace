@@ -67,7 +67,6 @@ export default function SellerDisputesScreen() {
         <Text style={styles.headerTitle}>Disputes</Text>
       </View>
 
-      {/* CONTENT */}
       {loading ? (
         <ActivityIndicator style={{ marginTop: 60 }} />
       ) : disputes.length === 0 ? (
@@ -95,7 +94,7 @@ export default function SellerDisputesScreen() {
               style={styles.card}
               onPress={() =>
                 router.push(
-                  `./disputes-issue?orderId=${item.order_id}`
+                  `/seller-hub/orders/disputes-issue?orderId=${item.order_id}`
                 )
               }
             >
@@ -161,7 +160,7 @@ const styles = StyleSheet.create({
 
   backText: {
     marginLeft: 6,
-    color: "#000000",
+    color: "#E8F5EE",
     fontWeight: "600",
     fontSize: 13,
   },
