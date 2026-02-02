@@ -2,21 +2,22 @@ import { Ionicons } from "@expo/vector-icons"
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { useEffect, useMemo, useState } from "react"
 import {
-    Alert,
-    Image,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native"
 
 import { useAuth } from "../context/AuthContext"
 import { supabase } from "../lib/supabase"
+
+/* ---------------- SCREEN ---------------- */
 
 export default function MakeOfferScreen() {
   const router = useRouter()
@@ -26,23 +27,43 @@ export default function MakeOfferScreen() {
   const [listing, setListing] = useState<any>(null)
   const [offer, setOffer] = useState("")
   const [loading, setLoading] = useState(false)
-  const [showConfirm, setShowConfirm] = useState(false)
   const [minError, setMinError] = useState<string | null>(null)
+
+  /* ---------------- LOAD LISTING ---------------- */
 
   useEffect(() => {
     if (!listingId) return
 
     supabase
       .from("listings")
-      .select("id,title,price,image_urls,min_offer")
+      .select("id, title, price, image_urls, min_offer, user_id")
       .eq("id", listingId)
       .single()
-      .then(({ data }) => setListing(data))
+      .then(({ data, error }) => {
+        if (error) {
+          console.error("Listing load error:", error)
+          return
+        }
+        setListing(data)
+      })
   }, [listingId])
 
   const numericOffer = Number(offer)
 
-  // Clear min error when offer becomes valid
+  /* ---------------- FEES ---------------- */
+
+  const buyerFee = useMemo(() => {
+    if (!numericOffer || numericOffer <= 0) return 0
+    return Number((numericOffer * 0.03).toFixed(2))
+  }, [numericOffer])
+
+  const totalDue = useMemo(() => {
+    if (!numericOffer || numericOffer <= 0) return 0
+    return Number((numericOffer + buyerFee).toFixed(2))
+  }, [numericOffer, buyerFee])
+
+  /* ---------------- VALIDATION ---------------- */
+
   useEffect(() => {
     if (
       minError &&
@@ -53,17 +74,11 @@ export default function MakeOfferScreen() {
     }
   }, [numericOffer, listing, minError])
 
-  const buyerFee = useMemo(() => {
-    if (!numericOffer || numericOffer <= 0) return 0
-    return numericOffer * 0.03
-  }, [numericOffer])
+  /* ---------------- SUBMIT ---------------- */
 
-  const totalCharge = useMemo(() => {
-    if (!numericOffer || numericOffer <= 0) return 0
-    return numericOffer + buyerFee
-  }, [numericOffer, buyerFee])
+  const submitOffer = async () => {
+    if (!session?.user || !listing) return
 
-  const handleSubmitPress = () => {
     if (!numericOffer || numericOffer <= 0) {
       Alert.alert("Invalid offer", "Enter a valid offer amount.")
       return
@@ -73,39 +88,60 @@ export default function MakeOfferScreen() {
       typeof listing.min_offer === "number" &&
       numericOffer < listing.min_offer
     ) {
-      setMinError(
-        `Minimum offer is $${listing.min_offer.toFixed(2)}`
-      )
+      setMinError(`Minimum offer is $${listing.min_offer.toFixed(2)}`)
       return
     }
 
-    setShowConfirm(true)
-  }
-
-  const submitOffer = async () => {
-    if (!session?.user || !listing) return
-
-    setShowConfirm(false)
     setLoading(true)
 
-    await supabase.from("offers").insert({
-      listing_id: listingId,
+    const { error } = await supabase.from("offers").insert({
+      listing_id: listing.id,
       buyer_id: session.user.id,
-      amount: numericOffer,
+      seller_id: listing.user_id,
+
+      offer_amount: numericOffer,
+      original_offer: numericOffer,
+      current_amount: numericOffer,
+
+      buyer_fee: buyerFee,
+      total_due: totalDue,
+
       status: "pending",
+      last_action: "buyer",
+      last_actor: "buyer",
+      counter_count: 0,
+
+      expires_at: new Date(
+        Date.now() + 24 * 60 * 60 * 1000
+      ).toISOString(),
     })
 
     setLoading(false)
 
+    if (error) {
+      if (error.code === "23505") {
+        Alert.alert(
+          "Offer already sent",
+          "You already have an active offer on this item."
+        )
+      } else {
+        console.error("Offer insert error:", error)
+        Alert.alert("Error", "Failed to submit offer.")
+      }
+      return
+    }
+
     Alert.alert(
       "Offer Sent",
-      "If the seller accepts, your payment method will be charged automatically."
+      "The seller has been notified. You’ll be able to respond if they counter."
     )
 
     router.back()
   }
 
   if (!listing) return null
+
+  /* ---------------- UI ---------------- */
 
   return (
     <View style={styles.screen}>
@@ -124,12 +160,8 @@ export default function MakeOfferScreen() {
         keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 20}
       >
         <ScrollView
-          contentContainerStyle={{
-            padding: 20,
-            paddingBottom: 300,
-          }}
+          contentContainerStyle={{ padding: 20, paddingBottom: 200 }}
           keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
         >
           <View style={styles.card}>
             <Image
@@ -138,17 +170,11 @@ export default function MakeOfferScreen() {
             />
 
             <Text style={styles.name}>{listing.title}</Text>
-
             <Text style={styles.price}>
               Listed at ${listing.price.toFixed(2)}
             </Text>
 
-            {/* 🔴 MIN OFFER ERROR */}
-            {minError && (
-              <Text style={styles.minError}>
-                {minError}
-              </Text>
-            )}
+            {minError && <Text style={styles.minError}>{minError}</Text>}
 
             <TextInput
               placeholder="Your offer"
@@ -165,7 +191,7 @@ export default function MakeOfferScreen() {
                   value={`$${numericOffer.toFixed(2)}`}
                 />
                 <Row
-                  label="Buyer protection (3%)"
+                  label="Buyer fee (3%)"
                   value={`$${buyerFee.toFixed(2)}`}
                 />
 
@@ -173,23 +199,15 @@ export default function MakeOfferScreen() {
 
                 <Row
                   label="Total if accepted"
-                  value={`$${totalCharge.toFixed(2)}`}
+                  value={`$${totalDue.toFixed(2)}`}
                   bold
                 />
-
-                <Text style={styles.autoCharge}>
-                  If accepted,{" "}
-                  <Text style={{ fontWeight: "900" }}>
-                    ${totalCharge.toFixed(2)}
-                  </Text>{" "}
-                  will be charged automatically to your saved payment method.
-                </Text>
               </View>
             )}
 
             <TouchableOpacity
               style={styles.submit}
-              onPress={handleSubmitPress}
+              onPress={submitOffer}
               disabled={loading}
             >
               <Text style={styles.submitText}>
@@ -198,51 +216,12 @@ export default function MakeOfferScreen() {
             </TouchableOpacity>
 
             <Text style={styles.disclaimer}>
-              Submitting an offer does not guarantee acceptance. Sellers may
-              accept or decline any offer.
+              Submitting an offer does not guarantee acceptance. Offers expire
+              after 24 hours.
             </Text>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-
-      {/* CONFIRM MODAL */}
-      <Modal transparent visible={showConfirm} animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>
-              Authorization Required
-            </Text>
-
-            <Text style={styles.modalText}>
-              By submitting this offer, you authorize Melo Marketplace to
-              automatically charge your saved payment method if the seller
-              accepts your offer.
-              {"\n\n"}
-              This charge will be processed without further confirmation.
-            </Text>
-
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={styles.modalCancel}
-                onPress={() => setShowConfirm(false)}
-              >
-                <Text style={styles.modalCancelText}>
-                  Cancel
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.modalConfirm}
-                onPress={submitOffer}
-              >
-                <Text style={styles.modalConfirmText}>
-                  I Understand & Submit
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </View>
   )
 }
@@ -273,10 +252,7 @@ function Row({
 /* ---------------- STYLES ---------------- */
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: "#EAF4EF",
-  },
+  screen: { flex: 1, backgroundColor: "#EAF4EF" },
 
   header: {
     paddingTop: 50,
@@ -320,7 +296,7 @@ const styles = StyleSheet.create({
   },
 
   minError: {
-    marginTop: 4,
+    marginTop: 6,
     fontSize: 12,
     color: "#C0392B",
     fontWeight: "700",
@@ -361,21 +337,12 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 
-  boldText: {
-    fontWeight: "900",
-  },
+  boldText: { fontWeight: "900" },
 
   divider: {
     height: 1,
     backgroundColor: "#CFE5DA",
     marginVertical: 8,
-  },
-
-  autoCharge: {
-    marginTop: 8,
-    fontSize: 12,
-    color: "#2E5F4F",
-    lineHeight: 16,
   },
 
   submit: {
@@ -398,63 +365,5 @@ const styles = StyleSheet.create({
     color: "#6B8F7D",
     textAlign: "center",
     lineHeight: 16,
-  },
-
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "center",
-    padding: 24,
-  },
-
-  modalCard: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 20,
-  },
-
-  modalTitle: {
-    fontSize: 17,
-    fontWeight: "900",
-    color: "#0F1E17",
-    marginBottom: 10,
-  },
-
-  modalText: {
-    fontSize: 14,
-    color: "#4A6B5F",
-    lineHeight: 20,
-  },
-
-  modalActions: {
-    flexDirection: "row",
-    marginTop: 20,
-    gap: 10,
-  },
-
-  modalCancel: {
-    flex: 1,
-    padding: 12,
-    borderRadius: 10,
-    backgroundColor: "#E4EFEA",
-    alignItems: "center",
-  },
-
-  modalCancelText: {
-    fontWeight: "700",
-    color: "#2E5F4F",
-  },
-
-  modalConfirm: {
-    flex: 1,
-    padding: 12,
-    borderRadius: 10,
-    backgroundColor: "#0F1E17",
-    alignItems: "center",
-  },
-
-  modalConfirmText: {
-    fontWeight: "900",
-    color: "#fff",
   },
 })

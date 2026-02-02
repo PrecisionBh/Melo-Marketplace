@@ -2,15 +2,15 @@ import { Ionicons } from "@expo/vector-icons"
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { useEffect, useMemo, useState } from "react"
 import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  Modal,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Image,
+    Modal,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native"
 
 import { useAuth } from "@/context/AuthContext"
@@ -18,16 +18,12 @@ import { supabase } from "@/lib/supabase"
 
 /* ---------------- TYPES ---------------- */
 
-type OfferStatus =
-  | "pending"
-  | "countered"
-  | "accepted"
-  | "declined"
+type OfferStatus = "pending" | "countered" | "accepted" | "declined" | "expired"
 
 type Offer = {
   id: string
-  seller_id: string
   buyer_id: string
+  seller_id: string
   current_amount: number
   counter_count: number
   last_actor: "buyer" | "seller"
@@ -41,14 +37,21 @@ type Offer = {
   }
 }
 
+type PaymentLink = {
+  id: string
+  offer_id: string
+  status: "pending" | "paid"
+}
+
 /* ---------------- SCREEN ---------------- */
 
-export default function SellerOfferDetailScreen() {
+export default function BuyerOfferDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const router = useRouter()
   const { session } = useAuth()
 
   const [offer, setOffer] = useState<Offer | null>(null)
+  const [paymentLink, setPaymentLink] = useState<PaymentLink | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [counterAmount, setCounterAmount] = useState("")
@@ -60,6 +63,7 @@ export default function SellerOfferDetailScreen() {
       return
     }
     loadOffer()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, session?.user?.id])
 
   /* ---------------- LOAD OFFER ---------------- */
@@ -71,8 +75,8 @@ export default function SellerOfferDetailScreen() {
       .from("offers")
       .select(`
         id,
-        seller_id,
         buyer_id,
+        seller_id,
         current_amount,
         counter_count,
         last_actor,
@@ -91,21 +95,39 @@ export default function SellerOfferDetailScreen() {
 
     if (error || !data) {
       setOffer(null)
+      setPaymentLink(null)
       setLoading(false)
       return
     }
 
-    if (data.seller_id !== session!.user!.id) {
-      Alert.alert("Access denied")
-      router.replace("/seller-hub/offers")
+    // ✅ Access control: buyer only
+    if (data.buyer_id !== session!.user!.id) {
+      setLoading(false)
+      Alert.alert("Access denied", "You can only view your own offers.")
+      router.replace("/buyer-hub/offers")
       return
     }
 
     setOffer(data)
+
+    // ✅ Load payment link if accepted (optional — UI will still allow pay even if missing)
+    if (data.status === "accepted") {
+      const { data: linkData } = await supabase
+        .from("payment_links")
+        .select("id, offer_id, status")
+        .eq("offer_id", data.id)
+        .maybeSingle()
+        .returns<PaymentLink>()
+
+      setPaymentLink(linkData ?? null)
+    } else {
+      setPaymentLink(null)
+    }
+
     setLoading(false)
   }
 
-  /* ---------------- EXPIRATION ---------------- */
+  /* ---------------- EXPIRATION (24h) ---------------- */
 
   const isExpired = useMemo(() => {
     if (!offer) return false
@@ -113,90 +135,112 @@ export default function SellerOfferDetailScreen() {
     return Date.now() > created + 24 * 60 * 60 * 1000
   }, [offer])
 
+  const offerIsFinal =
+    offer?.status === "accepted" ||
+    offer?.status === "declined" ||
+    offer?.status === "expired"
+
   /* ---------------- CALCULATIONS ---------------- */
 
-  if (!offer) {
-    return (
-      <View style={styles.empty}>
-        <Text style={styles.emptyText}>
-          You have no offers at this time.
-        </Text>
-      </View>
-    )
-  }
-
-  const shippingCost =
-    offer.listings.shipping_type === "buyer_pays"
+  const shippingCost = useMemo(() => {
+    if (!offer) return 0
+    return offer.listings.shipping_type === "buyer_pays"
       ? offer.listings.shipping_price ?? 0
       : 0
+  }, [offer])
 
-  const itemPrice = offer.current_amount
+  const itemPrice = offer?.current_amount ?? 0
   const buyerTotal = itemPrice + shippingCost
-  const platformFee = Number((itemPrice * 0.035).toFixed(2))
-  const sellerPayout = Number((itemPrice - platformFee).toFixed(2))
 
+  // ✅ Buyer can respond only when:
+  // - not expired
+  // - offer not final (accepted/declined/expired)
+  // - less than 6 counters
+  // - seller acted last (so it’s buyer’s turn)
   const canRespond =
+    !!offer &&
     !isExpired &&
-    offer.status !== "accepted" &&
+    !offerIsFinal &&
     offer.counter_count < 6 &&
-    offer.last_actor === "buyer"
+    offer.last_actor === "seller"
+
+  // ✅ Buyer can pay when accepted and not expired and not already paid
+  const canPay =
+    !!offer &&
+    offer.status === "accepted" &&
+    !isExpired &&
+    paymentLink?.status !== "paid"
+
+  const alreadyPaid =
+    !!offer && offer.status === "accepted" && paymentLink?.status === "paid"
 
   /* ---------------- ACTIONS ---------------- */
 
-  const acceptOffer = async () => {
-    if (saving || isExpired) return
-    setSaving(true)
+  const goToPay = () => {
+    if (!offer) return
 
-    const { error } = await supabase
-      .from("offers")
-      .update({
-        status: "accepted",
-        last_actor: "seller",
-        last_action: "accepted",
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", offer.id)
-
-    setSaving(false)
-
-    if (error) {
-      Alert.alert("Failed to accept offer")
-      return
-    }
-
-    Alert.alert(
-      "Offer Accepted",
-      "The buyer can now complete payment."
-    )
-
-    router.replace("/seller-hub/offers")
+    // ✅ IMPORTANT: checkout.tsx expects query params (offerId / listingId)
+    router.push({
+      pathname: "/checkout",
+      params: { offerId: offer.id },
+    })
   }
 
   const declineOffer = async () => {
+    if (!offer) return
     if (saving) return
-    setSaving(true)
 
-    const { error } = await supabase
-      .from("offers")
-      .update({
-        status: "declined",
-        last_actor: "seller",
-        last_action: "declined",
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", offer.id)
-
-    setSaving(false)
-
-    if (error) {
-      Alert.alert("Failed to decline offer")
+    // hard guard even if button visible bug
+    if (isExpired || offerIsFinal) {
+      Alert.alert("Not available", "This offer can no longer be declined.")
+      return
+    }
+    if (offer.last_actor !== "seller") {
+      Alert.alert("Please wait", "The seller is waiting on your counter.")
       return
     }
 
-    router.replace("/seller-hub/offers")
+    Alert.alert("Decline offer?", "This will end the negotiation.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Decline",
+        style: "destructive",
+        onPress: async () => {
+          setSaving(true)
+
+          const { error } = await supabase
+            .from("offers")
+            .update({
+              status: "declined",
+              last_actor: "buyer",
+              last_action: "declined",
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", offer.id)
+
+          setSaving(false)
+
+          if (error) {
+            Alert.alert("Failed to decline offer", error.message)
+            return
+          }
+
+          router.replace("/buyer-hub/offers")
+        },
+      },
+    ])
   }
 
   const submitCounter = async () => {
+    if (!offer) return
+    if (saving) return
+
+    // hard guards
+    if (!canRespond) {
+      Alert.alert("Not available", "You can’t counter this offer right now.")
+      return
+    }
+
     const amount = Number(counterAmount)
     if (!amount || amount <= 0) {
       Alert.alert("Enter a valid amount")
@@ -211,7 +255,7 @@ export default function SellerOfferDetailScreen() {
         current_amount: amount,
         counter_amount: amount,
         counter_count: offer.counter_count + 1,
-        last_actor: "seller",
+        last_actor: "buyer",
         last_action: "countered",
         status: "countered",
         updated_at: new Date().toISOString(),
@@ -221,18 +265,27 @@ export default function SellerOfferDetailScreen() {
     setSaving(false)
 
     if (error) {
-      Alert.alert("Failed to counter offer")
+      Alert.alert("Failed to counter offer", error.message)
       return
     }
 
     setShowCounter(false)
-    router.replace("/seller-hub/offers")
+    setCounterAmount("")
+    router.replace("/buyer-hub/offers")
   }
 
   /* ---------------- UI ---------------- */
 
   if (loading) {
     return <ActivityIndicator style={{ marginTop: 80 }} />
+  }
+
+  if (!offer) {
+    return (
+      <View style={styles.empty}>
+        <Text style={styles.emptyText}>This offer is no longer available.</Text>
+      </View>
+    )
   }
 
   return (
@@ -264,32 +317,51 @@ export default function SellerOfferDetailScreen() {
             <Row
               label="Shipping"
               value={
-                shippingCost === 0
-                  ? "Free"
-                  : `$${shippingCost.toFixed(2)}`
+                shippingCost === 0 ? "Free" : `$${shippingCost.toFixed(2)}`
               }
             />
-            <Row
-              label="Melo Fee (3.5%)"
-              value={`-$${platformFee.toFixed(2)}`}
-            />
-            <View style={styles.divider} />
-            <Row
-              label="You receive"
-              value={`$${sellerPayout.toFixed(2)}`}
-              bold
-            />
-            <View style={styles.divider} />
-            <Row
-              label="Buyer pays"
-              value={`$${buyerTotal.toFixed(2)}`}
-            />
+            <Row label="Total due" value={`$${buyerTotal.toFixed(2)}`} bold />
           </View>
 
-          {isExpired && (
-            <Text style={styles.expired}>
-              This offer has expired.
-            </Text>
+          {/* ✅ ACCEPTED STATE (PAYMENT FIRST-CLASS) */}
+          {offer.status === "accepted" && (
+            <View style={styles.acceptedBox}>
+              <Text style={styles.acceptedTitle}>Offer Accepted 🎉</Text>
+
+              {alreadyPaid ? (
+                <Text style={styles.acceptedText}>
+                  Payment completed. You’re all set ✅
+                </Text>
+              ) : (
+                <>
+                  <Text style={styles.acceptedText}>
+                    The seller accepted your offer. Complete payment to finalize
+                    the purchase.
+                  </Text>
+
+                  <TouchableOpacity
+                    style={[styles.payBtn, (!canPay || saving) && { opacity: 0.6 }]}
+                    onPress={goToPay}
+                    disabled={!canPay || saving}
+                  >
+                    <Text style={styles.payText}>
+                      Pay Now • ${buyerTotal.toFixed(2)}
+                    </Text>
+                  </TouchableOpacity>
+
+                  {isExpired && (
+                    <Text style={styles.expired}>
+                      This offer expired before payment was completed.
+                    </Text>
+                  )}
+                </>
+              )}
+            </View>
+          )}
+
+          {/* Expired label for non-accepted states */}
+          {isExpired && offer.status !== "accepted" && (
+            <Text style={styles.expired}>This offer has expired.</Text>
           )}
         </View>
       </View>
@@ -297,14 +369,6 @@ export default function SellerOfferDetailScreen() {
       {/* ACTIONS */}
       {canRespond && (
         <View style={styles.actionBar}>
-          <TouchableOpacity
-            style={styles.acceptBtn}
-            onPress={acceptOffer}
-            disabled={saving}
-          >
-            <Text style={styles.acceptText}>Accept Offer</Text>
-          </TouchableOpacity>
-
           <TouchableOpacity
             style={styles.counterBtn}
             onPress={() => setShowCounter(true)}
@@ -341,13 +405,15 @@ export default function SellerOfferDetailScreen() {
               <TouchableOpacity
                 style={styles.modalCancel}
                 onPress={() => setShowCounter(false)}
+                disabled={saving}
               >
                 <Text style={styles.modalCancelText}>Cancel</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={styles.modalConfirm}
+                style={[styles.modalConfirm, saving && { opacity: 0.7 }]}
                 onPress={submitCounter}
+                disabled={saving}
               >
                 <Text style={styles.modalConfirmText}>Submit</Text>
               </TouchableOpacity>
@@ -406,14 +472,52 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#CFE5DA",
   },
-  row: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 6 },
+  row: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 6,
+  },
   rowLabel: { color: "#6B8F7D", fontWeight: "600" },
   rowValue: { fontWeight: "700" },
-  divider: { height: 1, backgroundColor: "#CFE5DA", marginVertical: 8 },
   expired: { marginTop: 10, color: "#C0392B", fontWeight: "800" },
-  actionBar: { position: "absolute", bottom: 30, left: 16, right: 16, gap: 10 },
-  acceptBtn: { backgroundColor: "#1F7A63", paddingVertical: 14, borderRadius: 16 },
-  acceptText: { textAlign: "center", fontWeight: "900", color: "#fff" },
+
+  acceptedBox: {
+    marginTop: 16,
+    padding: 14,
+    borderRadius: 14,
+    backgroundColor: "#E8F5EE",
+    borderWidth: 1,
+    borderColor: "#1F7A63",
+  },
+  acceptedTitle: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#1F7A63",
+    marginBottom: 6,
+  },
+  acceptedText: {
+    fontSize: 13,
+    color: "#2E5F4F",
+    marginBottom: 12,
+  },
+  payBtn: {
+    backgroundColor: "#1F7A63",
+    paddingVertical: 14,
+    borderRadius: 16,
+  },
+  payText: {
+    textAlign: "center",
+    fontWeight: "900",
+    color: "#fff",
+  },
+
+  actionBar: {
+    position: "absolute",
+    bottom: 30,
+    left: 16,
+    right: 16,
+    gap: 10,
+  },
   counterBtn: {
     backgroundColor: "#E8F5EE",
     paddingVertical: 14,
@@ -427,8 +531,10 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     borderColor: "#EB5757",
+    backgroundColor: "#fff",
   },
   declineText: { textAlign: "center", fontWeight: "900", color: "#EB5757" },
+
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",

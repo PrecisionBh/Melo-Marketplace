@@ -14,6 +14,7 @@ export default function SellerOrdersHubScreen() {
   const [ordersToShipCount, setOrdersToShipCount] = useState(0)
   const [inProgressCount, setInProgressCount] = useState(0)
   const [openDisputesCount, setOpenDisputesCount] = useState(0)
+  const [offersCount, setOffersCount] = useState(0)
 
   /* ---------------- LOAD COUNTS ---------------- */
 
@@ -23,6 +24,7 @@ export default function SellerOrdersHubScreen() {
       loadOrdersToShipCount()
       loadInProgressCount()
       loadOpenDisputesCount()
+      loadOffersCount()
     }, [sellerId])
   )
 
@@ -62,6 +64,19 @@ export default function SellerOrdersHubScreen() {
     setOpenDisputesCount(count ?? 0)
   }
 
+  const loadOffersCount = async () => {
+    if (!sellerId) return
+
+    const { count } = await supabase
+      .from("offers")
+      .select("id", { count: "exact", head: true })
+      .eq("seller_id", sellerId)
+      .in("status", ["pending", "countered"])
+      .neq("last_actor", "seller") // only offers needing seller action
+
+    setOffersCount(count ?? 0)
+  }
+
   return (
     <View style={styles.screen}>
       {/* HEADER */}
@@ -96,6 +111,16 @@ export default function SellerOrdersHubScreen() {
           badgeColor="blue"
           onPress={() =>
             router.push("/seller-hub/orders/in-progress")
+          }
+        />
+
+        <MenuItem
+          icon="pricetag-outline"
+          label="Offers"
+          badgeCount={offersCount}
+          badgeColor="red"
+          onPress={() =>
+            router.push("/seller-hub/offers")
           }
         />
 
