@@ -107,7 +107,7 @@ export default function BuyerOrderDetailScreen() {
     )
   }
 
-  const completeOrder = async () => {
+  const confirmDelivery = async () => {
     await supabase
       .from("orders")
       .update({
@@ -117,8 +117,6 @@ export default function BuyerOrderDetailScreen() {
       .eq("id", order!.id)
 
     setConfirmVisible(false)
-
-    // ✅ Redirect so buyer sees result immediately
     router.replace("/buyer-hub/orders/completed")
   }
 
@@ -242,7 +240,7 @@ export default function BuyerOrderDetailScreen() {
               style={styles.completeBtn}
               onPress={() => setConfirmVisible(true)}
             >
-              <Text style={styles.completeText}>Complete Order</Text>
+              <Text style={styles.completeText}>Confirm Delivery</Text>
             </TouchableOpacity>
           </>
         )}
@@ -252,17 +250,18 @@ export default function BuyerOrderDetailScreen() {
       <Modal transparent visible={confirmVisible} animationType="fade">
         <View style={styles.modalBackdrop}>
           <View style={styles.modal}>
-            <Text style={styles.modalTitle}>Complete Order?</Text>
+            <Text style={styles.modalTitle}>Confirm Delivery?</Text>
             <Text style={styles.modalText}>
-              Once completed, escrow will be released and disputes will no longer
-              be possible.
+              Please inspect your item before confirming delivery.
+              {"\n\n"}
+              Once confirmed, the seller will be paid and disputes will no longer be available.
             </Text>
 
             <TouchableOpacity
               style={styles.completeBtn}
-              onPress={completeOrder}
+              onPress={confirmDelivery}
             >
-              <Text style={styles.completeText}>Yes, Complete</Text>
+              <Text style={styles.completeText}>Yes, Confirm Delivery</Text>
             </TouchableOpacity>
 
             <TouchableOpacity onPress={() => setConfirmVisible(false)}>

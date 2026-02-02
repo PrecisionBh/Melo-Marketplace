@@ -69,29 +69,6 @@ export default function SettingsScreen() {
         />
       </View>
 
-      {/* PAYMENTS */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Payments</Text>
-
-        <SettingsItem
-          icon="home-outline"
-          label="Shipping address"
-          onPress={() => router.push("/settings/address")}
-        />
-
-        <SettingsItem
-          icon="card-outline"
-          label="Payment method"
-          onPress={() => router.push("/settings/payment")}
-        />
-
-        <SettingsItem
-          icon="cash-outline"
-          label="Payouts"
-          onPress={() => router.push("/settings/payout")}
-        />
-      </View>
-
       {/* LEGAL */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Legal</Text>
@@ -154,7 +131,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#EAF4EF",
   },
 
-  /* 🌿 PREMIUM HEADER */
   headerWrap: {
     backgroundColor: "#7FAF9B",
     paddingTop: 60,

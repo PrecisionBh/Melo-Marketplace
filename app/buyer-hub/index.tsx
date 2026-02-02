@@ -28,7 +28,6 @@ export default function BuyerHubScreen() {
           onPress={() => router.push("/buyer-hub/orders")}
         />
 
-        {/* ✅ NEW: MY OFFERS */}
         <HubButton
           icon="pricetag-outline"
           label="My Offers"
@@ -39,12 +38,6 @@ export default function BuyerHubScreen() {
           icon="chatbubble-ellipses-outline"
           label="Messages"
           onPress={() => router.push("/messages")}
-        />
-
-        <HubButton
-          icon="card-outline"
-          label="Payment Methods"
-          onPress={() => router.push("/settings/payment")}
         />
 
         <HubButton

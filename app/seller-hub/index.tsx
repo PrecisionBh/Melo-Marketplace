@@ -78,6 +78,13 @@ export default function SellerHubScreen() {
           onPress={() => router.push("/seller-hub/orders")}
         />
 
+        {/* ✅ WALLET */}
+        <MenuItem
+          icon="wallet-outline"
+          label="Wallet"
+          onPress={() => router.push("/seller-hub/wallet")}
+        />
+
         <MenuItem
           icon="chatbubble-ellipses-outline"
           label="Messages"
@@ -123,21 +130,15 @@ function MenuItem({
       <Ionicons name={icon} size={22} color="#0F1E17" />
       <Text style={styles.menuText}>{label}</Text>
 
-      {/* PUSH CONTENT RIGHT */}
       <View style={{ flex: 1 }} />
 
-      {/* BADGE */}
       {typeof badgeCount === "number" && badgeCount > 0 && (
         <View style={styles.countBadge}>
           <Text style={styles.countText}>{badgeCount}</Text>
         </View>
       )}
 
-      <Ionicons
-        name="chevron-forward"
-        size={18}
-        color="#9FB8AC"
-      />
+      <Ionicons name="chevron-forward" size={18} color="#9FB8AC" />
     </TouchableOpacity>
   )
 }
