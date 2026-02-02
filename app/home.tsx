@@ -41,6 +41,7 @@ type ListingRow = {
   image_urls: string[] | null
   allow_offers?: boolean | null
   shipping_type?: "seller_pays" | "buyer_pays" | null
+  is_sold: boolean
 }
 
 /* ---------------- SCREEN ---------------- */
@@ -60,12 +61,12 @@ export default function HomeScreen() {
   /* ---------------- LOAD DATA ---------------- */
 
   useEffect(() => {
-    loadListings()
     setupPushTokenIfNeeded()
   }, [])
 
   useFocusEffect(
     useCallback(() => {
+      loadListings()
       checkUnreadMessages()
     }, [])
   )
@@ -76,16 +77,16 @@ export default function HomeScreen() {
     const { data, error } = await supabase
       .from("listings")
       .select(
-        "id,title,price,category,condition,image_urls,allow_offers,shipping_type"
+        "id,title,price,category,condition,image_urls,allow_offers,shipping_type,is_sold"
       )
       .eq("status", "active")
+      .eq("is_sold", false) // ✅ FINAL SOURCE OF TRUTH
       .order("created_at", { ascending: false })
 
     if (!error && data) {
       const rows = data as ListingRow[]
 
       const normalized: Listing[] = rows
-        // ⛔ filter out review / seed / empty listings
         .filter(
           (l) =>
             Array.isArray(l.image_urls) &&

@@ -18,11 +18,7 @@ import { supabase } from "@/lib/supabase"
 
 /* ---------------- TYPES ---------------- */
 
-type OfferStatus =
-  | "pending"
-  | "countered"
-  | "accepted"
-  | "declined"
+type OfferStatus = "pending" | "countered" | "accepted" | "declined"
 
 type Offer = {
   id: string
@@ -144,7 +140,9 @@ export default function SellerOfferDetailScreen() {
   /* ---------------- ACTIONS ---------------- */
 
   const acceptOffer = async () => {
+    if (!offer) return
     if (saving || isExpired) return
+
     setSaving(true)
 
     const { error } = await supabase
@@ -153,14 +151,25 @@ export default function SellerOfferDetailScreen() {
         status: "accepted",
         last_actor: "seller",
         last_action: "accepted",
+
+        // 🔒 SNAPSHOT — IMMUTABLE CONTRACT
+        accepted_price: offer.current_amount,
+        accepted_shipping_type: offer.listings.shipping_type,
+        accepted_shipping_price: offer.listings.shipping_price ?? 0,
+        accepted_title: offer.listings.title,
+        accepted_image_url: offer.listings.image_urls?.[0] ?? null,
+        accepted_at: new Date().toISOString(),
+
         updated_at: new Date().toISOString(),
       })
       .eq("id", offer.id)
+      .eq("seller_id", session!.user!.id)
+      .eq("status", offer.status)
 
     setSaving(false)
 
     if (error) {
-      Alert.alert("Failed to accept offer")
+      Alert.alert("Failed to accept offer", error.message)
       return
     }
 

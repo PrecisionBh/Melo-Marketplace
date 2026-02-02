@@ -63,22 +63,44 @@ serve(async (req) => {
       return new Response("Missing order_id", { status: 400 })
     }
 
-    // ✅ READ IMAGE URL FROM METADATA (ADDED)
+    // 🔁 FETCH ORDER (IDEMPOTENCY GUARD)
+    const { data: order, error: fetchError } = await supabase
+      .from("orders")
+      .select("id, status, listing_id, offer_id")
+      .eq("id", orderId)
+      .single()
+
+    if (fetchError || !order) {
+      console.error("Order not found:", fetchError)
+      return new Response("Order not found", { status: 404 })
+    }
+
+    // 🔒 ALREADY PROCESSED → EXIT CLEANLY
+    if (order.status === "paid") {
+      return new Response(
+        JSON.stringify({ received: true, duplicate: true }),
+        { status: 200 }
+      )
+    }
+
+    // ✅ READ IMAGE URL FROM METADATA
     const imageUrl = session.metadata?.image_url ?? null
 
     // ✅ CORRECT STRIPE CHECKOUT SHIPPING SOURCE
     const shipping =
-      session.collected_information?.shipping_details
-        ?? session.shipping_details
+      session.collected_information?.shipping_details ??
+      session.shipping_details
 
     const address = shipping?.address
 
-    const { error } = await supabase
+    // ---------------- UPDATE ORDER ----------------
+    const { error: updateError } = await supabase
       .from("orders")
       .update({
         status: "paid",
         stripe_session_id: session.id,
         stripe_payment_intent: session.payment_intent ?? null,
+
         shipping_name: shipping?.name ?? null,
         shipping_line1: address?.line1 ?? null,
         shipping_line2: address?.line2 ?? null,
@@ -88,16 +110,40 @@ serve(async (req) => {
         shipping_country: address?.country ?? null,
         shipping_phone: session.customer_details?.phone ?? null,
 
-        // ✅ WRITE IMAGE URL (ADDED)
         image_url: imageUrl,
-
         updated_at: new Date().toISOString(),
       })
       .eq("id", orderId)
 
-    if (error) {
-      console.error("Order update failed:", error)
-      return new Response("Database update failed", { status: 500 })
+    if (updateError) {
+      console.error("Order update failed:", updateError)
+      return new Response("Order update failed", { status: 500 })
+    }
+
+    // ---------------- MARK LISTING AS SOLD + INACTIVE ----------------
+    if (order.listing_id) {
+      await supabase
+        .from("listings")
+        .update({
+          is_sold: true,
+          status: "inactive",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", order.listing_id)
+        .eq("is_sold", false) // 🛡 idempotent guard
+    }
+
+    // ---------------- EXPIRE COMPETING OFFERS ----------------
+    if (order.listing_id) {
+      await supabase
+        .from("offers")
+        .update({
+          status: "expired",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("listing_id", order.listing_id)
+        .neq("id", order.offer_id ?? "")
+        .in("status", ["pending", "countered"])
     }
   }
 
