@@ -66,7 +66,9 @@ serve(async (req) => {
     // 🔁 FETCH ORDER (IDEMPOTENCY GUARD)
     const { data: order, error: fetchError } = await supabase
       .from("orders")
-      .select("id, status, listing_id, offer_id")
+      .select(
+        "id, status, listing_id, offer_id, escrow_status"
+      )
       .eq("id", orderId)
       .single()
 
@@ -75,8 +77,8 @@ serve(async (req) => {
       return new Response("Order not found", { status: 404 })
     }
 
-    // 🔒 ALREADY PROCESSED → EXIT CLEANLY
-    if (order.status === "paid") {
+    // 🔒 ALREADY PROCESSED
+    if (order.status === "paid" && order.escrow_status === "held") {
       return new Response(
         JSON.stringify({ received: true, duplicate: true }),
         { status: 200 }
@@ -86,18 +88,23 @@ serve(async (req) => {
     // ✅ READ IMAGE URL FROM METADATA
     const imageUrl = session.metadata?.image_url ?? null
 
-    // ✅ CORRECT STRIPE CHECKOUT SHIPPING SOURCE
+    // ✅ SHIPPING DETAILS
     const shipping =
       session.collected_information?.shipping_details ??
       session.shipping_details
 
     const address = shipping?.address
 
-    // ---------------- UPDATE ORDER ----------------
+    // ---------------- UPDATE ORDER (ESCROW FUNDED) ----------------
     const { error: updateError } = await supabase
       .from("orders")
       .update({
         status: "paid",
+
+        // 🔐 ESCROW
+        escrow_status: "held",
+        escrow_funded_at: new Date().toISOString(),
+
         stripe_session_id: session.id,
         stripe_payment_intent: session.payment_intent ?? null,
 
@@ -120,7 +127,7 @@ serve(async (req) => {
       return new Response("Order update failed", { status: 500 })
     }
 
-    // ---------------- MARK LISTING AS SOLD + INACTIVE ----------------
+    // ---------------- MARK LISTING AS SOLD ----------------
     if (order.listing_id) {
       await supabase
         .from("listings")
@@ -130,7 +137,7 @@ serve(async (req) => {
           updated_at: new Date().toISOString(),
         })
         .eq("id", order.listing_id)
-        .eq("is_sold", false) // 🛡 idempotent guard
+        .eq("is_sold", false)
     }
 
     // ---------------- EXPIRE COMPETING OFFERS ----------------

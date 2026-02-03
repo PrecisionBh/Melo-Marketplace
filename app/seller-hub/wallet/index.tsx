@@ -130,10 +130,9 @@ export default function SellerWalletScreen() {
           <TouchableOpacity
             style={[
               styles.withdrawBtn,
-              available <= 0 && { opacity: 0.4 },
+              available <= 0 && { opacity: 0.6 }, // visual hint only
             ]}
-            disabled={available <= 0}
-            onPress={() => alert("Withdraw flow next")}
+            onPress={() => router.push("/seller-hub/wallet/payout")}
           >
             <Text style={styles.withdrawText}>Withdraw Funds</Text>
           </TouchableOpacity>
@@ -158,7 +157,7 @@ export default function SellerWalletScreen() {
           </Text>
         </View>
 
-        {/* STRIPE CONNECT (BOTTOM) */}
+        {/* STRIPE CONNECT */}
         <View style={styles.payoutBox}>
           <Text style={styles.payoutTitle}>Payout Settings</Text>
 
