@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons"
+import * as Linking from "expo-linking"
 import { useRouter } from "expo-router"
 import { useEffect, useState } from "react"
 import {
@@ -22,6 +23,10 @@ type Wallet = {
   currency: string
 }
 
+type Profile = {
+  stripe_account_id: string | null
+}
+
 /* ---------------- SCREEN ---------------- */
 
 export default function SellerWalletScreen() {
@@ -29,33 +34,68 @@ export default function SellerWalletScreen() {
   const { session } = useAuth()
 
   const [wallet, setWallet] = useState<Wallet | null>(null)
+  const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
+  const [connecting, setConnecting] = useState(false)
 
   useEffect(() => {
-    if (session?.user?.id) loadWallet()
+    if (session?.user?.id) {
+      loadData()
+    }
   }, [session?.user?.id])
 
-  const loadWallet = async () => {
-    const { data, error } = await supabase
-      .from("wallets")
-      .select(`
-        id,
-        available_balance_cents,
-        pending_balance_cents,
-        lifetime_earnings_cents,
-        currency
-      `)
-      .eq("user_id", session!.user.id)
-      .single()
+  const loadData = async () => {
+    setLoading(true)
 
-    if (error) {
-      console.error("Failed to load wallet:", error)
-      setLoading(false)
-      return
-    }
+    const [{ data: walletData }, { data: profileData }] =
+      await Promise.all([
+        supabase
+          .from("wallets")
+          .select(
+            "id, available_balance_cents, pending_balance_cents, lifetime_earnings_cents, currency"
+          )
+          .eq("user_id", session!.user.id)
+          .single(),
 
-    setWallet(data)
+        supabase
+          .from("profiles")
+          .select("stripe_account_id")
+          .eq("id", session!.user.id)
+          .single(),
+      ])
+
+    setWallet(walletData ?? null)
+    setProfile(profileData ?? null)
     setLoading(false)
+  }
+
+  /* ---------------- STRIPE CONNECT ---------------- */
+
+  const openPayoutSetup = async () => {
+    if (!session?.user?.id) return
+
+    try {
+      setConnecting(true)
+
+      const { data, error } = await supabase.functions.invoke(
+        "create-connect-account-link",
+        {
+          body: {
+            user_id: session.user.id,
+          },
+        }
+      )
+
+      if (error || !data?.url) {
+        throw error || new Error("No onboarding URL returned")
+      }
+
+      await Linking.openURL(data.url)
+    } catch (err: any) {
+      alert(err?.message || "Unable to start payout setup")
+    } finally {
+      setConnecting(false)
+    }
   }
 
   if (loading || !wallet) {
@@ -65,6 +105,8 @@ export default function SellerWalletScreen() {
   const available = wallet.available_balance_cents / 100
   const pending = wallet.pending_balance_cents / 100
   const lifetime = wallet.lifetime_earnings_cents / 100
+
+  const hasStripe = !!profile?.stripe_account_id
 
   /* ---------------- RENDER ---------------- */
 
@@ -91,10 +133,7 @@ export default function SellerWalletScreen() {
               available <= 0 && { opacity: 0.4 },
             ]}
             disabled={available <= 0}
-            onPress={() => {
-              // 🔜 Wire to payout flow later
-              alert("Withdraw flow coming next")
-            }}
+            onPress={() => alert("Withdraw flow next")}
           >
             <Text style={styles.withdrawText}>Withdraw Funds</Text>
           </TouchableOpacity>
@@ -106,8 +145,8 @@ export default function SellerWalletScreen() {
           <Text style={styles.pending}>${pending.toFixed(2)}</Text>
 
           <Text style={styles.helperText}>
-            Funds become available after delivery is confirmed or
-            automatically released 7 days after shipment.
+            Funds are released after delivery is confirmed or automatically
+            after the protection window.
           </Text>
         </View>
 
@@ -118,6 +157,28 @@ export default function SellerWalletScreen() {
             ${lifetime.toFixed(2)}
           </Text>
         </View>
+
+        {/* STRIPE CONNECT (BOTTOM) */}
+        <View style={styles.payoutBox}>
+          <Text style={styles.payoutTitle}>Payout Settings</Text>
+
+          <TouchableOpacity
+            style={[
+              styles.payoutBtn,
+              connecting && { opacity: 0.6 },
+            ]}
+            onPress={openPayoutSetup}
+            disabled={connecting}
+          >
+            <Text style={styles.payoutText}>
+              {hasStripe ? "Edit payout details" : "Set up payouts"}
+            </Text>
+          </TouchableOpacity>
+
+          <Text style={styles.payoutHelper}>
+            Secure payouts powered by Stripe. Bank info is never stored by us.
+          </Text>
+        </View>
       </View>
     </View>
   )
@@ -126,10 +187,7 @@ export default function SellerWalletScreen() {
 /* ---------------- STYLES ---------------- */
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: "#EAF4EF",
-  },
+  screen: { flex: 1, backgroundColor: "#EAF4EF" },
 
   header: {
     height: 85,
@@ -214,5 +272,38 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "900",
     color: "#0F1E17",
+  },
+
+  payoutBox: {
+    marginTop: 12,
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 16,
+  },
+
+  payoutTitle: {
+    fontSize: 14,
+    fontWeight: "900",
+    marginBottom: 10,
+    color: "#0F1E17",
+  },
+
+  payoutBtn: {
+    backgroundColor: "#0F1E17",
+    paddingVertical: 14,
+    borderRadius: 14,
+  },
+
+  payoutText: {
+    color: "#fff",
+    fontWeight: "900",
+    textAlign: "center",
+  },
+
+  payoutHelper: {
+    marginTop: 8,
+    fontSize: 12,
+    color: "#6B8F7D",
+    textAlign: "center",
   },
 })

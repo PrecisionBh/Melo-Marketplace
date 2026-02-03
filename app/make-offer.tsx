@@ -52,11 +52,13 @@ export default function MakeOfferScreen() {
 
   /* ---------------- FEES ---------------- */
 
+  // ✅ Buyer protection ONLY (1.5%)
   const buyerFee = useMemo(() => {
     if (!numericOffer || numericOffer <= 0) return 0
-    return Number((numericOffer * 0.03).toFixed(2))
+    return Number((numericOffer * 0.015).toFixed(2))
   }, [numericOffer])
 
+  // ❗ Stripe fee intentionally NOT included here (handled at checkout)
   const totalDue = useMemo(() => {
     if (!numericOffer || numericOffer <= 0) return 0
     return Number((numericOffer + buyerFee).toFixed(2))
@@ -191,7 +193,7 @@ export default function MakeOfferScreen() {
                   value={`$${numericOffer.toFixed(2)}`}
                 />
                 <Row
-                  label="Buyer fee (3%)"
+                  label="Buyer protection (1.5%)"
                   value={`$${buyerFee.toFixed(2)}`}
                 />
 

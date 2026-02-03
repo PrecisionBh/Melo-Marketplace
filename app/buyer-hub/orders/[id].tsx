@@ -128,12 +128,21 @@ export default function BuyerOrderDetailScreen() {
   const canCancel = order.status === "paid"
   const canTrack = !!order.tracking_url && !isCompleted
 
-  /* ---------------- RECEIPT MATH ---------------- */
+  /* ---------------- RECEIPT MATH (FIXED) ---------------- */
 
-  const itemTotal = order.amount_cents / 100
+  // amount_cents = item + shipping (already charged)
   const shipping =
     (order.listing_snapshot?.shipping_amount_cents ?? 0) / 100
+
+  // item price ONLY (no shipping)
+  const itemTotal =
+    (order.amount_cents -
+      (order.listing_snapshot?.shipping_amount_cents ?? 0)) /
+    100
+
+  // Buyer pays Stripe passthrough ONLY on item price
   const buyerFee = +(itemTotal * 0.029 + 0.3).toFixed(2)
+
   const totalPaid = +(itemTotal + shipping + buyerFee).toFixed(2)
 
   /* ---------------- RENDER ---------------- */
@@ -179,8 +188,14 @@ export default function BuyerOrderDetailScreen() {
 
         {/* RECEIPT */}
         <View style={styles.receipt}>
-          <ReceiptRow label="Item price" value={`$${itemTotal.toFixed(2)}`} />
-          <ReceiptRow label="Shipping" value={`$${shipping.toFixed(2)}`} />
+          <ReceiptRow
+            label="Item price"
+            value={`$${itemTotal.toFixed(2)}`}
+          />
+          <ReceiptRow
+            label="Shipping"
+            value={`$${shipping.toFixed(2)}`}
+          />
           <ReceiptRow
             label="Buyer protection & processing"
             value={`$${buyerFee.toFixed(2)}`}
@@ -197,7 +212,11 @@ export default function BuyerOrderDetailScreen() {
         {/* COMPLETED STATE */}
         {isCompleted ? (
           <View style={styles.completedBadge}>
-            <Ionicons name="checkmark-circle" size={18} color="#27AE60" />
+            <Ionicons
+              name="checkmark-circle"
+              size={18}
+              color="#27AE60"
+            />
             <Text style={styles.completedText}>
               This order is completed
             </Text>
@@ -229,7 +248,9 @@ export default function BuyerOrderDetailScreen() {
               {canTrack && (
                 <TouchableOpacity
                   style={[styles.pill, styles.trackPill]}
-                  onPress={() => Linking.openURL(order.tracking_url!)}
+                  onPress={() =>
+                    Linking.openURL(order.tracking_url!)
+                  }
                 >
                   <Text style={styles.trackText}>Track</Text>
                 </TouchableOpacity>
@@ -240,7 +261,9 @@ export default function BuyerOrderDetailScreen() {
               style={styles.completeBtn}
               onPress={() => setConfirmVisible(true)}
             >
-              <Text style={styles.completeText}>Confirm Delivery</Text>
+              <Text style={styles.completeText}>
+                Confirm Delivery
+              </Text>
             </TouchableOpacity>
           </>
         )}
@@ -250,21 +273,29 @@ export default function BuyerOrderDetailScreen() {
       <Modal transparent visible={confirmVisible} animationType="fade">
         <View style={styles.modalBackdrop}>
           <View style={styles.modal}>
-            <Text style={styles.modalTitle}>Confirm Delivery?</Text>
+            <Text style={styles.modalTitle}>
+              Confirm Delivery?
+            </Text>
             <Text style={styles.modalText}>
-              Please inspect your item before confirming delivery.
+              Please inspect your item before confirming
+              delivery.
               {"\n\n"}
-              Once confirmed, the seller will be paid and disputes will no longer be available.
+              Once confirmed, the seller will be paid and
+              disputes will no longer be available.
             </Text>
 
             <TouchableOpacity
               style={styles.completeBtn}
               onPress={confirmDelivery}
             >
-              <Text style={styles.completeText}>Yes, Confirm Delivery</Text>
+              <Text style={styles.completeText}>
+                Yes, Confirm Delivery
+              </Text>
             </TouchableOpacity>
 
-            <TouchableOpacity onPress={() => setConfirmVisible(false)}>
+            <TouchableOpacity
+              onPress={() => setConfirmVisible(false)}
+            >
               <Text style={styles.modalCancel}>Go Back</Text>
             </TouchableOpacity>
           </View>
@@ -289,10 +320,20 @@ function ReceiptRow({
 }) {
   return (
     <View style={styles.receiptRow}>
-      <Text style={[styles.receiptLabel, subtle && { color: "#6B8F7D" }]}>
+      <Text
+        style={[
+          styles.receiptLabel,
+          subtle && { color: "#6B8F7D" },
+        ]}
+      >
         {label}
       </Text>
-      <Text style={[styles.receiptValue, bold && { fontWeight: "900" }]}>
+      <Text
+        style={[
+          styles.receiptValue,
+          bold && { fontWeight: "900" },
+        ]}
+      >
         {value}
       </Text>
     </View>

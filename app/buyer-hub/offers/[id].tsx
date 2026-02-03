@@ -149,14 +149,17 @@ export default function BuyerOfferDetailScreen() {
       : 0
   }, [offer])
 
-  const itemPrice = offer?.current_amount ?? 0
-  const buyerTotal = itemPrice + shippingCost
+ const itemPrice = offer?.current_amount ?? 0
 
-  // ✅ Buyer can respond only when:
-  // - not expired
-  // - offer not final (accepted/declined/expired)
-  // - less than 6 counters
-  // - seller acted last (so it’s buyer’s turn)
+// Buyer fees (item price ONLY)
+const buyerProtectionFee = Number((itemPrice * 0.015).toFixed(2))
+const stripeProcessingFee = Number((itemPrice * 0.029 + 0.3).toFixed(2))
+const buyerFeeTotal = buyerProtectionFee + stripeProcessingFee
+
+const buyerTotal = Number(
+  (itemPrice + shippingCost + buyerFeeTotal).toFixed(2)
+)
+
   const canRespond =
     !!offer &&
     !isExpired &&
@@ -313,15 +316,28 @@ export default function BuyerOfferDetailScreen() {
           <Text style={styles.title}>{offer.listings.title}</Text>
 
           <View style={styles.receipt}>
-            <Row label="Item price" value={`$${itemPrice.toFixed(2)}`} />
-            <Row
-              label="Shipping"
-              value={
-                shippingCost === 0 ? "Free" : `$${shippingCost.toFixed(2)}`
-              }
-            />
-            <Row label="Total due" value={`$${buyerTotal.toFixed(2)}`} bold />
-          </View>
+  <Row label="Item price" value={`$${itemPrice.toFixed(2)}`} />
+
+  <Row
+    label="Shipping"
+    value={
+      shippingCost === 0 ? "Free" : `$${shippingCost.toFixed(2)}`
+    }
+  />
+
+  <Row
+    label="Buyer protection (1.5%)"
+    value={`$${buyerProtectionFee.toFixed(2)}`}
+  />
+
+  <Row
+    label="Processing fee"
+    value={`$${stripeProcessingFee.toFixed(2)}`}
+  />
+
+  <Row label="Total due" value={`$${buyerTotal.toFixed(2)}`} bold />
+</View>
+
 
           {/* ✅ ACCEPTED STATE (PAYMENT FIRST-CLASS) */}
           {offer.status === "accepted" && (

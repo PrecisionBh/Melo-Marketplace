@@ -51,10 +51,7 @@ export default function SellerOfferDetailScreen() {
   const [showCounter, setShowCounter] = useState(false)
 
   useEffect(() => {
-    if (!id || !session?.user?.id) {
-      setLoading(false)
-      return
-    }
+    if (!id || !session?.user?.id) return
     loadOffer()
   }, [id, session?.user?.id])
 
@@ -85,14 +82,7 @@ export default function SellerOfferDetailScreen() {
       .single()
       .returns<Offer>()
 
-    if (error || !data) {
-      setOffer(null)
-      setLoading(false)
-      return
-    }
-
-    if (data.seller_id !== session!.user!.id) {
-      Alert.alert("Access denied")
+    if (error || !data || data.seller_id !== session!.user!.id) {
       router.replace("/seller-hub/offers")
       return
     }
@@ -109,27 +99,27 @@ export default function SellerOfferDetailScreen() {
     return Date.now() > created + 24 * 60 * 60 * 1000
   }, [offer])
 
-  /* ---------------- CALCULATIONS ---------------- */
-
-  if (!offer) {
-    return (
-      <View style={styles.empty}>
-        <Text style={styles.emptyText}>
-          You have no offers at this time.
-        </Text>
-      </View>
-    )
+  if (loading) {
+    return <ActivityIndicator style={{ marginTop: 80 }} />
   }
+
+  if (!offer) return null
+
+  /* ---------------- MONEY (PREVIEW ONLY) ---------------- */
+
+  const itemPrice = offer.current_amount
 
   const shippingCost =
     offer.listings.shipping_type === "buyer_pays"
       ? offer.listings.shipping_price ?? 0
       : 0
 
-  const itemPrice = offer.current_amount
+  // 🔒 4% SELLER FEE — ITEM PRICE ONLY
+  const sellerFee = Number((itemPrice * 0.04).toFixed(2))
+
+  const sellerPayout = Number((itemPrice - sellerFee).toFixed(2))
+
   const buyerTotal = itemPrice + shippingCost
-  const platformFee = Number((itemPrice * 0.035).toFixed(2))
-  const sellerPayout = Number((itemPrice - platformFee).toFixed(2))
 
   const canRespond =
     !isExpired &&
@@ -140,9 +130,7 @@ export default function SellerOfferDetailScreen() {
   /* ---------------- ACTIONS ---------------- */
 
   const acceptOffer = async () => {
-    if (!offer) return
     if (saving || isExpired) return
-
     setSaving(true)
 
     const { error } = await supabase
@@ -150,16 +138,14 @@ export default function SellerOfferDetailScreen() {
       .update({
         status: "accepted",
         last_actor: "seller",
-        last_action: "accepted",
 
-        // 🔒 SNAPSHOT — IMMUTABLE CONTRACT
+        // 🔒 SNAPSHOT — USED TO CREATE ORDER LATER
         accepted_price: offer.current_amount,
         accepted_shipping_type: offer.listings.shipping_type,
         accepted_shipping_price: offer.listings.shipping_price ?? 0,
         accepted_title: offer.listings.title,
         accepted_image_url: offer.listings.image_urls?.[0] ?? null,
         accepted_at: new Date().toISOString(),
-
         updated_at: new Date().toISOString(),
       })
       .eq("id", offer.id)
@@ -173,11 +159,7 @@ export default function SellerOfferDetailScreen() {
       return
     }
 
-    Alert.alert(
-      "Offer Accepted",
-      "The buyer can now complete payment."
-    )
-
+    Alert.alert("Offer Accepted", "The buyer can now complete payment.")
     router.replace("/seller-hub/offers")
   }
 
@@ -190,7 +172,6 @@ export default function SellerOfferDetailScreen() {
       .update({
         status: "declined",
         last_actor: "seller",
-        last_action: "declined",
         updated_at: new Date().toISOString(),
       })
       .eq("id", offer.id)
@@ -221,7 +202,6 @@ export default function SellerOfferDetailScreen() {
         counter_amount: amount,
         counter_count: offer.counter_count + 1,
         last_actor: "seller",
-        last_action: "countered",
         status: "countered",
         updated_at: new Date().toISOString(),
       })
@@ -239,10 +219,6 @@ export default function SellerOfferDetailScreen() {
   }
 
   /* ---------------- UI ---------------- */
-
-  if (loading) {
-    return <ActivityIndicator style={{ marginTop: 80 }} />
-  }
 
   return (
     <View style={styles.screen}>
@@ -279,8 +255,8 @@ export default function SellerOfferDetailScreen() {
               }
             />
             <Row
-              label="Melo Fee (3.5%)"
-              value={`-$${platformFee.toFixed(2)}`}
+              label="Marketplace Fee (4%)"
+              value={`-$${sellerFee.toFixed(2)}`}
             />
             <View style={styles.divider} />
             <Row
@@ -403,8 +379,6 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: 16, fontWeight: "900" },
   content: { padding: 16 },
-  empty: { flex: 1, justifyContent: "center", alignItems: "center" },
-  emptyText: { fontWeight: "800", color: "#6B8F7D" },
   card: { backgroundColor: "#fff", borderRadius: 16, padding: 16 },
   image: { width: "100%", height: 220, borderRadius: 14, marginBottom: 12 },
   title: { fontSize: 18, fontWeight: "900", marginBottom: 12 },

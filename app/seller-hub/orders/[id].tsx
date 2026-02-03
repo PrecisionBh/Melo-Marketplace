@@ -24,7 +24,12 @@ type Order = {
   id: string
   seller_id: string
   status: OrderStatus
-  amount_cents: number
+
+  // 🔒 SNAPSHOTS (AUTHORITATIVE)
+  item_price_cents: number            // SALE PRICE ONLY (NO SHIPPING)
+  shipping_amount_cents: number | null
+  seller_fee_cents: number
+  seller_net_cents: number
 
   image_url: string | null
 
@@ -55,21 +60,19 @@ export default function SellerOrderDetailScreen() {
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    if (id && session?.user?.id) {
-      loadOrder()
-    }
+    if (id && session?.user?.id) loadOrder()
   }, [id, session?.user?.id])
 
   const loadOrder = async () => {
     setLoading(true)
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("orders")
       .select("*")
       .eq("id", id)
       .single()
 
-    if (!data || data.seller_id !== session?.user?.id) {
+    if (error || !data || data.seller_id !== session?.user?.id) {
       router.back()
       return
     }
@@ -95,8 +98,6 @@ export default function SellerOrderDetailScreen() {
       })
       .eq("id", order.id)
 
-    console.log("UPDATE ERROR:", error)
-
     setSaving(false)
 
     if (error) {
@@ -106,7 +107,7 @@ export default function SellerOrderDetailScreen() {
 
     Alert.alert(
       "Order Shipped",
-      "Tracking has been added and the order is now in progress.",
+      "Tracking has been added and the order is now in escrow.",
       [
         {
           text: "OK",
@@ -123,9 +124,14 @@ export default function SellerOrderDetailScreen() {
 
   if (!order) return null
 
-  const gross = order.amount_cents / 100
-  const sellerFee = +(gross * 0.035).toFixed(2)
-  const escrow = +(gross - sellerFee).toFixed(2)
+  /* ---------------- MONEY (DISPLAY ONLY) ---------------- */
+
+  const salePrice = order.item_price_cents / 100
+  const shipping = (order.shipping_amount_cents ?? 0) / 100
+  const sellerFee = order.seller_fee_cents / 100
+  const escrow = order.seller_net_cents / 100
+
+  /* ---------------- RENDER ---------------- */
 
   return (
     <View style={styles.screen}>
@@ -165,24 +171,16 @@ export default function SellerOrderDetailScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Ship To</Text>
 
-          <Text style={styles.addressText}>
-            {order.shipping_name}
-          </Text>
-          <Text style={styles.addressText}>
-            {order.shipping_line1}
-          </Text>
+          <Text style={styles.addressText}>{order.shipping_name}</Text>
+          <Text style={styles.addressText}>{order.shipping_line1}</Text>
           {order.shipping_line2 && (
-            <Text style={styles.addressText}>
-              {order.shipping_line2}
-            </Text>
+            <Text style={styles.addressText}>{order.shipping_line2}</Text>
           )}
           <Text style={styles.addressText}>
             {order.shipping_city}, {order.shipping_state}{" "}
             {order.shipping_postal_code}
           </Text>
-          <Text style={styles.addressText}>
-            {order.shipping_country}
-          </Text>
+          <Text style={styles.addressText}>{order.shipping_country}</Text>
         </View>
 
         {/* TRACKING */}
@@ -204,8 +202,7 @@ export default function SellerOrderDetailScreen() {
                     <Text
                       style={[
                         styles.carrierText,
-                        carrier === c &&
-                          styles.carrierTextActive,
+                        carrier === c && styles.carrierTextActive,
                       ]}
                     >
                       {c}
@@ -235,21 +232,17 @@ export default function SellerOrderDetailScreen() {
 
         {/* RECEIPT */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>
-            Sale Breakdown
-          </Text>
+          <Text style={styles.sectionTitle}>Sale Breakdown</Text>
 
+          <Row label="Sale Price" value={`$${salePrice.toFixed(2)}`} />
+          <Row label="Shipping (You Keep)" value={`$${shipping.toFixed(2)}`} />
           <Row
-            label="Sale Price"
-            value={`$${gross.toFixed(2)}`}
+            label="Marketplace Fee (4%)"
+            value={`-$${sellerFee.toFixed(2)}`}
           />
           <Row
-            label="Seller Fee (3.5%)"
-            value={`-$${sellerFee}`}
-          />
-          <Row
-            label="Held in Escrow / Your Payment"
-            value={`$${escrow}`}
+            label="Pending Escrow (Your Payout)"
+            value={`$${escrow.toFixed(2)}`}
             bold
           />
         </View>
@@ -261,16 +254,13 @@ export default function SellerOrderDetailScreen() {
           <TouchableOpacity
             style={[
               styles.primaryBtn,
-              (!carrier || !tracking) &&
-                styles.primaryDisabled,
+              (!carrier || !tracking) && styles.primaryDisabled,
             ]}
             disabled={!carrier || !tracking || saving}
             onPress={submitTracking}
           >
             <Text style={styles.primaryText}>
-              {saving
-                ? "Saving…"
-                : "Add Tracking & Mark Shipped"}
+              {saving ? "Saving…" : "Add Tracking & Mark Shipped"}
             </Text>
           </TouchableOpacity>
         </View>
@@ -293,9 +283,7 @@ function Row({
   return (
     <View style={styles.row}>
       <Text style={styles.rowLabel}>{label}</Text>
-      <Text
-        style={[styles.rowValue, bold && { fontWeight: "900" }]}
-      >
+      <Text style={[styles.rowValue, bold && { fontWeight: "900" }]}>
         {value}
       </Text>
     </View>
