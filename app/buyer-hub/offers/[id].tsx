@@ -5,10 +5,8 @@ import {
     ActivityIndicator,
     Alert,
     Image,
-    Modal,
     StyleSheet,
     Text,
-    TextInput,
     TouchableOpacity,
     View,
 } from "react-native"
@@ -37,12 +35,6 @@ type Offer = {
   }
 }
 
-type PaymentLink = {
-  id: string
-  offer_id: string
-  status: "pending" | "paid"
-}
-
 /* ---------------- SCREEN ---------------- */
 
 export default function BuyerOfferDetailScreen() {
@@ -51,7 +43,6 @@ export default function BuyerOfferDetailScreen() {
   const { session } = useAuth()
 
   const [offer, setOffer] = useState<Offer | null>(null)
-  const [paymentLink, setPaymentLink] = useState<PaymentLink | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [counterAmount, setCounterAmount] = useState("")
@@ -63,7 +54,6 @@ export default function BuyerOfferDetailScreen() {
       return
     }
     loadOffer()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, session?.user?.id])
 
   /* ---------------- LOAD OFFER ---------------- */
@@ -90,44 +80,25 @@ export default function BuyerOfferDetailScreen() {
         )
       `)
       .eq("id", id)
-      .single()
-      .returns<Offer>()
+      .single<Offer>()
 
     if (error || !data) {
       setOffer(null)
-      setPaymentLink(null)
       setLoading(false)
       return
     }
 
-    // ✅ Access control: buyer only
     if (data.buyer_id !== session!.user!.id) {
-      setLoading(false)
       Alert.alert("Access denied", "You can only view your own offers.")
       router.replace("/buyer-hub/offers")
       return
     }
 
     setOffer(data)
-
-    // ✅ Load payment link if accepted (optional — UI will still allow pay even if missing)
-    if (data.status === "accepted") {
-      const { data: linkData } = await supabase
-        .from("payment_links")
-        .select("id, offer_id, status")
-        .eq("offer_id", data.id)
-        .maybeSingle()
-        .returns<PaymentLink>()
-
-      setPaymentLink(linkData ?? null)
-    } else {
-      setPaymentLink(null)
-    }
-
     setLoading(false)
   }
 
-  /* ---------------- EXPIRATION (24h) ---------------- */
+  /* ---------------- EXPIRATION ---------------- */
 
   const isExpired = useMemo(() => {
     if (!offer) return false
@@ -150,13 +121,16 @@ export default function BuyerOfferDetailScreen() {
   }, [offer])
 
   const itemPrice = offer?.current_amount ?? 0
-  const buyerTotal = itemPrice + shippingCost
 
-  // ✅ Buyer can respond only when:
-  // - not expired
-  // - offer not final (accepted/declined/expired)
-  // - less than 6 counters
-  // - seller acted last (so it’s buyer’s turn)
+  const buyerProtectionFee = Number((itemPrice * 0.015).toFixed(2))
+  const stripeProcessingFee = Number((itemPrice * 0.029 + 0.3).toFixed(2))
+
+  const buyerTotal =
+    itemPrice +
+    shippingCost +
+    buyerProtectionFee +
+    stripeProcessingFee
+
   const canRespond =
     !!offer &&
     !isExpired &&
@@ -164,41 +138,59 @@ export default function BuyerOfferDetailScreen() {
     offer.counter_count < 6 &&
     offer.last_actor === "seller"
 
-  // ✅ Buyer can pay when accepted and not expired and not already paid
   const canPay =
     !!offer &&
     offer.status === "accepted" &&
-    !isExpired &&
-    paymentLink?.status !== "paid"
-
-  const alreadyPaid =
-    !!offer && offer.status === "accepted" && paymentLink?.status === "paid"
+    !isExpired
 
   /* ---------------- ACTIONS ---------------- */
 
   const goToPay = () => {
     if (!offer) return
-
-    // ✅ IMPORTANT: checkout.tsx expects query params (offerId / listingId)
     router.push({
       pathname: "/checkout",
       params: { offerId: offer.id },
     })
   }
 
-  const declineOffer = async () => {
-    if (!offer) return
-    if (saving) return
+  const acceptOffer = async () => {
+    if (!offer || saving) return
 
-    // hard guard even if button visible bug
-    if (isExpired || offerIsFinal) {
-      Alert.alert("Not available", "This offer can no longer be declined.")
+    setSaving(true)
+
+    const { error } = await supabase
+      .from("offers")
+      .update({
+        status: "accepted",
+        last_actor: "buyer",
+        last_action: "accepted",
+
+        // 🔒 SNAPSHOT DATA
+        accepted_price: offer.current_amount,
+        accepted_title: offer.listings.title,
+        accepted_image_url: offer.listings.image_urls?.[0] ?? null,
+        accepted_shipping_type: offer.listings.shipping_type,
+        accepted_shipping_price:
+          offer.listings.shipping_type === "buyer_pays"
+            ? offer.listings.shipping_price ?? 0
+            : 0,
+
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", offer.id)
+
+    setSaving(false)
+
+    if (error) {
+      Alert.alert("Failed to accept offer", error.message)
       return
     }
-    if (offer.last_actor !== "seller") {
-      Alert.alert("Please wait", "The seller is waiting on your counter.")
-      return
-    }
+
+    loadOffer()
+  }
+
+  const declineOffer = async () => {
+    if (!offer || saving) return
 
     Alert.alert("Decline offer?", "This will end the negotiation.", [
       { text: "Cancel", style: "cancel" },
@@ -225,21 +217,14 @@ export default function BuyerOfferDetailScreen() {
             return
           }
 
-          router.replace("/buyer-hub/offers")
+          loadOffer()
         },
       },
     ])
   }
 
   const submitCounter = async () => {
-    if (!offer) return
-    if (saving) return
-
-    // hard guards
-    if (!canRespond) {
-      Alert.alert("Not available", "You can’t counter this offer right now.")
-      return
-    }
+    if (!offer || saving) return
 
     const amount = Number(counterAmount)
     if (!amount || amount <= 0) {
@@ -271,7 +256,7 @@ export default function BuyerOfferDetailScreen() {
 
     setShowCounter(false)
     setCounterAmount("")
-    router.replace("/buyer-hub/offers")
+    loadOffer()
   }
 
   /* ---------------- UI ---------------- */
@@ -284,13 +269,18 @@ export default function BuyerOfferDetailScreen() {
     return (
       <View style={styles.empty}>
         <Text style={styles.emptyText}>This offer is no longer available.</Text>
+        <TouchableOpacity
+          style={styles.browseBtn}
+          onPress={() => router.replace("/home")}
+        >
+          <Text style={styles.browseText}>Back to Browsing</Text>
+        </TouchableOpacity>
       </View>
     )
   }
 
   return (
     <View style={styles.screen}>
-      {/* HEADER */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={22} />
@@ -317,110 +307,40 @@ export default function BuyerOfferDetailScreen() {
             <Row
               label="Shipping"
               value={
-                shippingCost === 0 ? "Free" : `$${shippingCost.toFixed(2)}`
+                shippingCost === 0
+                  ? "Free"
+                  : `$${shippingCost.toFixed(2)}`
               }
             />
-            <Row label="Total due" value={`$${buyerTotal.toFixed(2)}`} bold />
+            <Row
+              label="Buyer protection (1.5%)"
+              value={`$${buyerProtectionFee.toFixed(2)}`}
+            />
+            <Row
+              label="Processing fee (2.9% + $0.30)"
+              value={`$${stripeProcessingFee.toFixed(2)}`}
+            />
+            <Row
+              label="Total due"
+              value={`$${buyerTotal.toFixed(2)}`}
+              bold
+            />
           </View>
 
-          {/* ✅ ACCEPTED STATE (PAYMENT FIRST-CLASS) */}
-          {offer.status === "accepted" && (
+          {canPay && (
             <View style={styles.acceptedBox}>
-              <Text style={styles.acceptedTitle}>Offer Accepted 🎉</Text>
-
-              {alreadyPaid ? (
-                <Text style={styles.acceptedText}>
-                  Payment completed. You’re all set ✅
+              <TouchableOpacity
+                style={styles.payBtn}
+                onPress={goToPay}
+              >
+                <Text style={styles.payText}>
+                  Pay Now • ${buyerTotal.toFixed(2)}
                 </Text>
-              ) : (
-                <>
-                  <Text style={styles.acceptedText}>
-                    The seller accepted your offer. Complete payment to finalize
-                    the purchase.
-                  </Text>
-
-                  <TouchableOpacity
-                    style={[styles.payBtn, (!canPay || saving) && { opacity: 0.6 }]}
-                    onPress={goToPay}
-                    disabled={!canPay || saving}
-                  >
-                    <Text style={styles.payText}>
-                      Pay Now • ${buyerTotal.toFixed(2)}
-                    </Text>
-                  </TouchableOpacity>
-
-                  {isExpired && (
-                    <Text style={styles.expired}>
-                      This offer expired before payment was completed.
-                    </Text>
-                  )}
-                </>
-              )}
+              </TouchableOpacity>
             </View>
-          )}
-
-          {/* Expired label for non-accepted states */}
-          {isExpired && offer.status !== "accepted" && (
-            <Text style={styles.expired}>This offer has expired.</Text>
           )}
         </View>
       </View>
-
-      {/* ACTIONS */}
-      {canRespond && (
-        <View style={styles.actionBar}>
-          <TouchableOpacity
-            style={styles.counterBtn}
-            onPress={() => setShowCounter(true)}
-            disabled={saving}
-          >
-            <Text style={styles.counterText}>Counter</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.declineBtn}
-            onPress={declineOffer}
-            disabled={saving}
-          >
-            <Text style={styles.declineText}>Decline</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* COUNTER MODAL */}
-      <Modal transparent visible={showCounter} animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Counter Offer</Text>
-
-            <TextInput
-              placeholder="New amount"
-              keyboardType="decimal-pad"
-              value={counterAmount}
-              onChangeText={setCounterAmount}
-              style={styles.input}
-            />
-
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={styles.modalCancel}
-                onPress={() => setShowCounter(false)}
-                disabled={saving}
-              >
-                <Text style={styles.modalCancelText}>Cancel</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.modalConfirm, saving && { opacity: 0.7 }]}
-                onPress={submitCounter}
-                disabled={saving}
-              >
-                <Text style={styles.modalConfirmText}>Submit</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </View>
   )
 }
@@ -448,8 +368,10 @@ function Row({
 
 /* ---------------- STYLES ---------------- */
 
+
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#F6F7F8" },
+
   header: {
     height: 90,
     backgroundColor: "#7FAF9B",
@@ -458,13 +380,47 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: 14,
   },
+
   headerTitle: { fontSize: 16, fontWeight: "900" },
-  content: { padding: 16 },
-  empty: { flex: 1, justifyContent: "center", alignItems: "center" },
-  emptyText: { fontWeight: "800", color: "#6B8F7D" },
-  card: { backgroundColor: "#fff", borderRadius: 16, padding: 16 },
-  image: { width: "100%", height: 220, borderRadius: 14, marginBottom: 12 },
-  title: { fontSize: 18, fontWeight: "900", marginBottom: 12 },
+
+  content: {
+    padding: 16,
+    paddingBottom: 180, // keeps Pay button clear of bottom nav
+  },
+
+  empty: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  emptyText: {
+    fontWeight: "800",
+    color: "#6B8F7D",
+    marginBottom: 14,
+  },
+
+  card: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 16,
+  },
+
+  image: {
+    width: "100%",
+    height: 220,
+    borderRadius: 14,
+    marginBottom: 12,
+  },
+
+  title: {
+    fontSize: 18,
+    fontWeight: "900",
+    marginBottom: 12,
+  },
+
+  /* ---------- RECEIPT ---------- */
+
   receipt: {
     backgroundColor: "#F0FAF6",
     borderRadius: 14,
@@ -472,14 +428,39 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#CFE5DA",
   },
+
   row: {
     flexDirection: "row",
     justifyContent: "space-between",
     paddingVertical: 6,
   },
-  rowLabel: { color: "#6B8F7D", fontWeight: "600" },
-  rowValue: { fontWeight: "700" },
-  expired: { marginTop: 10, color: "#C0392B", fontWeight: "800" },
+
+  rowLabel: {
+    color: "#6B8F7D",
+    fontWeight: "600",
+  },
+
+  rowValue: {
+    fontWeight: "700",
+  },
+
+  feeRowLabel: {
+    color: "#8FAEA1",
+    fontWeight: "600",
+  },
+
+  feeRowValue: {
+    color: "#2E5F4F",
+    fontWeight: "600",
+  },
+
+  divider: {
+    height: 1,
+    backgroundColor: "#CFE5DA",
+    marginVertical: 8,
+  },
+
+  /* ---------- ACCEPTED ---------- */
 
   acceptedBox: {
     marginTop: 16,
@@ -489,76 +470,39 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#1F7A63",
   },
-  acceptedTitle: {
-    fontSize: 16,
-    fontWeight: "900",
-    color: "#1F7A63",
-    marginBottom: 6,
-  },
-  acceptedText: {
-    fontSize: 13,
-    color: "#2E5F4F",
-    marginBottom: 12,
-  },
+
   payBtn: {
     backgroundColor: "#1F7A63",
     paddingVertical: 14,
     borderRadius: 16,
   },
+
   payText: {
     textAlign: "center",
     fontWeight: "900",
     color: "#fff",
   },
 
-  actionBar: {
-    position: "absolute",
-    bottom: 30,
-    left: 16,
-    right: 16,
-    gap: 10,
+  expired: {
+    marginTop: 10,
+    color: "#C0392B",
+    fontWeight: "800",
   },
-  counterBtn: {
-    backgroundColor: "#E8F5EE",
-    paddingVertical: 14,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#1F7A63",
-  },
-  counterText: { textAlign: "center", fontWeight: "900", color: "#1F7A63" },
-  declineBtn: {
-    paddingVertical: 14,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#EB5757",
-    backgroundColor: "#fff",
-  },
-  declineText: { textAlign: "center", fontWeight: "900", color: "#EB5757" },
 
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "center",
-    padding: 24,
+  /* ---------- BROWSE ---------- */
+
+  browseBtn: {
+    marginTop: 20,
+    backgroundColor: "#7FAF9B",
+    paddingVertical: 14,
+    borderRadius: 16,
   },
-  modalCard: { backgroundColor: "#fff", borderRadius: 16, padding: 20 },
-  modalTitle: { fontSize: 17, fontWeight: "900", marginBottom: 10 },
-  input: { backgroundColor: "#F4F4F4", padding: 14, borderRadius: 10 },
-  modalActions: { flexDirection: "row", marginTop: 20, gap: 10 },
-  modalCancel: {
-    flex: 1,
-    padding: 12,
-    borderRadius: 10,
-    backgroundColor: "#E4EFEA",
-    alignItems: "center",
+
+  browseText: {
+    textAlign: "center",
+    fontWeight: "900",
+    color: "#0F1E17",
   },
-  modalCancelText: { fontWeight: "700", color: "#2E5F4F" },
-  modalConfirm: {
-    flex: 1,
-    padding: 12,
-    borderRadius: 10,
-    backgroundColor: "#1F7A63",
-    alignItems: "center",
-  },
-  modalConfirmText: { fontWeight: "900", color: "#fff" },
 })
+
+

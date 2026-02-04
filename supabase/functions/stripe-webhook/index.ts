@@ -8,8 +8,7 @@ import Stripe from "https://esm.sh/stripe@13.11.0?target=deno"
 const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY")
 const STRIPE_WEBHOOK_SECRET = Deno.env.get("STRIPE_WEBHOOK_SECRET")
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")
-const SUPABASE_SERVICE_ROLE_KEY =
-  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")
 
 if (!STRIPE_SECRET_KEY) throw new Error("Missing STRIPE_SECRET_KEY")
 if (!STRIPE_WEBHOOK_SECRET) throw new Error("Missing STRIPE_WEBHOOK_SECRET")
@@ -39,7 +38,6 @@ serve(async (req) => {
   }
 
   const body = await req.text()
-
   let event: Stripe.Event
 
   try {
@@ -53,75 +51,109 @@ serve(async (req) => {
     return new Response("Invalid signature", { status: 400 })
   }
 
-  // ---------------- EVENT HANDLING ----------------
+  // ---------------- EVENT ----------------
   if (event.type === "checkout.session.completed") {
     const session = event.data.object as Stripe.Checkout.Session
-    const orderId = session.metadata?.order_id
 
-    if (!orderId) {
-      console.error("Missing order_id in metadata")
-      return new Response("Missing order_id", { status: 400 })
+    const offerId = session.metadata?.offer_id
+    if (!offerId) {
+      console.error("Missing offer_id in metadata")
+      return new Response("Missing offer_id", { status: 400 })
     }
 
-    // 🔁 FETCH ORDER (IDEMPOTENCY GUARD)
-    const { data: order, error: fetchError } = await supabase
-      .from("orders")
-      .select("id, status, listing_id, offer_id")
-      .eq("id", orderId)
+    // 🔁 LOAD OFFER
+    const { data: offer, error: offerErr } = await supabase
+      .from("offers")
+      .select(`
+        id,
+        buyer_id,
+        seller_id,
+        listing_id,
+        accepted_price,
+        accepted_shipping_type,
+        accepted_shipping_price,
+        accepted_title,
+        accepted_image_url,
+        status
+      `)
+      .eq("id", offerId)
       .single()
 
-    if (fetchError || !order) {
-      console.error("Order not found:", fetchError)
-      return new Response("Order not found", { status: 404 })
+    if (offerErr || !offer) {
+      console.error("Offer not found", offerErr)
+      return new Response("Offer not found", { status: 404 })
     }
 
-    // 🔒 ALREADY PROCESSED → EXIT CLEANLY
-    if (order.status === "paid") {
+    // 🔒 IDEMPOTENCY GUARD (retry-safe)
+    const { data: existingOrder } = await supabase
+      .from("orders")
+      .select("id")
+      .eq("offer_id", offer.id)
+      .maybeSingle()
+
+    if (existingOrder) {
       return new Response(
         JSON.stringify({ received: true, duplicate: true }),
         { status: 200 }
       )
     }
 
-    // ✅ READ IMAGE URL FROM METADATA
-    const imageUrl = session.metadata?.image_url ?? null
-
-    // ✅ CORRECT STRIPE CHECKOUT SHIPPING SOURCE
+    // ---------------- CALCULATIONS ----------------
+    const itemPrice = Number(offer.accepted_price ?? 0)
     const shipping =
-      session.collected_information?.shipping_details ??
-      session.shipping_details
+      offer.accepted_shipping_type === "buyer_pays"
+        ? Number(offer.accepted_shipping_price ?? 0)
+        : 0
 
-    const address = shipping?.address
+    // Buyer fee = 1.5% protection + 2.9% + $0.30 processing
+    const buyerFee = +(
+      itemPrice * 0.015 +
+      itemPrice * 0.029 +
+      0.3
+    ).toFixed(2)
 
-    // ---------------- UPDATE ORDER ----------------
-    const { error: updateError } = await supabase
+    const total = +(itemPrice + shipping + buyerFee).toFixed(2)
+
+    // ---------------- CREATE ORDER ----------------
+    const { data: order, error: orderErr } = await supabase
       .from("orders")
-      .update({
+      .insert({
+        buyer_id: offer.buyer_id,
+        seller_id: offer.seller_id,
+        listing_id: offer.listing_id,
+        offer_id: offer.id,
+
         status: "paid",
+        amount_cents: Math.round(total * 100),
+        currency: "usd",
+
+        image_url: offer.accepted_image_url,
+
+        listing_snapshot: {
+          title: offer.accepted_title,
+          image_url: offer.accepted_image_url,
+          item_price: itemPrice,
+          shipping_price: shipping,
+          buyer_fee: buyerFee,
+          total,
+        },
+
         stripe_session_id: session.id,
         stripe_payment_intent: session.payment_intent ?? null,
 
-        shipping_name: shipping?.name ?? null,
-        shipping_line1: address?.line1 ?? null,
-        shipping_line2: address?.line2 ?? null,
-        shipping_city: address?.city ?? null,
-        shipping_state: address?.state ?? null,
-        shipping_postal_code: address?.postal_code ?? null,
-        shipping_country: address?.country ?? null,
-        shipping_phone: session.customer_details?.phone ?? null,
-
-        image_url: imageUrl,
+        created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
-      .eq("id", orderId)
+      .select("id")
+      .single()
 
-    if (updateError) {
-      console.error("Order update failed:", updateError)
-      return new Response("Order update failed", { status: 500 })
+    if (orderErr || !order) {
+      console.error("Order creation failed", orderErr)
+      return new Response("Order creation failed", { status: 500 })
     }
 
-    // ---------------- MARK LISTING AS SOLD + INACTIVE ----------------
-    if (order.listing_id) {
+    // ---------------- DEACTIVATE LISTING ----------------
+    if (offer.listing_id) {
       await supabase
         .from("listings")
         .update({
@@ -129,22 +161,28 @@ serve(async (req) => {
           status: "inactive",
           updated_at: new Date().toISOString(),
         })
-        .eq("id", order.listing_id)
-        .eq("is_sold", false) // 🛡 idempotent guard
+        .eq("id", offer.listing_id)
     }
 
-    // ---------------- EXPIRE COMPETING OFFERS ----------------
-    if (order.listing_id) {
-      await supabase
-        .from("offers")
-        .update({
-          status: "expired",
-          updated_at: new Date().toISOString(),
-        })
-        .eq("listing_id", order.listing_id)
-        .neq("id", order.offer_id ?? "")
-        .in("status", ["pending", "countered"])
-    }
+    // ---------------- EXPIRE OTHER OFFERS ----------------
+    await supabase
+      .from("offers")
+      .update({
+        status: "expired",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("listing_id", offer.listing_id)
+      .neq("id", offer.id)
+      .in("status", ["pending", "countered"])
+
+    // ---------------- MARK OFFER PAID ----------------
+    await supabase
+      .from("offers")
+      .update({
+        status: "paid",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", offer.id)
   }
 
   return new Response(JSON.stringify({ received: true }), {

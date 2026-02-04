@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons"
 import { useFocusEffect, useRouter } from "expo-router"
-import { useCallback, useState } from "react"
+import { useCallback, useMemo, useState } from "react"
 import {
   ActivityIndicator,
   FlatList,
@@ -16,7 +16,11 @@ import { supabase } from "@/lib/supabase"
 
 /* ---------------- TYPES ---------------- */
 
-type OfferStatus = "pending" | "countered"
+type OfferStatus =
+  | "pending"
+  | "countered"
+  | "accepted"
+  | "declined"
 
 type Offer = {
   id: string
@@ -38,6 +42,7 @@ export default function SellerOffersScreen() {
 
   const [offers, setOffers] = useState<Offer[]>([])
   const [loading, setLoading] = useState(true)
+  const [filter, setFilter] = useState<"all" | OfferStatus>("pending")
 
   /* ---------------- LOAD OFFERS ---------------- */
 
@@ -66,18 +71,35 @@ export default function SellerOffersScreen() {
         )
       `)
       .eq("seller_id", session.user.id)
-      .in("status", ["pending", "countered"])
       .order("created_at", { ascending: false })
-      .returns<Offer[]>() // 👈 TS FIX
+      .returns<Offer[]>()
 
-    if (error) {
-      console.error("Error loading offers:", error)
-      setOffers([])
-    } else {
-      setOffers(data ?? [])
-    }
-
+    setOffers(data ?? [])
     setLoading(false)
+  }
+
+  /* ---------------- FILTERED DATA ---------------- */
+
+  const filteredOffers = useMemo(() => {
+    if (filter === "all") return offers
+    return offers.filter((o) => o.status === filter)
+  }, [offers, filter])
+
+  /* ---------------- STATUS TEXT ---------------- */
+
+  const getStatusText = (offer: Offer) => {
+    switch (offer.status) {
+      case "pending":
+        return "Awaiting your response"
+      case "countered":
+        return "Negotiation ongoing"
+      case "accepted":
+        return "Accepted • Awaiting payment"
+      case "declined":
+        return "Declined"
+      default:
+        return ""
+    }
   }
 
   /* ---------------- RENDER ---------------- */
@@ -99,26 +121,56 @@ export default function SellerOffersScreen() {
 
           <View style={{ width: 60 }} />
         </View>
+
+        {/* FILTER PILLS */}
+        <View style={styles.filterContainer}>
+          <View style={styles.filterRow}>
+            <FilterPill
+              label="Pending"
+              active={filter === "pending"}
+              onPress={() => setFilter("pending")}
+            />
+            <FilterPill
+              label="Countered"
+              active={filter === "countered"}
+              onPress={() => setFilter("countered")}
+            />
+            <FilterPill
+              label="Accepted"
+              active={filter === "accepted"}
+              onPress={() => setFilter("accepted")}
+            />
+          </View>
+
+          <View style={styles.filterRowCenter}>
+            <FilterPill
+              label="All"
+              active={filter === "all"}
+              onPress={() => setFilter("all")}
+            />
+            <FilterPill
+              label="Declined"
+              active={filter === "declined"}
+              onPress={() => setFilter("declined")}
+            />
+          </View>
+        </View>
       </View>
 
       {/* CONTENT */}
       {loading ? (
         <ActivityIndicator style={{ marginTop: 60 }} />
-      ) : offers.length === 0 ? (
+      ) : filteredOffers.length === 0 ? (
         <View style={styles.empty}>
-          <Ionicons
-            name="pricetag-outline"
-            size={40}
-            color="#7FAF9B"
-          />
-          <Text style={styles.emptyText}>No offers yet</Text>
+          <Ionicons name="pricetag-outline" size={40} color="#7FAF9B" />
+          <Text style={styles.emptyText}>No offers found</Text>
           <Text style={styles.emptySub}>
-            When buyers make offers, they’ll appear here
+            Try selecting a different filter
           </Text>
         </View>
       ) : (
         <FlatList
-          data={offers}
+          data={filteredOffers}
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ padding: 16, paddingBottom: 140 }}
           renderItem={({ item }) => (
@@ -147,11 +199,11 @@ export default function SellerOffersScreen() {
                 </Text>
 
                 <Text style={styles.meta}>
-                  {item.status === "pending"
-                    ? "Awaiting your response"
-                    : "Countered"}{" "}
-                  • {item.counter_count} counter
-                  {item.counter_count === 1 ? "" : "s"}
+                  {getStatusText(item)}
+                  {item.counter_count > 0 &&
+                    ` • ${item.counter_count} counter${
+                      item.counter_count === 1 ? "" : "s"
+                    }`}
                 </Text>
               </View>
             </TouchableOpacity>
@@ -162,19 +214,46 @@ export default function SellerOffersScreen() {
   )
 }
 
+/* ---------------- FILTER PILL ---------------- */
+
+function FilterPill({
+  label,
+  active,
+  onPress,
+}: {
+  label: string
+  active: boolean
+  onPress: () => void
+}) {
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      style={[
+        styles.filterPill,
+        active && styles.filterPillActive,
+      ]}
+    >
+      <Text
+        style={[
+          styles.filterText,
+          active && styles.filterTextActive,
+        ]}
+      >
+        {label}
+      </Text>
+    </TouchableOpacity>
+  )
+}
+
 /* ---------------- STYLES ---------------- */
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: "#EAF4EF",
-  },
+  screen: { flex: 1, backgroundColor: "#EAF4EF" },
 
-  /* 🌿 HEADER */
   headerWrap: {
     backgroundColor: "#7FAF9B",
     paddingTop: 50,
-    paddingBottom: 12,
+    paddingBottom: 14,
     paddingHorizontal: 14,
   },
 
@@ -200,6 +279,46 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "600",
     color: "#0F1E17",
+  },
+
+  /* FILTERS */
+  filterContainer: {
+    marginTop: 14,
+    gap: 10,
+  },
+
+  filterRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+
+  filterRowCenter: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 12,
+  },
+
+  filterPill: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: "#E8F5EE",
+    alignItems: "center",
+  },
+
+  filterPillActive: {
+    backgroundColor: "#1F7A63",
+  },
+
+  filterText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#1F7A63",
+  },
+
+  filterTextActive: {
+    color: "#ffffff",
   },
 
   /* EMPTY */

@@ -36,7 +36,16 @@ export default function MakeOfferScreen() {
 
     supabase
       .from("listings")
-      .select("id, title, price, image_urls, min_offer, user_id")
+      .select(`
+        id,
+        title,
+        price,
+        image_urls,
+        min_offer,
+        user_id,
+        shipping_type,
+        shipping_price
+      `)
       .eq("id", listingId)
       .single()
       .then(({ data, error }) => {
@@ -50,17 +59,26 @@ export default function MakeOfferScreen() {
 
   const numericOffer = Number(offer)
 
-  /* ---------------- FEES ---------------- */
+  /* ---------------- SHIPPING ---------------- */
 
+  const shippingCost = useMemo(() => {
+    if (!listing) return 0
+    return listing.shipping_type === "buyer_pays"
+      ? Number(listing.shipping_price ?? 0)
+      : 0
+  }, [listing])
+
+  /* ---------------- FEES (MATCH CHECKOUT) ---------------- */
+  // Buyer fee = 1.5% buyer protection + 2.9% processing + $0.30
   const buyerFee = useMemo(() => {
     if (!numericOffer || numericOffer <= 0) return 0
-    return Number((numericOffer * 0.03).toFixed(2))
+    return Number((numericOffer * 0.044 + 0.3).toFixed(2))
   }, [numericOffer])
 
   const totalDue = useMemo(() => {
     if (!numericOffer || numericOffer <= 0) return 0
-    return Number((numericOffer + buyerFee).toFixed(2))
-  }, [numericOffer, buyerFee])
+    return Number((numericOffer + buyerFee + shippingCost).toFixed(2))
+  }, [numericOffer, buyerFee, shippingCost])
 
   /* ---------------- VALIDATION ---------------- */
 
@@ -111,9 +129,7 @@ export default function MakeOfferScreen() {
       last_actor: "buyer",
       counter_count: 0,
 
-      expires_at: new Date(
-        Date.now() + 24 * 60 * 60 * 1000
-      ).toISOString(),
+      expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
     })
 
     setLoading(false)
@@ -145,12 +161,11 @@ export default function MakeOfferScreen() {
 
   return (
     <View style={styles.screen}>
-      {/* HEADER */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={22} color="#0F1E17" />
         </TouchableOpacity>
-        <Text style={styles.title}>Make Offer</Text>
+        <Text style={styles.headerTitle}>Make Offer</Text>
         <View style={{ width: 22 }} />
       </View>
 
@@ -159,25 +174,25 @@ export default function MakeOfferScreen() {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 20}
       >
-        <ScrollView
-          contentContainerStyle={{ padding: 20, paddingBottom: 200 }}
-          keyboardShouldPersistTaps="handled"
-        >
-          <View style={styles.card}>
-            <Image
-              source={{ uri: listing.image_urls?.[0] }}
-              style={styles.image}
-            />
+        <ScrollView contentContainerStyle={styles.content}>
+          {listing.image_urls?.[0] && (
+            <Image source={{ uri: listing.image_urls[0] }} style={styles.image} />
+          )}
 
-            <Text style={styles.name}>{listing.title}</Text>
-            <Text style={styles.price}>
-              Listed at ${listing.price.toFixed(2)}
+          <View style={styles.card}>
+            <Text style={styles.title}>{listing.title}</Text>
+            <Text style={styles.listedPrice}>
+              Listed at ${Number(listing.price).toFixed(2)}
             </Text>
+          </View>
+
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>Your Offer</Text>
 
             {minError && <Text style={styles.minError}>{minError}</Text>}
 
             <TextInput
-              placeholder="Your offer"
+              placeholder="Enter your offer"
               keyboardType="decimal-pad"
               value={offer}
               onChangeText={setOffer}
@@ -185,13 +200,15 @@ export default function MakeOfferScreen() {
             />
 
             {numericOffer > 0 && (
-              <View style={styles.totalBox}>
+              <View style={styles.summary}>
+                <Row label="Offer amount" value={`$${numericOffer.toFixed(2)}`} />
+
+                {shippingCost > 0 && (
+                  <Row label="Shipping" value={`$${shippingCost.toFixed(2)}`} />
+                )}
+
                 <Row
-                  label="Offer amount"
-                  value={`$${numericOffer.toFixed(2)}`}
-                />
-                <Row
-                  label="Buyer fee (3%)"
+                  label="Buyer protection & processing"
                   value={`$${buyerFee.toFixed(2)}`}
                 />
 
@@ -206,20 +223,32 @@ export default function MakeOfferScreen() {
             )}
 
             <TouchableOpacity
-              style={styles.submit}
+              style={[styles.primaryBtn, loading && { opacity: 0.7 }]}
               onPress={submitOffer}
               disabled={loading}
             >
-              <Text style={styles.submitText}>
+              <Text style={styles.primaryText}>
                 {loading ? "Sending..." : "Submit Offer"}
               </Text>
             </TouchableOpacity>
 
-            <Text style={styles.disclaimer}>
-              Submitting an offer does not guarantee acceptance. Offers expire
-              after 24 hours.
+            <Text style={styles.reassurance}>
+              Submitting an offer does not guarantee acceptance.
             </Text>
+
+            <Text style={styles.reassurance}>Offers expire after 24 hours.</Text>
+
+            <Text style={styles.reassurance}>
+              Secure checkout powered by Stripe
+            </Text>
+
+            <View style={styles.protectionPill}>
+              <Ionicons name="shield-checkmark" size={14} color="#1F7A63" />
+              <Text style={styles.protectionText}>Buyer Protection Included</Text>
+            </View>
           </View>
+
+          <View style={{ height: 120 }} />
         </ScrollView>
       </KeyboardAvoidingView>
     </View>
@@ -239,15 +268,12 @@ function Row({
 }) {
   return (
     <View style={styles.row}>
-      <Text style={[styles.rowLabel, bold && styles.boldText]}>
-        {label}
-      </Text>
-      <Text style={[styles.rowValue, bold && styles.boldText]}>
-        {value}
-      </Text>
+      <Text style={[styles.rowLabel, bold && styles.boldText]}>{label}</Text>
+      <Text style={[styles.rowValue, bold && styles.boldText]}>{value}</Text>
     </View>
   )
 }
+
 
 /* ---------------- STYLES ---------------- */
 
@@ -256,114 +282,147 @@ const styles = StyleSheet.create({
 
   header: {
     paddingTop: 50,
+    paddingBottom: 12,
     paddingHorizontal: 14,
-    paddingBottom: 10,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    backgroundColor: "#7FAF9B",
   },
 
-  title: {
+  headerTitle: {
     fontSize: 18,
     fontWeight: "800",
     color: "#0F1E17",
   },
 
-  card: {
-    backgroundColor: "#fff",
-    borderRadius: 14,
-    padding: 16,
+  content: {
+    padding: 20,
   },
 
   image: {
     width: "100%",
-    height: 180,
+    height: 220,
+    resizeMode: "contain",
+    marginBottom: 12,
+    backgroundColor: "#D6E6DE",
     borderRadius: 12,
   },
 
-  name: {
-    marginTop: 12,
+  card: {
+    backgroundColor: "#fff",
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 14,
+  },
+
+  title: {
     fontSize: 16,
     fontWeight: "800",
     color: "#0F1E17",
   },
 
-  price: {
-    marginTop: 4,
+  listedPrice: {
+    marginTop: 6,
     fontSize: 14,
     fontWeight: "700",
     color: "#2E5F4F",
   },
 
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#0F1E17",
+    marginBottom: 10,
+  },
+
   minError: {
-    marginTop: 6,
+    marginBottom: 10,
     fontSize: 12,
     color: "#C0392B",
-    fontWeight: "700",
+    fontWeight: "800",
   },
 
   input: {
-    marginTop: 20,
     backgroundColor: "#F4F4F4",
     padding: 14,
     borderRadius: 10,
     fontSize: 15,
   },
 
-  totalBox: {
-    marginTop: 16,
+  summary: {
+    marginTop: 14,
+    backgroundColor: "#fff",
+    borderRadius: 14,
     padding: 14,
-    borderRadius: 12,
-    backgroundColor: "#F0FAF6",
     borderWidth: 1,
-    borderColor: "#CFE5DA",
+    borderColor: "#D6E6DE",
   },
 
   row: {
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingVertical: 4,
+    paddingVertical: 7, // ⬅️ slightly more breathing room
   },
 
   rowLabel: {
-    fontSize: 13,
     color: "#6B8F7D",
     fontWeight: "600",
   },
 
   rowValue: {
-    fontSize: 13,
     color: "#0F1E17",
     fontWeight: "700",
   },
 
-  boldText: { fontWeight: "900" },
+  boldText: {
+    fontWeight: "900",
+  },
 
   divider: {
     height: 1,
-    backgroundColor: "#CFE5DA",
-    marginVertical: 8,
+    backgroundColor: "#C6DDD2", // ⬅️ a touch darker for separation
+    marginVertical: 10,
   },
 
-  submit: {
-    marginTop: 20,
+  primaryBtn: {
+    height: 50,
+    borderRadius: 25,
     backgroundColor: "#0F1E17",
-    padding: 14,
-    borderRadius: 22,
     alignItems: "center",
-  },
-
-  submitText: {
-    color: "#fff",
-    fontWeight: "800",
-    fontSize: 15,
-  },
-
-  disclaimer: {
+    justifyContent: "center",
     marginTop: 14,
+  },
+
+  primaryText: {
+    color: "#fff",
+    fontWeight: "900",
+    fontSize: 14,
+  },
+
+  reassurance: {
     fontSize: 12,
-    color: "#6B8F7D",
     textAlign: "center",
-    lineHeight: 16,
+    color: "#6B8F7D",
+    fontWeight: "600",
+    marginTop: 10,
+  },
+
+  protectionPill: {
+    marginTop: 8,
+    alignSelf: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#E8F5EE",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+
+  protectionText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#1F7A63",
   },
 })

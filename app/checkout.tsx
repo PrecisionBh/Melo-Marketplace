@@ -57,16 +57,10 @@ export default function CheckoutScreen() {
   /* ---------------- LOAD DATA ---------------- */
 
   useEffect(() => {
-    if (offerId) {
-      loadFromOffer()
-    } else if (listingId) {
-      loadFromListing()
-    } else {
-      setLoading(false)
-    }
+    if (offerId) loadFromOffer()
+    else if (listingId) loadFromListing()
+    else setLoading(false)
   }, [offerId, listingId])
-
-  /* ---------------- OFFER CHECKOUT ---------------- */
 
   const loadFromOffer = async () => {
     setLoading(true)
@@ -108,8 +102,6 @@ export default function CheckoutScreen() {
 
     setLoading(false)
   }
-
-  /* ---------------- LISTING CHECKOUT ---------------- */
 
   const loadFromListing = async () => {
     setLoading(true)
@@ -157,8 +149,18 @@ export default function CheckoutScreen() {
     const shipping =
       item.shipping_type === "free" ? 0 : item.shipping_price
 
-    const buyerProtectionFee = +(item.price * 0.029 + 0.3).toFixed(2)
-    const total = +(item.price + shipping + buyerProtectionFee).toFixed(2)
+    // ✅ Explicit fee breakdown
+    const buyerProtectionFee = item.price * 0.015
+    const stripePercentageFee = item.price * 0.029
+    const stripeFlatFee = 0.3
+
+    const buyerFee = +(
+      buyerProtectionFee +
+      stripePercentageFee +
+      stripeFlatFee
+    ).toFixed(2)
+
+    const total = +(item.price + shipping + buyerFee).toFixed(2)
 
     try {
       const { data, error } = await supabase.functions.invoke(
@@ -208,8 +210,17 @@ export default function CheckoutScreen() {
   const shipping =
     item.shipping_type === "free" ? 0 : item.shipping_price
 
-  const buyerProtectionFee = +(item.price * 0.029 + 0.3).toFixed(2)
-  const total = +(item.price + shipping + buyerProtectionFee).toFixed(2)
+  const buyerProtectionFee = item.price * 0.015
+  const stripePercentageFee = item.price * 0.029
+  const stripeFlatFee = 0.3
+
+  const buyerFee = +(
+    buyerProtectionFee +
+    stripePercentageFee +
+    stripeFlatFee
+  ).toFixed(2)
+
+  const total = +(item.price + shipping + buyerFee).toFixed(2)
 
   return (
     <View style={styles.screen}>
@@ -221,7 +232,10 @@ export default function CheckoutScreen() {
         <View style={{ width: 22 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
         {item.image_url && (
           <Image source={{ uri: item.image_url }} style={styles.image} />
         )}
@@ -239,7 +253,7 @@ export default function CheckoutScreen() {
           />
           <Row
             label="Buyer protection & processing"
-            value={`$${buyerProtectionFee.toFixed(2)}`}
+            value={`$${buyerFee.toFixed(2)}`}
           />
           <View style={styles.divider} />
           <Row label="Total" value={`$${total.toFixed(2)}`} bold />
@@ -258,6 +272,15 @@ export default function CheckoutScreen() {
         <Text style={styles.reassurance}>
           Secure checkout powered by Stripe
         </Text>
+
+        <View style={styles.protectionPill}>
+          <Ionicons name="shield-checkmark" size={14} color="#1F7A63" />
+          <Text style={styles.protectionText}>
+            Buyer Protection Included
+          </Text>
+        </View>
+
+        <View style={{ height: 120 }} />
       </ScrollView>
     </View>
   )
@@ -291,6 +314,7 @@ function Row({
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#EAF4EF" },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
+
   header: {
     paddingTop: 50,
     paddingBottom: 12,
@@ -300,54 +324,67 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#7FAF9B",
   },
+
   headerTitle: {
     fontSize: 18,
     fontWeight: "800",
     color: "#0F1E17",
   },
-  content: { padding: 20 },
+
+  content: {
+    padding: 20,
+  },
+
   image: {
     width: "100%",
     height: 220,
     resizeMode: "contain",
     marginBottom: 12,
   },
+
   card: {
     backgroundColor: "#fff",
     borderRadius: 14,
     padding: 14,
     marginBottom: 14,
   },
+
   title: {
     fontSize: 16,
     fontWeight: "800",
     color: "#0F1E17",
   },
+
   price: {
     marginTop: 6,
     fontSize: 18,
     fontWeight: "900",
     color: "#2E5F4F",
   },
+
   summary: {
     backgroundColor: "#fff",
     borderRadius: 14,
     padding: 14,
     marginBottom: 14,
   },
+
   row: {
     flexDirection: "row",
     justifyContent: "space-between",
     paddingVertical: 5,
   },
+
   rowLabel: { color: "#6B8F7D", fontWeight: "600" },
   rowValue: { color: "#0F1E17", fontWeight: "700" },
   boldText: { fontWeight: "900" },
+
   divider: {
     height: 1,
     backgroundColor: "#D6E6DE",
     marginVertical: 8,
   },
+
   primaryBtn: {
     height: 50,
     borderRadius: 25,
@@ -355,16 +392,36 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+
   primaryText: {
     color: "#fff",
     fontWeight: "900",
     fontSize: 14,
   },
+
   reassurance: {
     fontSize: 12,
     textAlign: "center",
     color: "#6B8F7D",
     fontWeight: "600",
     marginTop: 10,
+  },
+
+  protectionPill: {
+    marginTop: 8,
+    alignSelf: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#E8F5EE",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+
+  protectionText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#1F7A63",
   },
 })

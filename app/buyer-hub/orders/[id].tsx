@@ -88,7 +88,7 @@ export default function BuyerOrderDetailScreen() {
   const cancelOrder = async () => {
     Alert.alert(
       "Cancel Order",
-      "Item price and shipping will be refunded. Buyer Protection & Processing fees (2.9% + $0.30) are non-refundable.",
+      "Item price and shipping will be refunded. Buyer Protection & Processing fees are non-refundable.",
       [
         { text: "Never mind" },
         {
@@ -126,14 +126,28 @@ export default function BuyerOrderDetailScreen() {
 
   const isCompleted = order.status === "completed"
   const canCancel = order.status === "paid"
-  const canTrack = !!order.tracking_url && !isCompleted
+
+  const canTrack =
+    !!order.tracking_url &&
+    ["shipped", "delivered", "completed"].includes(order.status)
+
+  const canConfirmDelivery = order.status === "shipped"
 
   /* ---------------- RECEIPT MATH ---------------- */
 
   const itemTotal = order.amount_cents / 100
   const shipping =
     (order.listing_snapshot?.shipping_amount_cents ?? 0) / 100
-  const buyerFee = +(itemTotal * 0.029 + 0.3).toFixed(2)
+
+  const protectionFee = Math.max(
+    +(itemTotal * 0.015).toFixed(2),
+    0.5
+  )
+
+  const processingFee = +(itemTotal * 0.029 + 0.3).toFixed(2)
+
+  const buyerFee = +(protectionFee + processingFee).toFixed(2)
+
   const totalPaid = +(itemTotal + shipping + buyerFee).toFixed(2)
 
   /* ---------------- RENDER ---------------- */
@@ -156,10 +170,17 @@ export default function BuyerOrderDetailScreen() {
       />
 
       <View style={styles.content}>
-        <Text style={styles.title}>
-          {order.listing_snapshot?.title ??
-            `Order #${order.id.slice(0, 8)}`}
+        {/* ✅ ORDER NUMBER (ALWAYS) */}
+        <Text style={styles.orderNumber}>
+          Order #{order.id.slice(0, 8)}
         </Text>
+
+        {/* ✅ LISTING TITLE (UNDER ORDER #) */}
+        {order.listing_snapshot?.title && (
+          <Text style={styles.title}>
+            {order.listing_snapshot.title}
+          </Text>
+        )}
 
         {/* STATUS BADGE */}
         <View
@@ -194,7 +215,6 @@ export default function BuyerOrderDetailScreen() {
           />
         </View>
 
-        {/* COMPLETED STATE */}
         {isCompleted ? (
           <View style={styles.completedBadge}>
             <Ionicons name="checkmark-circle" size={18} color="#27AE60" />
@@ -204,7 +224,6 @@ export default function BuyerOrderDetailScreen() {
           </View>
         ) : (
           <>
-            {/* ACTION PILLS */}
             <View style={styles.pillRow}>
               {canCancel && (
                 <TouchableOpacity
@@ -236,12 +255,14 @@ export default function BuyerOrderDetailScreen() {
               )}
             </View>
 
-            <TouchableOpacity
-              style={styles.completeBtn}
-              onPress={() => setConfirmVisible(true)}
-            >
-              <Text style={styles.completeText}>Confirm Delivery</Text>
-            </TouchableOpacity>
+            {canConfirmDelivery && (
+              <TouchableOpacity
+                style={styles.completeBtn}
+                onPress={() => setConfirmVisible(true)}
+              >
+                <Text style={styles.completeText}>Confirm Delivery</Text>
+              </TouchableOpacity>
+            )}
           </>
         )}
       </View>
@@ -327,10 +348,17 @@ const styles = StyleSheet.create({
 
   content: { padding: 16 },
 
+  orderNumber: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#6B8F7D",
+  },
+
   title: {
     fontSize: 18,
     fontWeight: "900",
     color: "#0F1E17",
+    marginTop: 4,
   },
 
   badge: {
@@ -389,32 +417,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 
-  cancelPill: {
-    backgroundColor: "#FDE2E2",
-  },
+  cancelPill: { backgroundColor: "#FDE2E2" },
+  cancelText: { fontWeight: "900", color: "#C0392B" },
 
-  cancelText: {
-    fontWeight: "900",
-    color: "#C0392B",
-  },
+  disputePill: { backgroundColor: "#FFF3CD" },
+  disputeText: { fontWeight: "900", color: "#B8860B" },
 
-  disputePill: {
-    backgroundColor: "#FFF3CD",
-  },
-
-  disputeText: {
-    fontWeight: "900",
-    color: "#B8860B",
-  },
-
-  trackPill: {
-    backgroundColor: "#E8F5EE",
-  },
-
-  trackText: {
-    fontWeight: "900",
-    color: "#1F7A63",
-  },
+  trackPill: { backgroundColor: "#E8F5EE" },
+  trackText: { fontWeight: "900", color: "#1F7A63" },
 
   completeBtn: {
     marginTop: 16,

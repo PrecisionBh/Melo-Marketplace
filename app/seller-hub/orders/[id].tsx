@@ -25,7 +25,6 @@ type Order = {
   seller_id: string
   status: OrderStatus
   amount_cents: number
-
   image_url: string | null
 
   carrier: string | null
@@ -38,6 +37,23 @@ type Order = {
   shipping_state: string | null
   shipping_postal_code: string | null
   shipping_country: string | null
+}
+
+/* ---------------- HELPERS ---------------- */
+
+const buildTrackingUrl = (carrier: string, tracking: string) => {
+  switch (carrier) {
+    case "USPS":
+      return `https://tools.usps.com/go/TrackConfirmAction?tLabels=${tracking}`
+    case "UPS":
+      return `https://www.ups.com/track?tracknum=${tracking}`
+    case "FedEx":
+      return `https://www.fedex.com/fedextrack/?tracknumbers=${tracking}`
+    case "DHL":
+      return `https://www.dhl.com/en/express/tracking.html?AWB=${tracking}`
+    default:
+      return null
+  }
 }
 
 /* ---------------- SCREEN ---------------- */
@@ -80,22 +96,26 @@ export default function SellerOrderDetailScreen() {
     setLoading(false)
   }
 
+  /* ---------------- ACTIONS ---------------- */
+
   const submitTracking = async () => {
     if (!carrier || !tracking || !order) return
 
     setSaving(true)
+
+    const trackingUrl = buildTrackingUrl(carrier, tracking)
 
     const { error } = await supabase
       .from("orders")
       .update({
         carrier,
         tracking_number: tracking,
+        tracking_url: trackingUrl,
         status: "shipped",
         shipped_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       })
       .eq("id", order.id)
-
-    console.log("UPDATE ERROR:", error)
 
     setSaving(false)
 
@@ -123,9 +143,16 @@ export default function SellerOrderDetailScreen() {
 
   if (!order) return null
 
+  /* ---------------- MONEY (LOCKED RATES) ---------------- */
+
   const gross = order.amount_cents / 100
-  const sellerFee = +(gross * 0.035).toFixed(2)
-  const escrow = +(gross - sellerFee).toFixed(2)
+
+  // ✅ LOCKED: 4% seller fee
+  const sellerFee = +(gross * 0.04).toFixed(2)
+
+  const sellerNet = +(gross - sellerFee).toFixed(2)
+
+  /* ---------------- RENDER ---------------- */
 
   return (
     <View style={styles.screen}>
@@ -165,12 +192,8 @@ export default function SellerOrderDetailScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Ship To</Text>
 
-          <Text style={styles.addressText}>
-            {order.shipping_name}
-          </Text>
-          <Text style={styles.addressText}>
-            {order.shipping_line1}
-          </Text>
+          <Text style={styles.addressText}>{order.shipping_name}</Text>
+          <Text style={styles.addressText}>{order.shipping_line1}</Text>
           {order.shipping_line2 && (
             <Text style={styles.addressText}>
               {order.shipping_line2}
@@ -180,9 +203,7 @@ export default function SellerOrderDetailScreen() {
             {order.shipping_city}, {order.shipping_state}{" "}
             {order.shipping_postal_code}
           </Text>
-          <Text style={styles.addressText}>
-            {order.shipping_country}
-          </Text>
+          <Text style={styles.addressText}>{order.shipping_country}</Text>
         </View>
 
         {/* TRACKING */}
@@ -235,21 +256,16 @@ export default function SellerOrderDetailScreen() {
 
         {/* RECEIPT */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>
-            Sale Breakdown
-          </Text>
+          <Text style={styles.sectionTitle}>Sale Breakdown</Text>
 
+          <Row label="Sale Price" value={`$${gross.toFixed(2)}`} />
           <Row
-            label="Sale Price"
-            value={`$${gross.toFixed(2)}`}
+            label="Seller Fee (4%)"
+            value={`-$${sellerFee.toFixed(2)}`}
           />
           <Row
-            label="Seller Fee (3.5%)"
-            value={`-$${sellerFee}`}
-          />
-          <Row
-            label="Held in Escrow / Your Payment"
-            value={`$${escrow}`}
+            label="Your Payout"
+            value={`$${sellerNet.toFixed(2)}`}
             bold
           />
         </View>
@@ -306,7 +322,6 @@ function Row({
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#F6F7F8" },
-
   header: {
     height: 56,
     backgroundColor: "#EAF4EF",
@@ -317,34 +332,28 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#DCEDE4",
   },
-
   headerTitle: {
     fontSize: 16,
     fontWeight: "900",
     color: "#0F1E17",
   },
-
   content: { padding: 16, paddingBottom: 180 },
-
   card: {
     backgroundColor: "#fff",
     borderRadius: 16,
     padding: 16,
   },
-
   image: {
     width: "100%",
     height: 220,
     borderRadius: 14,
     marginBottom: 12,
   },
-
   titleRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
-
   title: {
     fontSize: 18,
     fontWeight: "900",
@@ -352,41 +361,34 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: 10,
   },
-
   badge: {
     backgroundColor: "#7FAF9B",
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
   },
-
   badgeText: {
     fontSize: 11,
     fontWeight: "900",
     color: "#fff",
   },
-
   section: { marginTop: 24 },
-
   sectionTitle: {
     fontSize: 15,
     fontWeight: "900",
     marginBottom: 10,
   },
-
   addressText: {
     fontSize: 13,
     fontWeight: "600",
     marginBottom: 2,
   },
-
   carrierRow: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
     marginBottom: 12,
   },
-
   carrierBtn: {
     borderWidth: 1,
     borderColor: "#D1E9DD",
@@ -394,22 +396,16 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 12,
   },
-
   carrierActive: {
     backgroundColor: "#7FAF9B",
     borderColor: "#7FAF9B",
   },
-
   carrierText: {
     fontSize: 12,
     fontWeight: "800",
     color: "#0F1E17",
   },
-
-  carrierTextActive: {
-    color: "#fff",
-  },
-
+  carrierTextActive: { color: "#fff" },
   input: {
     backgroundColor: "#fff",
     borderRadius: 12,
@@ -418,28 +414,23 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#D1E9DD",
   },
-
   infoText: {
     fontSize: 13,
     fontWeight: "700",
     marginBottom: 4,
   },
-
   row: {
     flexDirection: "row",
     justifyContent: "space-between",
     paddingVertical: 6,
   },
-
   rowLabel: {
     color: "#6B8F7D",
     fontWeight: "600",
   },
-
   rowValue: {
     fontWeight: "700",
   },
-
   actionBar: {
     position: "absolute",
     bottom: 85,
@@ -447,17 +438,14 @@ const styles = StyleSheet.create({
     right: 0,
     paddingHorizontal: 16,
   },
-
   primaryBtn: {
     backgroundColor: "#1F7A63",
     paddingVertical: 14,
     borderRadius: 16,
   },
-
   primaryDisabled: {
     backgroundColor: "#A7C8BB",
   },
-
   primaryText: {
     color: "#fff",
     fontWeight: "900",

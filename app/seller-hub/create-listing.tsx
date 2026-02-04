@@ -18,6 +18,8 @@ import {
 import { useAuth } from "@/context/AuthContext"
 import { supabase } from "@/lib/supabase"
 
+/* ---------------- CONSTANTS ---------------- */
+
 const CATEGORIES = [
   { label: "Hard Case", value: "hard_case" },
   { label: "Soft Case", value: "soft_case" },
@@ -36,7 +38,7 @@ const CONDITIONS = [
   { label: "Poor", value: "poor" },
 ]
 
-const BUYER_SHIPPING_FEE = 15
+/* ---------------- SCREEN ---------------- */
 
 export default function CreateListing() {
   const router = useRouter()
@@ -53,8 +55,10 @@ export default function CreateListing() {
   const [allowOffers, setAllowOffers] = useState(false)
   const [minOffer, setMinOffer] = useState("")
 
+  // 🔑 SHIPPING
   const [shippingType, setShippingType] =
-    useState<"free" | "buyer_pays" | null>(null)
+    useState<"seller_pays" | "buyer_pays" | null>(null)
+  const [shippingPrice, setShippingPrice] = useState("")
 
   const [submitting, setSubmitting] = useState(false)
 
@@ -126,6 +130,17 @@ export default function CreateListing() {
       return
     }
 
+    if (shippingType === "buyer_pays") {
+      const amount = Number(shippingPrice)
+      if (!amount || amount <= 0) {
+        Alert.alert(
+          "Invalid shipping",
+          "Enter a valid shipping amount for buyer-paid shipping."
+        )
+        return
+      }
+    }
+
     if (allowOffers && Number(minOffer) >= Number(price)) {
       Alert.alert("Invalid offer", "Minimum offer must be below price.")
       return
@@ -134,7 +149,7 @@ export default function CreateListing() {
     try {
       setSubmitting(true)
 
-      /* 1️⃣ create listing */
+      /* 1️⃣ CREATE LISTING (CONSTRAINT SAFE) */
       const { data: listing, error } = await supabase
         .from("listings")
         .insert({
@@ -147,9 +162,12 @@ export default function CreateListing() {
           price: Number(price),
           allow_offers: allowOffers,
           min_offer: allowOffers ? Number(minOffer) : null,
+
+          // 🔐 SHIPPING (matches DB constraint)
           shipping_type: shippingType,
           shipping_price:
-            shippingType === "buyer_pays" ? BUYER_SHIPPING_FEE : 0,
+            shippingType === "buyer_pays" ? Number(shippingPrice) : 0,
+
           image_urls: [],
         })
         .select()
@@ -157,7 +175,7 @@ export default function CreateListing() {
 
       if (error || !listing) throw error
 
-      /* 2️⃣ upload images */
+      /* 2️⃣ UPLOAD IMAGES */
       const urls: string[] = []
       for (let i = 0; i < images.length; i++) {
         const url = await uploadImage(
@@ -169,7 +187,7 @@ export default function CreateListing() {
         urls.push(url)
       }
 
-      /* 3️⃣ update listing */
+      /* 3️⃣ UPDATE LISTING */
       await supabase
         .from("listings")
         .update({ image_urls: urls })
@@ -213,12 +231,7 @@ export default function CreateListing() {
         </View>
 
         <Field label="Title *" value={title} onChange={setTitle} />
-        <Field
-          label="Description"
-          value={description}
-          onChange={setDescription}
-          multiline
-        />
+        <Field label="Description" value={description} onChange={setDescription} multiline />
         <Field label="Brand" value={brand} onChange={setBrand} />
         <Field
           label="Price *"
@@ -281,14 +294,18 @@ export default function CreateListing() {
 
         {/* SHIPPING */}
         <Text style={styles.label}>Shipping *</Text>
+
         <TouchableOpacity
           style={[
             styles.option,
-            shippingType === "free" && styles.optionActive,
+            shippingType === "seller_pays" && styles.optionActive,
           ]}
-          onPress={() => setShippingType("free")}
+          onPress={() => {
+            setShippingType("seller_pays")
+            setShippingPrice("")
+          }}
         >
-          <Text>Free Shipping</Text>
+          <Text>Free Shipping (Seller Pays)</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -298,8 +315,17 @@ export default function CreateListing() {
           ]}
           onPress={() => setShippingType("buyer_pays")}
         >
-          <Text>Buyer Pays Shipping ($15)</Text>
+          <Text>Buyer Pays Shipping</Text>
         </TouchableOpacity>
+
+        {shippingType === "buyer_pays" && (
+          <Field
+            label="Shipping Price *"
+            value={shippingPrice}
+            onChange={setShippingPrice}
+            keyboardType="decimal-pad"
+          />
+        )}
 
         {/* OFFERS */}
         <View style={styles.toggleRow}>
@@ -330,7 +356,7 @@ export default function CreateListing() {
   )
 }
 
-/* ---------- FIELD ---------- */
+/* ---------------- FIELD ---------------- */
 
 function Field({
   label,
@@ -359,11 +385,10 @@ function Field({
   )
 }
 
-/* ---------- STYLES ---------- */
+/* ---------------- STYLES ---------------- */
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#fff" },
-
   topBar: {
     paddingTop: 50,
     paddingHorizontal: 14,
@@ -372,24 +397,9 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
-
-  title: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#0F1E17",
-  },
-
-  content: {
-    padding: 16,
-    paddingBottom: 140,
-  },
-
-  label: {
-    fontWeight: "700",
-    marginBottom: 6,
-    color: "#2E5F4F",
-  },
-
+  title: { fontSize: 18, fontWeight: "800", color: "#0F1E17" },
+  content: { padding: 16, paddingBottom: 140 },
+  label: { fontWeight: "700", marginBottom: 6, color: "#2E5F4F" },
   input: {
     backgroundColor: "#fff",
     borderRadius: 12,
@@ -398,19 +408,8 @@ const styles = StyleSheet.create({
     borderColor: "#D6E6DE",
     color: "#2E5F4F",
   },
-
-  imageRow: {
-    flexDirection: "row",
-    gap: 10,
-    marginBottom: 16,
-  },
-
-  image: {
-    width: 70,
-    height: 70,
-    borderRadius: 8,
-  },
-
+  imageRow: { flexDirection: "row", gap: 10, marginBottom: 16 },
+  image: { width: 70, height: 70, borderRadius: 8 },
   addImage: {
     width: 70,
     height: 70,
@@ -420,34 +419,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-
-  pillRow: {
-    flexDirection: "row",
-    gap: 10,
-    marginBottom: 16,
-  },
-
+  pillRow: { flexDirection: "row", gap: 10, marginBottom: 16 },
   pill: {
     paddingVertical: 8,
     paddingHorizontal: 14,
     borderRadius: 20,
     backgroundColor: "#EAF4EF",
   },
-
-  pillActive: {
-    backgroundColor: "#7FAF9B",
-  },
-
-  pillText: {
-    color: "#2E5F4F",
-    fontSize: 13,
-  },
-
-  pillTextActive: {
-    color: "#0F1E17",
-    fontWeight: "700",
-  },
-
+  pillActive: { backgroundColor: "#7FAF9B" },
+  pillText: { color: "#2E5F4F", fontSize: 13 },
+  pillTextActive: { color: "#0F1E17", fontWeight: "700" },
   option: {
     padding: 12,
     borderWidth: 1,
@@ -455,19 +436,16 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginBottom: 8,
   },
-
   optionActive: {
     backgroundColor: "#EAF4EF",
     borderColor: "#7FAF9B",
   },
-
   toggleRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginVertical: 10,
   },
-
   submit: {
     marginTop: 24,
     backgroundColor: "#0F1E17",
@@ -476,9 +454,5 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-
-  submitText: {
-    color: "#fff",
-    fontWeight: "900",
-  },
+  submitText: { color: "#fff", fontWeight: "900" },
 })

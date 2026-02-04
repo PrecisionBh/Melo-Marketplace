@@ -42,6 +42,7 @@ type ListingRow = {
   allow_offers?: boolean | null
   shipping_type?: "seller_pays" | "buyer_pays" | null
   is_sold: boolean
+  is_removed: boolean
 }
 
 /* ---------------- SCREEN ---------------- */
@@ -77,36 +78,40 @@ export default function HomeScreen() {
     const { data, error } = await supabase
       .from("listings")
       .select(
-        "id,title,price,category,condition,image_urls,allow_offers,shipping_type,is_sold"
+        "id,title,price,category,condition,image_urls,allow_offers,shipping_type,is_sold,is_removed"
       )
-      .eq("status", "active")
-      .eq("is_sold", false) // ✅ FINAL SOURCE OF TRUTH
+      .eq("status", "active")     // ✅ visible only
+      .eq("is_sold", false)       // ✅ not sold
+      .eq("is_removed", false)    // ✅ not removed
       .order("created_at", { ascending: false })
 
-    if (!error && data) {
-      const rows = data as ListingRow[]
-
-      const normalized: Listing[] = rows
-        .filter(
-          (l) =>
-            Array.isArray(l.image_urls) &&
-            l.image_urls.length > 0 &&
-            l.title?.trim().length > 0 &&
-            l.price > 0
-        )
-        .map((l) => ({
-          id: l.id,
-          title: l.title,
-          price: l.price,
-          category: l.category,
-          image_url: l.image_urls![0],
-          allow_offers: l.allow_offers ?? false,
-          shipping_type: l.shipping_type ?? null,
-        }))
-
-      setListings(normalized)
+    if (error) {
+      console.error("Load listings error:", error)
+      setLoading(false)
+      return
     }
 
+    const rows = data as ListingRow[]
+
+    const normalized: Listing[] = rows
+      .filter(
+        (l) =>
+          Array.isArray(l.image_urls) &&
+          l.image_urls.length > 0 &&
+          l.title?.trim().length > 0 &&
+          Number(l.price) > 0
+      )
+      .map((l) => ({
+        id: l.id,
+        title: l.title,
+        price: Number(l.price),
+        category: l.category,
+        image_url: l.image_urls![0],
+        allow_offers: l.allow_offers ?? false,
+        shipping_type: l.shipping_type ?? null,
+      }))
+
+    setListings(normalized)
     setLoading(false)
   }
 
