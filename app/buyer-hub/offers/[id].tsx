@@ -120,6 +120,7 @@ export default function BuyerOfferDetailScreen() {
       : 0
   }, [offer])
 
+<<<<<<< cleanup-escrow-reset
   const itemPrice = offer?.current_amount ?? 0
 
   const buyerProtectionFee = Number((itemPrice * 0.015).toFixed(2))
@@ -130,6 +131,18 @@ export default function BuyerOfferDetailScreen() {
     shippingCost +
     buyerProtectionFee +
     stripeProcessingFee
+=======
+ const itemPrice = offer?.current_amount ?? 0
+
+// Buyer fees (item price ONLY)
+const buyerProtectionFee = Number((itemPrice * 0.015).toFixed(2))
+const stripeProcessingFee = Number((itemPrice * 0.029 + 0.3).toFixed(2))
+const buyerFeeTotal = buyerProtectionFee + stripeProcessingFee
+
+const buyerTotal = Number(
+  (itemPrice + shippingCost + buyerFeeTotal).toFixed(2)
+)
+>>>>>>> main
 
   const canRespond =
     !!offer &&
@@ -303,6 +316,7 @@ export default function BuyerOfferDetailScreen() {
           <Text style={styles.title}>{offer.listings.title}</Text>
 
           <View style={styles.receipt}>
+<<<<<<< cleanup-escrow-reset
             <Row label="Item price" value={`$${itemPrice.toFixed(2)}`} />
             <Row
               label="Shipping"
@@ -326,6 +340,30 @@ export default function BuyerOfferDetailScreen() {
               bold
             />
           </View>
+=======
+  <Row label="Item price" value={`$${itemPrice.toFixed(2)}`} />
+
+  <Row
+    label="Shipping"
+    value={
+      shippingCost === 0 ? "Free" : `$${shippingCost.toFixed(2)}`
+    }
+  />
+
+  <Row
+    label="Buyer protection (1.5%)"
+    value={`$${buyerProtectionFee.toFixed(2)}`}
+  />
+
+  <Row
+    label="Processing fee"
+    value={`$${stripeProcessingFee.toFixed(2)}`}
+  />
+
+  <Row label="Total due" value={`$${buyerTotal.toFixed(2)}`} bold />
+</View>
+
+>>>>>>> main
 
           {canPay && (
             <View style={styles.acceptedBox}>

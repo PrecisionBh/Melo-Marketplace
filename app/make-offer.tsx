@@ -61,6 +61,7 @@ export default function MakeOfferScreen() {
 
   /* ---------------- SHIPPING ---------------- */
 
+<<<<<<< cleanup-escrow-reset
   const shippingCost = useMemo(() => {
     if (!listing) return 0
     return listing.shipping_type === "buyer_pays"
@@ -73,8 +74,15 @@ export default function MakeOfferScreen() {
   const buyerFee = useMemo(() => {
     if (!numericOffer || numericOffer <= 0) return 0
     return Number((numericOffer * 0.044 + 0.3).toFixed(2))
+=======
+  // ✅ Buyer protection ONLY (1.5%)
+  const buyerFee = useMemo(() => {
+    if (!numericOffer || numericOffer <= 0) return 0
+    return Number((numericOffer * 0.015).toFixed(2))
+>>>>>>> main
   }, [numericOffer])
 
+  // ❗ Stripe fee intentionally NOT included here (handled at checkout)
   const totalDue = useMemo(() => {
     if (!numericOffer || numericOffer <= 0) return 0
     return Number((numericOffer + buyerFee + shippingCost).toFixed(2))
@@ -208,7 +216,11 @@ export default function MakeOfferScreen() {
                 )}
 
                 <Row
+<<<<<<< cleanup-escrow-reset
                   label="Buyer protection & processing"
+=======
+                  label="Buyer protection (1.5%)"
+>>>>>>> main
                   value={`$${buyerFee.toFixed(2)}`}
                 />
 

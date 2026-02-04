@@ -49,10 +49,7 @@ export default function SellerOfferDetailScreen() {
   const [showCounter, setShowCounter] = useState(false)
 
   useEffect(() => {
-    if (!id || !session?.user?.id) {
-      setLoading(false)
-      return
-    }
+    if (!id || !session?.user?.id) return
     loadOffer()
   }, [id, session?.user?.id])
 
@@ -82,14 +79,7 @@ export default function SellerOfferDetailScreen() {
       .eq("id", id)
       .single<Offer>()
 
-    if (error || !data) {
-      setOffer(null)
-      setLoading(false)
-      return
-    }
-
-    if (data.seller_id !== session!.user!.id) {
-      Alert.alert("Access denied")
+    if (error || !data || data.seller_id !== session!.user!.id) {
       router.replace("/seller-hub/offers")
       return
     }
@@ -106,6 +96,7 @@ export default function SellerOfferDetailScreen() {
     return Date.now() > created + 24 * 60 * 60 * 1000
   }, [offer])
 
+<<<<<<< cleanup-escrow-reset
   /* ---------------- CALCULATIONS ---------------- */
 
   if (!offer) return null
@@ -114,16 +105,38 @@ export default function SellerOfferDetailScreen() {
 
   // ✅ shipping paid by buyer goes to seller
   const shippingIncome =
+=======
+  if (loading) {
+    return <ActivityIndicator style={{ marginTop: 80 }} />
+  }
+
+  if (!offer) return null
+
+  /* ---------------- MONEY (PREVIEW ONLY) ---------------- */
+
+  const itemPrice = offer.current_amount
+
+  const shippingCost =
+>>>>>>> main
     offer.listings.shipping_type === "buyer_pays"
       ? offer.listings.shipping_price ?? 0
       : 0
 
+<<<<<<< cleanup-escrow-reset
   // ✅ 4% fee ONLY on item price
   const sellerFee = Number((itemPrice * 0.04).toFixed(2))
 
   const sellerPayout = Number(
     (itemPrice - sellerFee + shippingIncome).toFixed(2)
   )
+=======
+  // 🔒 4% SELLER FEE — ITEM PRICE ONLY
+  const sellerFee = Number((itemPrice * 0.04).toFixed(2))
+
+  const sellerPayout = Number((itemPrice - sellerFee).toFixed(2))
+
+  const buyerTotal = itemPrice + shippingCost
+>>>>>>> main
 
   const canRespond =
     !isExpired &&
@@ -173,15 +186,24 @@ export default function SellerOfferDetailScreen() {
       .update({
         status: "accepted",
         last_actor: "seller",
+<<<<<<< cleanup-escrow-reset
         last_action: "accepted",
+=======
+
+        // 🔒 SNAPSHOT — USED TO CREATE ORDER LATER
+>>>>>>> main
         accepted_price: offer.current_amount,
         accepted_title: offer.listings.title,
         accepted_image_url: offer.listings.image_urls?.[0] ?? null,
+<<<<<<< cleanup-escrow-reset
         accepted_shipping_type: offer.listings.shipping_type,
         accepted_shipping_price:
           offer.listings.shipping_type === "buyer_pays"
             ? offer.listings.shipping_price ?? 0
             : 0,
+=======
+        accepted_at: new Date().toISOString(),
+>>>>>>> main
         updated_at: new Date().toISOString(),
       })
       .eq("id", offer.id)
@@ -193,7 +215,12 @@ export default function SellerOfferDetailScreen() {
       return
     }
 
+<<<<<<< cleanup-escrow-reset
     loadOffer()
+=======
+    Alert.alert("Offer Accepted", "The buyer can now complete payment.")
+    router.replace("/seller-hub/offers")
+>>>>>>> main
   }
 
   const declineOffer = async () => {
@@ -205,7 +232,6 @@ export default function SellerOfferDetailScreen() {
       .update({
         status: "declined",
         last_actor: "seller",
-        last_action: "declined",
         updated_at: new Date().toISOString(),
       })
       .eq("id", offer.id)
@@ -227,7 +253,6 @@ export default function SellerOfferDetailScreen() {
         counter_amount: amount,
         counter_count: offer.counter_count + 1,
         last_actor: "seller",
-        last_action: "countered",
         status: "countered",
         updated_at: new Date().toISOString(),
       })
@@ -240,8 +265,11 @@ export default function SellerOfferDetailScreen() {
 
   /* ---------------- UI ---------------- */
 
+<<<<<<< cleanup-escrow-reset
   if (loading) return <ActivityIndicator style={{ marginTop: 80 }} />
 
+=======
+>>>>>>> main
   return (
     <View style={styles.screen}>
       <View style={styles.header}>
@@ -278,7 +306,19 @@ export default function SellerOfferDetailScreen() {
             )}
 
             <Row
+<<<<<<< cleanup-escrow-reset
               label="Seller fee (4%)"
+=======
+              label="Shipping"
+              value={
+                shippingCost === 0
+                  ? "Free"
+                  : `$${shippingCost.toFixed(2)}`
+              }
+            />
+            <Row
+              label="Marketplace Fee (4%)"
+>>>>>>> main
               value={`-$${sellerFee.toFixed(2)}`}
             />
 
@@ -362,6 +402,7 @@ const styles = StyleSheet.create({
   },
 
   headerTitle: { fontSize: 16, fontWeight: "900" },
+<<<<<<< cleanup-escrow-reset
 
   content: { padding: 16, paddingBottom: 200 },
 
@@ -402,6 +443,12 @@ const styles = StyleSheet.create({
 
   /* ---------- RECEIPT ---------- */
 
+=======
+  content: { padding: 16 },
+  card: { backgroundColor: "#fff", borderRadius: 16, padding: 16 },
+  image: { width: "100%", height: 220, borderRadius: 14, marginBottom: 12 },
+  title: { fontSize: 18, fontWeight: "900", marginBottom: 12 },
+>>>>>>> main
   receipt: {
     backgroundColor: "#F0FAF6",
     borderRadius: 14,

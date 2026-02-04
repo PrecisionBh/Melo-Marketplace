@@ -61,6 +61,7 @@ serve(async (req) => {
       return new Response("Missing offer_id", { status: 400 })
     }
 
+<<<<<<< cleanup-escrow-reset
     // 🔁 LOAD OFFER
     const { data: offer, error: offerErr } = await supabase
       .from("offers")
@@ -77,6 +78,15 @@ serve(async (req) => {
         status
       `)
       .eq("id", offerId)
+=======
+    // 🔁 FETCH ORDER (IDEMPOTENCY GUARD)
+    const { data: order, error: fetchError } = await supabase
+      .from("orders")
+      .select(
+        "id, status, listing_id, offer_id, escrow_status"
+      )
+      .eq("id", orderId)
+>>>>>>> main
       .single()
 
     if (offerErr || !offer) {
@@ -84,6 +94,7 @@ serve(async (req) => {
       return new Response("Offer not found", { status: 404 })
     }
 
+<<<<<<< cleanup-escrow-reset
     // 🔒 IDEMPOTENCY GUARD (retry-safe)
     const { data: existingOrder } = await supabase
       .from("orders")
@@ -92,14 +103,25 @@ serve(async (req) => {
       .maybeSingle()
 
     if (existingOrder) {
+=======
+    // 🔒 ALREADY PROCESSED
+    if (order.status === "paid" && order.escrow_status === "held") {
+>>>>>>> main
       return new Response(
         JSON.stringify({ received: true, duplicate: true }),
         { status: 200 }
       )
     }
 
+<<<<<<< cleanup-escrow-reset
     // ---------------- CALCULATIONS ----------------
     const itemPrice = Number(offer.accepted_price ?? 0)
+=======
+    // ✅ READ IMAGE URL FROM METADATA
+    const imageUrl = session.metadata?.image_url ?? null
+
+    // ✅ SHIPPING DETAILS
+>>>>>>> main
     const shipping =
       offer.accepted_shipping_type === "buyer_pays"
         ? Number(offer.accepted_shipping_price ?? 0)
@@ -114,8 +136,13 @@ serve(async (req) => {
 
     const total = +(itemPrice + shipping + buyerFee).toFixed(2)
 
+<<<<<<< cleanup-escrow-reset
     // ---------------- CREATE ORDER ----------------
     const { data: order, error: orderErr } = await supabase
+=======
+    // ---------------- UPDATE ORDER (ESCROW FUNDED) ----------------
+    const { error: updateError } = await supabase
+>>>>>>> main
       .from("orders")
       .insert({
         buyer_id: offer.buyer_id,
@@ -124,6 +151,7 @@ serve(async (req) => {
         offer_id: offer.id,
 
         status: "paid",
+<<<<<<< cleanup-escrow-reset
         amount_cents: Math.round(total * 100),
         currency: "usd",
 
@@ -137,6 +165,12 @@ serve(async (req) => {
           buyer_fee: buyerFee,
           total,
         },
+=======
+
+        // 🔐 ESCROW
+        escrow_status: "held",
+        escrow_funded_at: new Date().toISOString(),
+>>>>>>> main
 
         stripe_session_id: session.id,
         stripe_payment_intent: session.payment_intent ?? null,
@@ -152,8 +186,13 @@ serve(async (req) => {
       return new Response("Order creation failed", { status: 500 })
     }
 
+<<<<<<< cleanup-escrow-reset
     // ---------------- DEACTIVATE LISTING ----------------
     if (offer.listing_id) {
+=======
+    // ---------------- MARK LISTING AS SOLD ----------------
+    if (order.listing_id) {
+>>>>>>> main
       await supabase
         .from("listings")
         .update({
@@ -161,7 +200,12 @@ serve(async (req) => {
           status: "inactive",
           updated_at: new Date().toISOString(),
         })
+<<<<<<< cleanup-escrow-reset
         .eq("id", offer.listing_id)
+=======
+        .eq("id", order.listing_id)
+        .eq("is_sold", false)
+>>>>>>> main
     }
 
     // ---------------- EXPIRE OTHER OFFERS ----------------

@@ -273,6 +273,7 @@ export default function CheckoutScreen() {
           Secure checkout powered by Stripe
         </Text>
 
+<<<<<<< cleanup-escrow-reset
         <View style={styles.protectionPill}>
           <Ionicons name="shield-checkmark" size={14} color="#1F7A63" />
           <Text style={styles.protectionText}>
@@ -281,6 +282,21 @@ export default function CheckoutScreen() {
         </View>
 
         <View style={{ height: 120 }} />
+=======
+        {/* 🔐 BUYER PROTECTION PILL */}
+        <View style={styles.protectionPill}>
+          <Ionicons
+            name="shield-checkmark"
+            size={16}
+            color="#1F7A63"
+          />
+          <Text style={styles.protectionText}>
+            Buyer Protection: Your payment is held securely until the item is
+            shipped and received as described. If there’s an issue, we help
+            resolve it.
+          </Text>
+        </View>
+>>>>>>> main
       </ScrollView>
     </View>
   )
@@ -407,6 +423,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
 
+<<<<<<< cleanup-escrow-reset
   protectionPill: {
     marginTop: 8,
     alignSelf: "center",
@@ -423,5 +440,26 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "800",
     color: "#1F7A63",
+=======
+  /* 🔐 Buyer Protection Pill */
+  protectionPill: {
+    marginTop: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    backgroundColor: "#E8F5EE",
+    borderWidth: 1,
+    borderColor: "#CFE5DA",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  protectionText: {
+    flex: 1,
+    fontSize: 12,
+    color: "#2E5F4F",
+    fontWeight: "600",
+    lineHeight: 16,
+>>>>>>> main
   },
 })
