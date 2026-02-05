@@ -52,6 +52,8 @@ export default function HomeScreen() {
 
   const [listings, setListings] = useState<Listing[]>([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+
   const [search, setSearch] = useState("")
   const [activeCategory, setActiveCategory] =
     useState<FilterKey>("all")
@@ -80,9 +82,9 @@ export default function HomeScreen() {
       .select(
         "id,title,price,category,condition,image_urls,allow_offers,shipping_type,is_sold,is_removed"
       )
-      .eq("status", "active")     // ✅ visible only
-      .eq("is_sold", false)       // ✅ not sold
-      .eq("is_removed", false)    // ✅ not removed
+      .eq("status", "active")
+      .eq("is_sold", false)
+      .eq("is_removed", false)
       .order("created_at", { ascending: false })
 
     if (error) {
@@ -113,6 +115,12 @@ export default function HomeScreen() {
 
     setListings(normalized)
     setLoading(false)
+  }
+
+  const refreshListings = async () => {
+    setRefreshing(true)
+    await loadListings()
+    setRefreshing(false)
   }
 
   /* ---------------- PUSH TOKEN SETUP ---------------- */
@@ -251,7 +259,11 @@ export default function HomeScreen() {
       {loading ? (
         <ActivityIndicator style={{ marginTop: 40 }} />
       ) : (
-        <ListingsGrid listings={filteredListings} />
+        <ListingsGrid
+          listings={filteredListings}
+          refreshing={refreshing}
+          onRefresh={refreshListings}
+        />
       )}
 
       <TouchableOpacity
