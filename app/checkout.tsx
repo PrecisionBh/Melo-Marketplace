@@ -1,5 +1,4 @@
 import { Ionicons } from "@expo/vector-icons"
-import * as Linking from "expo-linking"
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { useEffect, useState } from "react"
 import {
@@ -52,7 +51,6 @@ export default function CheckoutScreen() {
 
   const [item, setItem] = useState<CheckoutItem | null>(null)
   const [loading, setLoading] = useState(true)
-  const [paying, setPaying] = useState(false)
 
   /* ---------------- LOAD DATA ---------------- */
 
@@ -136,63 +134,6 @@ export default function CheckoutScreen() {
     setLoading(false)
   }
 
-  /* ---------------- PAY NOW ---------------- */
-
-  const payNow = async () => {
-    if (!session?.user?.id || !session.user.email || !item) {
-      Alert.alert("Error", "You must be logged in to continue.")
-      return
-    }
-
-    setPaying(true)
-
-    const shipping =
-      item.shipping_type === "free" ? 0 : item.shipping_price
-
-    // ✅ Explicit fee breakdown
-    const buyerProtectionFee = item.price * 0.015
-    const stripePercentageFee = item.price * 0.029
-    const stripeFlatFee = 0.3
-
-    const buyerFee = +(
-      buyerProtectionFee +
-      stripePercentageFee +
-      stripeFlatFee
-    ).toFixed(2)
-
-    const total = +(item.price + shipping + buyerFee).toFixed(2)
-
-    try {
-      const { data, error } = await supabase.functions.invoke(
-        "create-checkout-session",
-        {
-          body: {
-            listing_id: listingId ?? null,
-            offer_id: offerId ?? null,
-            amount: Math.round(total * 100),
-            email: session.user.email,
-            buyer_id: session.user.id,
-            seller_id: item.seller_id,
-            image_url: item.image_url,
-          },
-        }
-      )
-
-      if (error || !data?.url) {
-        throw error || new Error("No checkout URL returned")
-      }
-
-      await Linking.openURL(data.url)
-    } catch (err: any) {
-      Alert.alert(
-        "Checkout error",
-        err?.message || "Unable to start checkout."
-      )
-    } finally {
-      setPaying(false)
-    }
-  }
-
   /* ---------------- RENDER ---------------- */
 
   if (loading) {
@@ -221,6 +162,9 @@ export default function CheckoutScreen() {
   ).toFixed(2)
 
   const total = +(item.price + shipping + buyerFee).toFixed(2)
+
+  // ✅ ONLY ADDITION
+  const totalCents = Math.round(total * 100)
 
   return (
     <View style={styles.screen}>
@@ -261,11 +205,19 @@ export default function CheckoutScreen() {
 
         <TouchableOpacity
           style={styles.primaryBtn}
-          onPress={payNow}
-          disabled={paying}
+          onPress={() =>
+            router.push({
+              pathname: "/checkout/final",
+              params: {
+                listingId,
+                offerId,
+                totalCents: String(totalCents), // ✅ ONLY CHANGE
+              },
+            })
+          }
         >
           <Text style={styles.primaryText}>
-            Pay Now • ${total.toFixed(2)}
+            Proceed to Checkout • ${total.toFixed(2)}
           </Text>
         </TouchableOpacity>
 

@@ -10,17 +10,43 @@
     <p>Returning to Melo…</p>
 
     <script>
-      // 🔥 DEBUG: proves THIS file is loading
-      alert("NEW MELO REDIRECT PAGE LOADED");
+      const params = new URLSearchParams(window.location.search)
 
-      // 🔁 cache buster (prevents old JS from executing)
-      const ts = Date.now();
-      console.log("Redirect timestamp:", ts);
+      const mode = params.get("mode")        // onboarding | checkout
+      const status = params.get("status")    // success | cancel
 
-      // ✅ CORRECT DEEP LINK
-      setTimeout(() => {
-        window.location.replace("melomp://seller-hub/wallet?ts=" + ts);
-      }, 300);
+      const ts = Date.now()
+
+      console.log("Redirect mode:", mode)
+      console.log("Redirect status:", status)
+
+      // ---------------- SELLER ONBOARDING ----------------
+      if (mode === "onboarding") {
+        window.location.replace(
+          "melomp://seller-hub/wallet?ts=" + ts
+        )
+      }
+
+      // ---------------- CHECKOUT ----------------
+      else if (mode === "checkout") {
+        if (status === "success") {
+          window.location.replace(
+            "melomp://checkout/success?ts=" + ts
+          )
+        } else {
+          window.location.replace(
+            "melomp://checkout/cancel?ts=" + ts
+          )
+        }
+      }
+
+      // ---------------- FALLBACK ----------------
+      else {
+        // safety net so we never dead-end
+        window.location.replace(
+          "melomp://?ts=" + ts
+        )
+      }
     </script>
   </body>
 </html>
