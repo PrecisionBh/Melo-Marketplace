@@ -25,15 +25,14 @@ serve(async (req) => {
       )
     }
 
-    // Create a Stripe Checkout session in SETUP mode
     const session = await stripe.checkout.sessions.create({
       mode: "setup",
       payment_method_types: ["card"],
       customer_email: email,
 
-      // ✅ FIXED ROUTES (must exist in app)
-      success_url: "melomp://settings/payment",
-      cancel_url: "melomp://settings/payment",
+      // ✅ REDIRECT THROUGH HTTPS → BACK TO APP
+      success_url: "https://melomp-redirect.vercel.app/?result=success",
+      cancel_url: "https://melomp-redirect.vercel.app/?result=cancel",
 
       metadata: {
         user_id,

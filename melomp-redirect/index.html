@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Returning to Melo</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+  </head>
+
+  <body>
+    <p>Returning to Melo…</p>
+
+    <script>
+      // 🔥 DEBUG: proves THIS file is loading
+      alert("NEW MELO REDIRECT PAGE LOADED");
+
+      // 🔁 cache buster (prevents old JS from executing)
+      const ts = Date.now();
+      console.log("Redirect timestamp:", ts);
+
+      // ✅ CORRECT DEEP LINK
+      setTimeout(() => {
+        window.location.replace("melomp://seller-hub/wallet?ts=" + ts);
+      }, 300);
+    </script>
+  </body>
+</html>
