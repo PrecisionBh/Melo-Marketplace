@@ -4,7 +4,6 @@ import { serve } from "https://deno.land/std@0.203.0/http/server.ts"
 import { createClient } from "npm:@supabase/supabase-js@2"
 import Stripe from "npm:stripe@13.11.0"
 
-// 🔥 Confirms the deployed bundle is live
 console.log("🚀 stripe-webhook loaded")
 
 // ---------------- ENV ----------------
@@ -48,7 +47,7 @@ async function markOrderPaid(params: {
   const { data: order, error } = await supabase
     .from("orders")
     .select(
-      "id,status,listing_id,amount_cents,paid_at,escrow_funded_at"
+      "id,status,listing_id,offer_id,amount_cents,paid_at,escrow_funded_at"
     )
     .eq("id", orderId)
     .single()
@@ -64,7 +63,6 @@ async function markOrderPaid(params: {
     return json(200, { received: true })
   }
 
-  // 💰 Amount validation
   if (typeof amountTotal === "number" && amountTotal !== order.amount_cents) {
     console.error("❌ Amount mismatch", {
       orderId,
@@ -76,6 +74,30 @@ async function markOrderPaid(params: {
 
   const now = new Date().toISOString()
 
+  // ---------------- RESOLVE LISTING (OFFER SAFE) ----------------
+  let resolvedListingId = order.listing_id
+
+  if (!resolvedListingId && order.offer_id) {
+    const { data: offer, error: offerErr } = await supabase
+      .from("offers")
+      .select("listing_id")
+      .eq("id", order.offer_id)
+      .single()
+
+    if (offerErr || !offer?.listing_id) {
+      console.error("❌ Failed to resolve listing from offer", offerErr)
+      return json(500, { error: "Offer listing resolution failed" })
+    }
+
+    resolvedListingId = offer.listing_id
+
+    // 🔑 CRITICAL FIX: persist listing_id onto order
+    await supabase
+      .from("orders")
+      .update({ listing_id: resolvedListingId })
+      .eq("id", orderId)
+  }
+
   // ---------------- UPDATE ORDER ----------------
   const { error: updateErr } = await supabase
     .from("orders")
@@ -86,7 +108,6 @@ async function markOrderPaid(params: {
       stripe_session_id: sessionId ?? null,
       stripe_payment_intent: paymentIntentId ?? null,
 
-      // 🔑 DB-APPROVED ESCROW STATE
       escrow_status: "pending",
       escrow_funded_at: now,
 
@@ -101,8 +122,8 @@ async function markOrderPaid(params: {
 
   console.log("✅ Order PAID + escrow pending:", orderId)
 
-  // ---------------- MARK LISTING SOLD (BEST EFFORT) ----------------
-  if (order.listing_id) {
+  // ---------------- MARK LISTING SOLD ----------------
+  if (resolvedListingId) {
     const { error: listingErr } = await supabase
       .from("listings")
       .update({
@@ -110,10 +131,12 @@ async function markOrderPaid(params: {
         status: "inactive",
         updated_at: now,
       })
-      .eq("id", order.listing_id)
+      .eq("id", resolvedListingId)
 
     if (listingErr) {
       console.warn("⚠️ Listing update failed:", listingErr)
+    } else {
+      console.log("📦 Listing marked sold:", resolvedListingId)
     }
   }
 
@@ -122,8 +145,6 @@ async function markOrderPaid(params: {
 
 // ---------------- HANDLER ----------------
 serve(async (req) => {
-  console.log("➡️ Incoming request:", req.method)
-
   if (req.method !== "POST") {
     return new Response("Method Not Allowed", { status: 405 })
   }
@@ -133,7 +154,6 @@ serve(async (req) => {
     return new Response("Missing Stripe signature", { status: 400 })
   }
 
-  // 🔑 RAW BODY (REQUIRED)
   const body = new Uint8Array(await req.arrayBuffer())
 
   let event: Stripe.Event
@@ -148,25 +168,14 @@ serve(async (req) => {
     return new Response("Invalid signature", { status: 400 })
   }
 
-  console.log("📩 Stripe event received:", event.type)
-
-  // ---------------- CHECKOUT SESSION SUCCESS ----------------
   if (
     event.type === "checkout.session.completed" ||
     event.type === "checkout.session.async_payment_succeeded"
   ) {
     const session = event.data.object as Stripe.Checkout.Session
-
-    console.log("🧾 Session:", {
-      id: session.id,
-      metadata: session.metadata,
-      amount_total: session.amount_total,
-      payment_intent: session.payment_intent,
-    })
-
     const orderId = session.metadata?.order_id
+
     if (!orderId) {
-      console.error("❌ Missing order_id in metadata")
       return new Response("Missing order_id", { status: 400 })
     }
 
@@ -174,39 +183,22 @@ serve(async (req) => {
       orderId,
       sessionId: session.id,
       paymentIntentId: session.payment_intent as string | null,
-      amountTotal:
-        typeof session.amount_total === "number"
-          ? session.amount_total
-          : null,
+      amountTotal: session.amount_total ?? null,
     })
   }
 
-  // ---------------- PAYMENT INTENT FALLBACK ----------------
   if (event.type === "payment_intent.succeeded") {
     const intent = event.data.object as Stripe.PaymentIntent
-
-    console.log("💳 PaymentIntent:", {
-      id: intent.id,
-      metadata: intent.metadata,
-      amount_received: intent.amount_received,
-    })
-
     const orderId = intent.metadata?.order_id
-    if (!orderId) {
-      console.warn("⚠️ PI missing order_id, ignoring")
-      return json(200, { received: true })
-    }
+
+    if (!orderId) return json(200, { received: true })
 
     return await markOrderPaid({
       orderId,
       paymentIntentId: intent.id,
-      amountTotal:
-        typeof intent.amount_received === "number"
-          ? intent.amount_received
-          : null,
+      amountTotal: intent.amount_received ?? null,
     })
   }
 
-  console.log("ℹ️ Event ignored:", event.type)
   return json(200, { received: true })
 })
