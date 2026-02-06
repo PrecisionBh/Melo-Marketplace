@@ -2,13 +2,13 @@ import { Ionicons } from "@expo/vector-icons"
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { useEffect, useMemo, useState } from "react"
 import {
-    ActivityIndicator,
-    Alert,
-    Image,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Image,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native"
 
 import { useAuth } from "@/context/AuthContext"
@@ -59,44 +59,59 @@ export default function BuyerOfferDetailScreen() {
   /* ---------------- LOAD OFFER ---------------- */
 
   const loadOffer = async () => {
-    setLoading(true)
+  setLoading(true)
 
-    const { data, error } = await supabase
-      .from("offers")
-      .select(`
-        id,
-        buyer_id,
-        seller_id,
-        current_amount,
-        counter_count,
-        last_actor,
-        status,
-        created_at,
-        listings (
-          title,
-          image_urls,
-          shipping_type,
-          shipping_price
-        )
-      `)
-      .eq("id", id)
-      .single<Offer>()
+  const { data, error } = await supabase
+    .from("offers")
+    .select(`
+      id,
+      buyer_id,
+      seller_id,
+      current_amount,
+      counter_count,
+      last_actor,
+      status,
+      created_at,
+      listings (
+        title,
+        image_urls,
+        shipping_type,
+        shipping_price
+      )
+    `)
+    .eq("id", id)
+    .single<Offer>()
 
-    if (error || !data) {
-      setOffer(null)
-      setLoading(false)
-      return
-    }
-
-    if (data.buyer_id !== session!.user!.id) {
-      Alert.alert("Access denied", "You can only view your own offers.")
-      router.replace("/buyer-hub/offers")
-      return
-    }
-
-    setOffer(data)
+  if (error || !data) {
+    setOffer(null)
     setLoading(false)
+    return
   }
+
+  // 🔒 Buyer ownership check
+  if (data.buyer_id !== session!.user!.id) {
+    Alert.alert("Access denied", "You can only view your own offers.")
+    router.replace("/buyer-hub/offers")
+    return
+  }
+
+  // ✅ NEW: check if this offer has already been paid
+  const { data: paidOrder } = await supabase
+    .from("orders")
+    .select("id")
+    .eq("offer_id", data.id)
+    .eq("status", "paid")
+    .maybeSingle()
+
+  if (paidOrder) {
+    // Offer has been completed → remove from flow
+    router.replace("/buyer-hub/offers")
+    return
+  }
+
+  setOffer(data)
+  setLoading(false)
+}
 
   /* ---------------- EXPIRATION ---------------- */
 

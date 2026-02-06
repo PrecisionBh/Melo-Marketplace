@@ -46,9 +46,19 @@ async function markOrderPaid(params: {
 
   const { data: order, error } = await supabase
     .from("orders")
-    .select(
-      "id,status,listing_id,offer_id,amount_cents,paid_at,escrow_funded_at"
-    )
+    .select(`
+      id,
+      status,
+      listing_id,
+      offer_id,
+      amount_cents,
+      item_price_cents,
+      shipping_amount_cents,
+      seller_id,
+      paid_at,
+      escrow_funded_at,
+      wallet_credited
+    `)
     .eq("id", orderId)
     .single()
 
@@ -91,12 +101,32 @@ async function markOrderPaid(params: {
 
     resolvedListingId = offer.listing_id
 
-    // 🔑 CRITICAL FIX: persist listing_id onto order
     await supabase
       .from("orders")
       .update({ listing_id: resolvedListingId })
       .eq("id", orderId)
   }
+
+  // ---------------- ESCROW MATH ----------------
+  if (!order.item_price_cents) {
+    console.error("❌ Missing item_price_cents for escrow", orderId)
+    return json(500, { error: "Missing item price for escrow" })
+  }
+
+  // 🔧 UPDATED — correct Melo escrow math
+  const sellerFeeCents = Math.round(order.item_price_cents * 0.04)
+  const escrowAmountCents =
+    order.item_price_cents + (order.shipping_amount_cents ?? 0)
+  const sellerNetCents = escrowAmountCents - sellerFeeCents
+
+  console.log("🧮 Escrow calculation", {
+    orderId,
+    item_price_cents: order.item_price_cents,
+    shipping_amount_cents: order.shipping_amount_cents ?? 0,
+    escrow_amount_cents: escrowAmountCents,
+    seller_fee_cents: sellerFeeCents,
+    seller_net_cents: sellerNetCents,
+  })
 
   // ---------------- UPDATE ORDER ----------------
   const { error: updateErr } = await supabase
@@ -107,6 +137,12 @@ async function markOrderPaid(params: {
 
       stripe_session_id: sessionId ?? null,
       stripe_payment_intent: paymentIntentId ?? null,
+
+      // 🔧 UPDATED — escrow + seller accounting
+      seller_fee_cents: sellerFeeCents,
+      seller_net_cents: sellerNetCents,
+      seller_payout_cents: null,              // finalized at escrow release
+      escrow_amount_cents: escrowAmountCents,
 
       escrow_status: "pending",
       escrow_funded_at: now,
@@ -120,7 +156,35 @@ async function markOrderPaid(params: {
     return json(500, { error: "Order update failed" })
   }
 
-  console.log("✅ Order PAID + escrow pending:", orderId)
+  console.log("✅ Order PAID + escrow funded:", orderId)
+
+  // ---------------- CREDIT SELLER WALLET (PENDING) ----------------
+  if (!order.wallet_credited) {
+    console.log("💰 Crediting seller pending wallet", {
+      seller_id: order.seller_id,
+      amount: sellerNetCents,
+    })
+
+    const { error: walletErr } = await supabase.rpc(
+      "increment_wallet_pending",
+      {
+        p_user_id: order.seller_id,
+        p_amount_cents: sellerNetCents,
+      }
+    )
+
+    if (walletErr) {
+      console.error("❌ Wallet pending credit failed", walletErr)
+      return json(500, { error: "Wallet credit failed" })
+    }
+
+    await supabase
+      .from("orders")
+      .update({ wallet_credited: true })
+      .eq("id", orderId)
+
+    console.log("✅ Seller pending wallet credited")
+  }
 
   // ---------------- MARK LISTING SOLD ----------------
   if (resolvedListingId) {

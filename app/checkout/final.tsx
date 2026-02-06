@@ -108,10 +108,16 @@ export default function FinalPaymentScreen() {
       return
     }
 
-    if (!name || !line1 || !city || !state || !postal || !phone) {
-      Alert.alert("Missing info", "Please complete shipping address.")
-      return
-    }
+    if (
+  (!useSaved &&
+    (!name || !line1 || !city || !state || !postal || !phone)) ||
+  (useSaved &&
+    (!name || !line1 || !city || !state || !postal))
+) {
+  Alert.alert("Missing info", "Please complete shipping address.")
+  return
+}
+
 
     setPaying(true)
 
@@ -119,6 +125,9 @@ export default function FinalPaymentScreen() {
       let sellerId: string | null = null
       let imageUrl: string | null = null
       let listingSnapshot: ListingSnapshot | null = null
+
+      // 🔧 REQUIRED — persist item price source
+      let itemPriceCents: number | null = null
 
       /* ---------- OFFER FLOW ---------- */
       if (offerId) {
@@ -147,6 +156,9 @@ export default function FinalPaymentScreen() {
         sellerId = data.seller_id
         imageUrl = data.listing.image_urls?.[0] ?? null
 
+        // 🔧 REQUIRED
+        itemPriceCents = Math.round(Number(data.current_amount) * 100)
+
         listingSnapshot = {
           id: data.listing.id,
           title: data.listing.title,
@@ -164,6 +176,7 @@ export default function FinalPaymentScreen() {
           .select(`
             id,
             title,
+            price,
             image_urls,
             shipping_type,
             shipping_price,
@@ -179,6 +192,9 @@ export default function FinalPaymentScreen() {
         sellerId = data.user_id
         imageUrl = data.image_urls?.[0] ?? null
 
+        // 🔧 REQUIRED
+        itemPriceCents = Math.round(Number(data.price) * 100)
+
         listingSnapshot = {
           id: data.id,
           title: data.title,
@@ -189,9 +205,20 @@ export default function FinalPaymentScreen() {
         }
       }
 
-      if (!sellerId || !listingSnapshot) {
-        throw new Error("Missing listing snapshot")
+      if (!sellerId || !listingSnapshot || itemPriceCents === null) {
+        throw new Error("Missing listing pricing data")
       }
+
+      // 🔧 REQUIRED — derive shipping + buyer fee
+      const shippingCents =
+        listingSnapshot.shipping_type === "buyer_pays"
+          ? Math.round((listingSnapshot.shipping_price ?? 0) * 100)
+          : 0
+
+      const buyerFeeCents = Math.round(itemPriceCents * 0.015)
+
+      // 🔧 REQUIRED — true escrow base
+      const escrowCents = itemPriceCents + shippingCents
 
       /* ---------- CREATE ORDER ---------- */
       const { data: order, error } = await supabase
@@ -206,9 +233,18 @@ export default function FinalPaymentScreen() {
           listing_snapshot: listingSnapshot,
 
           status: "pending_payment",
+
+          // 🔧 REQUIRED — Stripe total
           amount_cents: Number(totalCents),
           currency: "usd",
-          escrow_amount_cents: Number(totalCents),
+
+          // 🔧 REQUIRED — pricing breakdown
+          item_price_cents: itemPriceCents,
+          shipping_amount_cents: shippingCents,
+          buyer_fee_cents: buyerFeeCents,
+
+          // 🔧 REQUIRED — escrow ≠ Stripe total
+          escrow_amount_cents: escrowCents,
 
           shipping_name: name,
           shipping_line1: line1,
@@ -399,8 +435,6 @@ export default function FinalPaymentScreen() {
     </View>
   )
 }
-
-
 /* ---------------- STYLES ---------------- */
 
 const styles = StyleSheet.create({
