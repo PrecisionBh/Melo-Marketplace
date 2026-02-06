@@ -108,13 +108,14 @@ export default function BuyerOrderDetailScreen() {
   }
 
   const confirmDelivery = async () => {
-    await supabase
-      .from("orders")
-      .update({
-        status: "completed",
-        completed_at: new Date().toISOString(),
-      })
-      .eq("id", order!.id)
+    const { error } = await supabase.rpc("release_order_escrow", {
+      p_order_id: order!.id,
+    })
+
+    if (error) {
+      Alert.alert("Error", error.message)
+      return
+    }
 
     setConfirmVisible(false)
     router.replace("/buyer-hub/orders/completed")
