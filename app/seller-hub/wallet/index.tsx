@@ -4,6 +4,7 @@ import { useRouter } from "expo-router"
 import { useEffect, useState } from "react"
 import {
   ActivityIndicator,
+  Alert,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -100,7 +101,7 @@ export default function SellerWalletScreen() {
         data?.stripe_account_id ?? data?.data?.stripe_account_id
 
       if (!onboardingUrl) {
-        alert("Failed to open Stripe onboarding")
+        Alert.alert("Error", "Failed to open Stripe onboarding")
         return
       }
 
@@ -113,8 +114,29 @@ export default function SellerWalletScreen() {
 
       await Linking.openURL(onboardingUrl)
     } catch {
-      alert("Unexpected error opening Stripe onboarding")
+      Alert.alert("Error", "Unexpected error opening Stripe onboarding")
     }
+  }
+
+  /* ---------------- WITHDRAW ---------------- */
+
+  const handleWithdraw = async () => {
+    if (available <= 0) return
+
+    const { data: canPayout, error } = await supabase.rpc(
+      "is_stripe_payout_ready",
+      { p_user_id: session!.user.id }
+    )
+
+    if (error || !canPayout) {
+      Alert.alert(
+        "Payout setup required",
+        "Please complete payout setup before withdrawing funds."
+      )
+      return
+    }
+
+    Alert.alert("Withdraw", "Stripe payout flow coming next.")
   }
 
   /* ---------------- RENDER ---------------- */
@@ -130,13 +152,14 @@ export default function SellerWalletScreen() {
       </View>
 
       <View style={styles.content}>
-        {/* LIFETIME EARNINGS (TEXT ONLY) */}
-        <View style={styles.lifetimeWrap}>
-          <Text style={styles.lifetimeLabel}>Lifetime Earnings</Text>
-          <Text style={styles.lifetimeValue}>${lifetime.toFixed(2)}</Text>
+        {/* ✅ LIFETIME EARNINGS */}
+        <View style={styles.lifetimeBlock}>
+          <Text style={styles.cardLabel}>Lifetime Earnings</Text>
+          <Text style={styles.primaryValue}>
+            ${lifetime.toFixed(2)}
+          </Text>
         </View>
 
-        {/* AVAILABLE */}
         <View style={styles.card}>
           <Text style={styles.cardLabel}>Withdrawable Balance</Text>
           <Text style={styles.balance}>${available.toFixed(2)}</Text>
@@ -147,19 +170,17 @@ export default function SellerWalletScreen() {
               available <= 0 && { opacity: 0.4 },
             ]}
             disabled={available <= 0}
-            onPress={() => alert("Withdraw flow coming next")}
+            onPress={handleWithdraw}
           >
             <Text style={styles.withdrawText}>Withdraw Funds</Text>
           </TouchableOpacity>
         </View>
 
-        {/* PENDING */}
         <View style={styles.card}>
           <Text style={styles.cardLabel}>Pending Escrow</Text>
           <Text style={styles.pending}>${pending.toFixed(2)}</Text>
         </View>
 
-        {/* PAYOUT METHOD */}
         <View style={styles.card}>
           <Text style={styles.cardLabel}>Payout Method</Text>
 
@@ -181,7 +202,6 @@ export default function SellerWalletScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#EAF4EF" },
-
   header: {
     height: 85,
     flexDirection: "row",
@@ -190,43 +210,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     backgroundColor: "#7FAF9B",
   },
-
-  headerTitle: {
-    fontSize: 16,
-    fontWeight: "900",
-    color: "#0F1E17",
-  },
-
+  headerTitle: { fontSize: 16, fontWeight: "900", color: "#0F1E17" },
   content: { padding: 16, gap: 16 },
 
-  lifetimeWrap: {
+  lifetimeBlock: {
     alignItems: "center",
     marginBottom: 8,
   },
 
-  lifetimeLabel: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: "#6B8F7D",
-  },
-
-  lifetimeValue: {
-    fontSize: 20,
-    fontWeight: "900",
-    color: "#0F1E17",
-  },
-
-  card: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 16,
-  },
+  card: { backgroundColor: "#fff", borderRadius: 16, padding: 16 },
 
   cardLabel: {
     fontSize: 13,
     fontWeight: "800",
     color: "#6B8F7D",
     marginBottom: 6,
+  },
+
+  primaryValue: {
+    fontSize: 26,
+    fontWeight: "900",
+    color: "#0F1E17",
   },
 
   balance: {
@@ -236,11 +240,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
 
-  pending: {
-    fontSize: 26,
-    fontWeight: "900",
-    color: "#B8860B",
-  },
+  pending: { fontSize: 26, fontWeight: "900", color: "#B8860B" },
 
   withdrawBtn: {
     backgroundColor: "#1F7A63",
@@ -248,11 +248,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
   },
 
-  withdrawText: {
-    textAlign: "center",
-    fontWeight: "900",
-    color: "#fff",
-  },
+  withdrawText: { textAlign: "center", fontWeight: "900", color: "#fff" },
 
   payoutBtn: {
     marginTop: 8,
@@ -263,9 +259,5 @@ const styles = StyleSheet.create({
     borderColor: "#1F7A63",
   },
 
-  payoutText: {
-    textAlign: "center",
-    fontWeight: "900",
-    color: "#1F7A63",
-  },
+  payoutText: { textAlign: "center", fontWeight: "900", color: "#1F7A63" },
 })
