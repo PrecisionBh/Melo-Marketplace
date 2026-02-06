@@ -51,10 +51,11 @@ export default function FinalPaymentScreen() {
   }>()
 
   const { session } = useAuth()
-
   const total = Number(totalCents ?? 0) / 100
+
   const [paying, setPaying] = useState(false)
   const [useSaved, setUseSaved] = useState(true)
+  const [saveAsDefault, setSaveAsDefault] = useState(false)
 
   /* ---------------- SHIPPING ---------------- */
 
@@ -66,35 +67,33 @@ export default function FinalPaymentScreen() {
   const [postal, setPostal] = useState("")
   const [phone, setPhone] = useState("")
 
-  /* ---------------- LOAD SAVED SHIPPING ---------------- */
+  /* ---------------- LOAD SAVED SHIPPING (ONCE) ---------------- */
 
   useEffect(() => {
-    if (!useSaved || !session?.user?.id) return
+    if (!session?.user?.id) return
 
     supabase
       .from("profiles")
       .select(`
-        shipping_name,
-        shipping_line1,
-        shipping_line2,
-        shipping_city,
-        shipping_state,
-        shipping_postal_code,
-        shipping_phone
+        display_name,
+        address_line1,
+        address_line2,
+        city,
+        state,
+        postal_code
       `)
       .eq("id", session.user.id)
       .single()
       .then(({ data }) => {
         if (!data) return
-        setName(data.shipping_name ?? "")
-        setLine1(data.shipping_line1 ?? "")
-        setLine2(data.shipping_line2 ?? "")
-        setCity(data.shipping_city ?? "")
-        setState(data.shipping_state ?? "")
-        setPostal(data.shipping_postal_code ?? "")
-        setPhone(data.shipping_phone ?? "")
+        setName(data.display_name ?? "")
+        setLine1(data.address_line1 ?? "")
+        setLine2(data.address_line2 ?? "")
+        setCity(data.city ?? "")
+        setState(data.state ?? "")
+        setPostal(data.postal_code ?? "")
       })
-  }, [useSaved, session?.user?.id])
+  }, [session?.user?.id])
 
   /* ---------------- PAY ---------------- */
 
@@ -201,7 +200,7 @@ export default function FinalPaymentScreen() {
           buyer_id: session.user.id,
           seller_id: sellerId,
 
-          listing_id: listingId ?? null,
+          listing_id: listingId ?? listingSnapshot.id,
           offer_id: offerId ?? null,
 
           listing_snapshot: listingSnapshot,
@@ -226,6 +225,22 @@ export default function FinalPaymentScreen() {
         .single()
 
       if (!order) throw error
+
+      /* ---------- SAVE AS DEFAULT (OPT-IN) ---------- */
+      if (!useSaved && saveAsDefault) {
+        await supabase
+          .from("profiles")
+          .update({
+            display_name: name,
+            address_line1: line1,
+            address_line2: line2,
+            city,
+            state,
+            postal_code: postal,
+            country: "United States",
+          })
+          .eq("id", session.user.id)
+      }
 
       /* ---------- STRIPE ---------- */
       const { data, error: stripeErr } =
@@ -264,7 +279,21 @@ export default function FinalPaymentScreen() {
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.card}>
           <View style={styles.toggleRow}>
-            <TouchableOpacity onPress={() => setUseSaved(!useSaved)}>
+            <TouchableOpacity
+              onPress={() => {
+                if (useSaved) {
+                  setName("")
+                  setLine1("")
+                  setLine2("")
+                  setCity("")
+                  setState("")
+                  setPostal("")
+                  setPhone("")
+                  setSaveAsDefault(false)
+                }
+                setUseSaved(!useSaved)
+              }}
+            >
               <Ionicons
                 name={useSaved ? "checkbox" : "square-outline"}
                 size={18}
@@ -275,6 +304,23 @@ export default function FinalPaymentScreen() {
               Use default shipping address
             </Text>
           </View>
+
+          {!useSaved && (
+            <View style={styles.toggleRow}>
+              <TouchableOpacity
+                onPress={() => setSaveAsDefault(!saveAsDefault)}
+              >
+                <Ionicons
+                  name={saveAsDefault ? "checkbox" : "square-outline"}
+                  size={18}
+                  color="#1F7A63"
+                />
+              </TouchableOpacity>
+              <Text style={styles.toggleText}>
+                Save as default shipping address
+              </Text>
+            </View>
+          )}
 
           <TextInput
             style={[styles.input, useSaved && styles.disabled]}
@@ -353,6 +399,7 @@ export default function FinalPaymentScreen() {
     </View>
   )
 }
+
 
 /* ---------------- STYLES ---------------- */
 
