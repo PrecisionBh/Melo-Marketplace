@@ -38,6 +38,7 @@ export default function SellerWalletScreen() {
   const [wallet, setWallet] = useState<Wallet | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
+  const [withdrawing, setWithdrawing] = useState(false)
 
   useEffect(() => {
     if (session?.user?.id) {
@@ -118,17 +119,20 @@ export default function SellerWalletScreen() {
     }
   }
 
-  /* ---------------- WITHDRAW ---------------- */
+  /* ---------------- WITHDRAW (REAL PAYOUT) ---------------- */
 
   const handleWithdraw = async () => {
-    if (available <= 0) return
+    if (available <= 0 || withdrawing) return
 
-    const { data: canPayout, error } = await supabase.rpc(
+    setWithdrawing(true)
+
+    const { data: canPayout, error: readyError } = await supabase.rpc(
       "is_stripe_payout_ready",
       { p_user_id: session!.user.id }
     )
 
-    if (error || !canPayout) {
+    if (readyError || !canPayout) {
+      setWithdrawing(false)
       Alert.alert(
         "Payout setup required",
         "Please complete payout setup before withdrawing funds."
@@ -136,7 +140,24 @@ export default function SellerWalletScreen() {
       return
     }
 
-    Alert.alert("Withdraw", "Stripe payout flow coming next.")
+    const { error } = await supabase.functions.invoke(
+      "execute-stripe-payout",
+      {
+        body: {
+          user_id: session!.user.id,
+        },
+      }
+    )
+
+    setWithdrawing(false)
+
+    if (error) {
+      Alert.alert("Withdrawal failed", error.message)
+      return
+    }
+
+    Alert.alert("Success", "Your payout has been sent to Stripe.")
+    await loadData()
   }
 
   /* ---------------- RENDER ---------------- */
@@ -152,7 +173,6 @@ export default function SellerWalletScreen() {
       </View>
 
       <View style={styles.content}>
-        {/* ✅ LIFETIME EARNINGS */}
         <View style={styles.lifetimeBlock}>
           <Text style={styles.cardLabel}>Lifetime Earnings</Text>
           <Text style={styles.primaryValue}>
@@ -167,12 +187,14 @@ export default function SellerWalletScreen() {
           <TouchableOpacity
             style={[
               styles.withdrawBtn,
-              available <= 0 && { opacity: 0.4 },
+              (available <= 0 || withdrawing) && { opacity: 0.4 },
             ]}
-            disabled={available <= 0}
+            disabled={available <= 0 || withdrawing}
             onPress={handleWithdraw}
           >
-            <Text style={styles.withdrawText}>Withdraw Funds</Text>
+            <Text style={styles.withdrawText}>
+              {withdrawing ? "Processing…" : "Withdraw Funds"}
+            </Text>
           </TouchableOpacity>
         </View>
 
