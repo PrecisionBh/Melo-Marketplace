@@ -40,7 +40,6 @@ export default function SellerWalletScreen() {
   const [wallet, setWallet] = useState<Wallet | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
-  const [withdrawing, setWithdrawing] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
 
   useEffect(() => {
@@ -128,45 +127,11 @@ export default function SellerWalletScreen() {
     }
   }
 
-  /* ---------------- WITHDRAW ---------------- */
+  /* ---------------- WITHDRAW (ROUTING ONLY) ---------------- */
 
-  const handleWithdraw = async () => {
-    if (available <= 0 || withdrawing) return
-
-    setWithdrawing(true)
-
-    const { data: canPayout, error: readyError } = await supabase.rpc(
-      "is_stripe_payout_ready",
-      { p_user_id: session!.user.id }
-    )
-
-    if (readyError || !canPayout) {
-      setWithdrawing(false)
-      Alert.alert(
-        "Payout setup required",
-        "Please complete payout setup before withdrawing funds."
-      )
-      return
-    }
-
-    const { error } = await supabase.functions.invoke(
-      "execute-stripe-payout",
-      {
-        body: {
-          user_id: session!.user.id,
-        },
-      }
-    )
-
-    setWithdrawing(false)
-
-    if (error) {
-      Alert.alert("Withdrawal failed", error.message)
-      return
-    }
-
-    Alert.alert("Success", "Your payout has been sent to Stripe.")
-    await loadData()
+  const handleWithdraw = () => {
+    if (available <= 0) return
+    router.push("/seller-hub/wallet/withdrawal")
   }
 
   /* ---------------- RENDER ---------------- */
@@ -201,14 +166,12 @@ export default function SellerWalletScreen() {
           <TouchableOpacity
             style={[
               styles.withdrawBtn,
-              (available <= 0 || withdrawing) && { opacity: 0.4 },
+              available <= 0 && { opacity: 0.4 },
             ]}
-            disabled={available <= 0 || withdrawing}
+            disabled={available <= 0}
             onPress={handleWithdraw}
           >
-            <Text style={styles.withdrawText}>
-              {withdrawing ? "Processing…" : "Withdraw Funds"}
-            </Text>
+            <Text style={styles.withdrawText}>Withdraw Funds</Text>
           </TouchableOpacity>
         </View>
 
