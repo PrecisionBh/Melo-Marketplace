@@ -1,10 +1,12 @@
 import { Ionicons } from "@expo/vector-icons"
 import * as Linking from "expo-linking"
 import { useRouter } from "expo-router"
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import {
   ActivityIndicator,
   Alert,
+  RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -39,6 +41,7 @@ export default function SellerWalletScreen() {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
   const [withdrawing, setWithdrawing] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
 
   useEffect(() => {
     if (session?.user?.id) {
@@ -72,6 +75,12 @@ export default function SellerWalletScreen() {
     setProfile(profileData ?? null)
     setLoading(false)
   }
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true)
+    await loadData()
+    setRefreshing(false)
+  }, [])
 
   if (loading || !wallet) {
     return <ActivityIndicator style={{ marginTop: 60 }} />
@@ -119,7 +128,7 @@ export default function SellerWalletScreen() {
     }
   }
 
-  /* ---------------- WITHDRAW (REAL PAYOUT) ---------------- */
+  /* ---------------- WITHDRAW ---------------- */
 
   const handleWithdraw = async () => {
     if (available <= 0 || withdrawing) return
@@ -172,7 +181,12 @@ export default function SellerWalletScreen() {
         <View style={{ width: 22 }} />
       </View>
 
-      <View style={styles.content}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
         <View style={styles.lifetimeBlock}>
           <Text style={styles.cardLabel}>Lifetime Earnings</Text>
           <Text style={styles.primaryValue}>
@@ -215,7 +229,7 @@ export default function SellerWalletScreen() {
             </Text>
           </TouchableOpacity>
         </View>
-      </View>
+      </ScrollView>
     </View>
   )
 }

@@ -16,18 +16,24 @@ serve(async (req) => {
   }
 
   try {
-    const { listing_id, amount, customer_id } = await req.json()
+    const {
+      listing_id,
+      amount,
+      customer_id,
+      seller_stripe_account_id,
+    } = await req.json()
 
-    if (!listing_id || !amount || !customer_id) {
+    if (!listing_id || !amount || !customer_id || !seller_stripe_account_id) {
       return new Response(
         JSON.stringify({
-          error: "Missing listing_id, amount, or customer_id",
+          error:
+            "Missing listing_id, amount, customer_id, or seller_stripe_account_id",
         }),
         { status: 400 }
       )
     }
 
-    // 🔍 Fetch customer to get DEFAULT payment method
+    // 🔍 Fetch customer to get default payment method
     const customer = await stripe.customers.retrieve(customer_id)
 
     const defaultPaymentMethod =
@@ -43,14 +49,20 @@ serve(async (req) => {
       )
     }
 
-    // 💳 Charge saved default card
+    // 💳 DESTINATION CHARGE (THIS IS THE FIX)
     const intent = await stripe.paymentIntents.create({
-      amount, // already in cents
+      amount, // cents
       currency: "usd",
       customer: customer_id,
       payment_method: defaultPaymentMethod,
       confirm: true,
       off_session: true,
+
+      // 🔥 ROUTES FUNDS TO CONNECTED ACCOUNT
+      transfer_data: {
+        destination: seller_stripe_account_id,
+      },
+
       metadata: {
         listing_id,
       },
@@ -69,7 +81,6 @@ serve(async (req) => {
   } catch (err: any) {
     console.error("Quick buy error:", err)
 
-    // 👇 This allows frontend to fall back to Checkout when needed
     return new Response(
       JSON.stringify({
         error: err.message,

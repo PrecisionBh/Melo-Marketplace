@@ -5,12 +5,11 @@ import {
   ActivityIndicator,
   Alert,
   Image,
-  Linking,
   Modal,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
+  View
 } from "react-native"
 
 import { useAuth } from "@/context/AuthContext"
@@ -52,6 +51,7 @@ export default function BuyerOrderDetailScreen() {
   const [order, setOrder] = useState<Order | null>(null)
   const [loading, setLoading] = useState(true)
   const [confirmVisible, setConfirmVisible] = useState(false)
+  const [processing, setProcessing] = useState(false)
 
   useEffect(() => {
     if (id && session?.user?.id) loadOrder()
@@ -107,17 +107,40 @@ export default function BuyerOrderDetailScreen() {
     )
   }
 
+  /**
+   * ✅ Confirm Delivery
+   * This triggers:
+   * 1. Stripe balance check
+   * 2. Platform → Seller transfer
+   * 3. Supabase escrow + wallet updates (inside function)
+   */
   const confirmDelivery = async () => {
-    const { error } = await supabase.rpc("release_order_escrow", {
-      p_order_id: order!.id,
-    })
+    if (!order || processing) return
+
+    setProcessing(true)
+
+    const { error } = await supabase.functions.invoke(
+      "execute-stripe-payout",
+      {
+        body: {
+          order_id: order.id,
+          user_id: order.buyer_id,
+        },
+      }
+    )
 
     if (error) {
-      Alert.alert("Error", error.message)
+      Alert.alert(
+        "Payment Pending",
+        error.message ?? "Funds are not available yet. Please try again shortly."
+      )
+      setProcessing(false)
       return
     }
 
     setConfirmVisible(false)
+    setProcessing(false)
+
     router.replace("/buyer-hub/orders/completed")
   }
 
@@ -140,22 +163,15 @@ export default function BuyerOrderDetailScreen() {
   const shipping =
     (order.listing_snapshot?.shipping_amount_cents ?? 0) / 100
 
-  const protectionFee = Math.max(
-    +(itemTotal * 0.015).toFixed(2),
-    0.5
-  )
-
+  const protectionFee = Math.max(+(itemTotal * 0.015).toFixed(2), 0.5)
   const processingFee = +(itemTotal * 0.029 + 0.3).toFixed(2)
-
   const buyerFee = +(protectionFee + processingFee).toFixed(2)
-
   const totalPaid = +(itemTotal + shipping + buyerFee).toFixed(2)
 
   /* ---------------- RENDER ---------------- */
 
   return (
     <View style={styles.screen}>
-      {/* HEADER */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={22} color="#0F1E17" />
@@ -164,26 +180,20 @@ export default function BuyerOrderDetailScreen() {
         <View style={{ width: 22 }} />
       </View>
 
-      {/* IMAGE */}
       <Image
         source={{ uri: order.image_url ?? undefined }}
         style={styles.image}
       />
 
       <View style={styles.content}>
-        {/* ✅ ORDER NUMBER (ALWAYS) */}
         <Text style={styles.orderNumber}>
           Order #{order.id.slice(0, 8)}
         </Text>
 
-        {/* ✅ LISTING TITLE (UNDER ORDER #) */}
         {order.listing_snapshot?.title && (
-          <Text style={styles.title}>
-            {order.listing_snapshot.title}
-          </Text>
+          <Text style={styles.title}>{order.listing_snapshot.title}</Text>
         )}
 
-        {/* STATUS BADGE */}
         <View
           style={[
             styles.badge,
@@ -199,7 +209,6 @@ export default function BuyerOrderDetailScreen() {
           </Text>
         </View>
 
-        {/* RECEIPT */}
         <View style={styles.receipt}>
           <ReceiptRow label="Item price" value={`$${itemTotal.toFixed(2)}`} />
           <ReceiptRow label="Shipping" value={`$${shipping.toFixed(2)}`} />
@@ -216,55 +225,13 @@ export default function BuyerOrderDetailScreen() {
           />
         </View>
 
-        {isCompleted ? (
-          <View style={styles.completedBadge}>
-            <Ionicons name="checkmark-circle" size={18} color="#27AE60" />
-            <Text style={styles.completedText}>
-              This order is completed
-            </Text>
-          </View>
-        ) : (
-          <>
-            <View style={styles.pillRow}>
-              {canCancel && (
-                <TouchableOpacity
-                  style={[styles.pill, styles.cancelPill]}
-                  onPress={cancelOrder}
-                >
-                  <Text style={styles.cancelText}>Cancel</Text>
-                </TouchableOpacity>
-              )}
-
-              <TouchableOpacity
-                style={[styles.pill, styles.disputePill]}
-                onPress={() =>
-                  router.push(
-                    `/buyer-hub/orders/dispute-issue?orderId=${order.id}`
-                  )
-                }
-              >
-                <Text style={styles.disputeText}>Dispute</Text>
-              </TouchableOpacity>
-
-              {canTrack && (
-                <TouchableOpacity
-                  style={[styles.pill, styles.trackPill]}
-                  onPress={() => Linking.openURL(order.tracking_url!)}
-                >
-                  <Text style={styles.trackText}>Track</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-
-            {canConfirmDelivery && (
-              <TouchableOpacity
-                style={styles.completeBtn}
-                onPress={() => setConfirmVisible(true)}
-              >
-                <Text style={styles.completeText}>Confirm Delivery</Text>
-              </TouchableOpacity>
-            )}
-          </>
+        {!isCompleted && canConfirmDelivery && (
+          <TouchableOpacity
+            style={styles.completeBtn}
+            onPress={() => setConfirmVisible(true)}
+          >
+            <Text style={styles.completeText}>Confirm Delivery</Text>
+          </TouchableOpacity>
         )}
       </View>
 
@@ -283,7 +250,9 @@ export default function BuyerOrderDetailScreen() {
               style={styles.completeBtn}
               onPress={confirmDelivery}
             >
-              <Text style={styles.completeText}>Yes, Confirm Delivery</Text>
+              <Text style={styles.completeText}>
+                {processing ? "Processing…" : "Yes, Confirm Delivery"}
+              </Text>
             </TouchableOpacity>
 
             <TouchableOpacity onPress={() => setConfirmVisible(false)}>
