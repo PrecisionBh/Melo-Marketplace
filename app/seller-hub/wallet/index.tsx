@@ -1,7 +1,8 @@
 import { Ionicons } from "@expo/vector-icons"
+import { useFocusEffect } from "@react-navigation/native"
 import * as Linking from "expo-linking"
 import { useRouter } from "expo-router"
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useState } from "react"
 import {
   ActivityIndicator,
   Alert,
@@ -42,11 +43,7 @@ export default function SellerWalletScreen() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
 
-  useEffect(() => {
-    if (session?.user?.id) {
-      loadData()
-    }
-  }, [session?.user?.id])
+  /* ---------------- LOAD DATA ---------------- */
 
   const loadData = async () => {
     setLoading(true)
@@ -74,6 +71,15 @@ export default function SellerWalletScreen() {
     setProfile(profileData ?? null)
     setLoading(false)
   }
+
+  /* ✅ KEY FIX: REFRESH ON SCREEN FOCUS */
+  useFocusEffect(
+    useCallback(() => {
+      if (session?.user?.id) {
+        loadData()
+      }
+    }, [session?.user?.id])
+  )
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true)

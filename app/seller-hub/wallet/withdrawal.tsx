@@ -39,26 +39,27 @@ export default function WithdrawalScreen() {
   const [payoutType, setPayoutType] = useState<"instant" | "standard">(
     "instant"
   )
+  const [withdrawing, setWithdrawing] = useState(false)
 
   /* ---------------- LOAD WALLET ---------------- */
 
-  useEffect(() => {
-    const loadWallet = async () => {
-      const { data, error } = await supabase
-        .from("wallets")
-        .select("available_balance_cents")
-        .eq("user_id", session!.user.id)
-        .single()
+  const loadWallet = async () => {
+    const { data, error } = await supabase
+      .from("wallets")
+      .select("available_balance_cents")
+      .eq("user_id", session!.user.id)
+      .single()
 
-      if (error) {
-        Alert.alert("Error", "Failed to load wallet")
-        router.back()
-        return
-      }
-
-      setWallet(data)
+    if (error) {
+      Alert.alert("Error", "Failed to load wallet")
+      router.back()
+      return
     }
 
+    setWallet(data)
+  }
+
+  useEffect(() => {
     if (session?.user?.id) loadWallet()
   }, [session?.user?.id])
 
@@ -74,7 +75,7 @@ export default function WithdrawalScreen() {
   const isValidAmount =
     numericAmount > 0 && numericAmount <= available
 
-  /* ---------------- FEES ---------------- */
+  /* ---------------- FEES (DISPLAY ONLY) ---------------- */
 
   const instantFee =
     payoutType === "instant"
@@ -85,6 +86,47 @@ export default function WithdrawalScreen() {
       : 0
 
   const netDeposit = numericAmount - instantFee
+
+  /* ---------------- SUBMIT ---------------- */
+
+  const handleWithdraw = async () => {
+    if (!isValidAmount || withdrawing) return
+
+    setWithdrawing(true)
+
+    const amount_cents = Math.round(numericAmount * 100)
+
+    const { error } = await supabase.functions.invoke(
+      "execute-withdrawal",
+      {
+        body: {
+          user_id: session!.user.id,
+          amount_cents,
+          payout_type: payoutType,
+        },
+      }
+    )
+
+    setWithdrawing(false)
+
+    if (error) {
+      Alert.alert(
+        "Withdrawal failed",
+        error.message || "Something went wrong"
+      )
+      return
+    }
+
+    Alert.alert(
+      "Success",
+      payoutType === "instant"
+        ? "Your instant payout is processing."
+        : "Your payout will arrive in 3–5 business days."
+    )
+
+    await loadWallet()
+    router.back()
+  }
 
   /* ---------------- UI ---------------- */
 
@@ -217,14 +259,14 @@ export default function WithdrawalScreen() {
         <TouchableOpacity
           style={[
             styles.submitBtn,
-            !isValidAmount && { opacity: 0.4 },
+            (!isValidAmount || withdrawing) && { opacity: 0.4 },
           ]}
-          disabled={!isValidAmount}
-          onPress={() =>
-            Alert.alert("Confirm withdrawal", "Backend next 😄")
-          }
+          disabled={!isValidAmount || withdrawing}
+          onPress={handleWithdraw}
         >
-          <Text style={styles.submitText}>Withdraw funds</Text>
+          <Text style={styles.submitText}>
+            {withdrawing ? "Processing…" : "Withdraw funds"}
+          </Text>
         </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>
