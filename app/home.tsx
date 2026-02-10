@@ -61,6 +61,9 @@ export default function HomeScreen() {
   const [hasUnreadMessages, setHasUnreadMessages] =
     useState(false)
 
+  const [hasUnreadNotifications, setHasUnreadNotifications] =
+    useState(false)
+
   /* ---------------- LOAD DATA ---------------- */
 
   useEffect(() => {
@@ -71,6 +74,7 @@ export default function HomeScreen() {
     useCallback(() => {
       loadListings()
       checkUnreadMessages()
+      checkUnreadNotifications()
     }, [])
   )
 
@@ -186,6 +190,27 @@ export default function HomeScreen() {
     setHasUnreadMessages(!!count && count > 0)
   }
 
+  /* ---------------- UNREAD NOTIFICATIONS ---------------- */
+
+  async function checkUnreadNotifications() {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      setHasUnreadNotifications(false)
+      return
+    }
+
+    const { count } = await supabase
+      .from("notifications")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .eq("read", false)
+
+    setHasUnreadNotifications(!!count && count > 0)
+  }
+
   /* ---------------- FILTERING ---------------- */
 
   const filteredListings = useMemo(() => {
@@ -237,7 +262,7 @@ export default function HomeScreen() {
     <View style={styles.screen}>
       <View style={styles.headerBlock}>
         <HomeHeader
-          hasUnreadNotifications={false}
+          hasUnreadNotifications={hasUnreadNotifications}
           hasUnreadMessages={hasUnreadMessages}
           onNotificationsPress={() => router.push("/notifications")}
           onMessagesPress={() => router.push("/messages")}
