@@ -1,3 +1,4 @@
+import { notify } from "@/lib/notifications/notify"
 import { Ionicons } from "@expo/vector-icons"
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { useEffect, useMemo, useState } from "react"
@@ -193,8 +194,20 @@ export default function SellerOfferDetailScreen() {
       return
     }
 
+    await notify({
+  userId: offer.buyer_id,
+  type: "offer",
+  title: "Offer accepted!",
+  body: "Your offer was accepted. Please complete payment.",
+  data: {
+    route: "/checkout",
+    params: { offerId: offer.id },
+  },
+})
     loadOffer()
   }
+
+  
 
   const declineOffer = async () => {
     if (saving) return
@@ -211,6 +224,15 @@ export default function SellerOfferDetailScreen() {
       .eq("id", offer.id)
 
     setSaving(false)
+    await notify({
+  userId: offer.buyer_id,
+  type: "offer",
+  title: "Offer declined",
+  body: "The seller declined your offer.",
+  data: {
+    route: "/buyer-hub/offers",
+  },
+})
     loadOffer()
   }
 
@@ -235,6 +257,17 @@ export default function SellerOfferDetailScreen() {
 
     setSaving(false)
     setShowCounter(false)
+    await notify({
+  userId: offer.buyer_id,
+  type: "offer",
+  title: "Offer countered",
+  body: "The seller countered your offer.",
+  data: {
+    route: "/buyer-hub/offers/[id]",
+    params: { id: offer.id },
+  },
+})
+
     loadOffer()
   }
 

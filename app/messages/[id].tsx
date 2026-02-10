@@ -1,16 +1,17 @@
+import { notify } from "@/lib/notifications/notify"
 import { Ionicons } from "@expo/vector-icons"
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { useEffect, useRef, useState } from "react"
 import {
-    FlatList,
-    Image,
-    KeyboardAvoidingView,
-    Platform,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  FlatList,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
@@ -49,8 +50,10 @@ export default function ChatScreen() {
   const [loading, setLoading] = useState(true)
 
   const [otherUserName, setOtherUserName] = useState("Chat")
-  const [otherUserAvatar, setOtherUserAvatar] =
-    useState<string | null>(null)
+const [otherUserAvatar, setOtherUserAvatar] = useState<string | null>(null)
+const [otherUserId, setOtherUserId] = useState<string | null>(null)
+
+
 
   const flatListRef = useRef<FlatList>(null)
 
@@ -103,6 +106,9 @@ export default function ChatScreen() {
       data.user_one === session.user.id
         ? data.user_two
         : data.user_one
+        
+    setOtherUserId(otherUserId)
+
 
     const { data: profile } = await supabase
       .from("profiles")
@@ -198,6 +204,18 @@ export default function ChatScreen() {
       sender_id: session.user.id,
       body,
     })
+
+    await notify({
+  userId: otherUserId!,
+  type: "message",
+  title: "New message",
+  body: "You have a new message",
+  data: {
+    route: "/messages/[id]",
+    params: { id: conversationId },
+  },
+})
+
   }
 
   /* ---------------- HELPERS ---------------- */

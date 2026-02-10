@@ -1,3 +1,4 @@
+import { notify } from "@/lib/notifications/notify"
 import { Ionicons } from "@expo/vector-icons"
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { useEffect, useState } from "react"
@@ -23,6 +24,7 @@ type OrderStatus = "paid" | "shipped" | "delivered" | "completed"
 type Order = {
   id: string
   seller_id: string
+  buyer_id: string 
   status: OrderStatus
   amount_cents: number
   image_url: string | null
@@ -106,35 +108,47 @@ export default function SellerOrderDetailScreen() {
     const trackingUrl = buildTrackingUrl(carrier, tracking)
 
     const { error } = await supabase
-      .from("orders")
-      .update({
-        carrier,
-        tracking_number: tracking,
-        tracking_url: trackingUrl,
-        status: "shipped",
-        shipped_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", order.id)
+  .from("orders")
+  .update({
+    carrier,
+    tracking_number: tracking,
+    tracking_url: trackingUrl,
+    status: "shipped",
+    shipped_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  })
+  .eq("id", order.id)
 
-    setSaving(false)
+setSaving(false)
 
-    if (error) {
-      Alert.alert("Error", "Failed to mark order as shipped.")
-      return
-    }
+if (error) {
+  Alert.alert("Error", "Failed to mark order as shipped.")
+  return
+}
 
-    Alert.alert(
-      "Order Shipped",
-      "Tracking has been added and the order is now in progress.",
-      [
-        {
-          text: "OK",
-          onPress: () =>
-            router.replace("/seller-hub/orders/orders-to-ship"),
-        },
-      ]
-    )
+await notify({
+  userId: order.buyer_id, // buyer gets notified
+  type: "order",
+  title: "Order shipped",
+  body: "Your order has been shipped. Tracking information is now available.",
+  data: {
+    route: "/buyer-hub/orders/[id]",
+    params: { id: order.id },
+  },
+})
+
+Alert.alert(
+  "Order Shipped",
+  "Tracking has been added and the order is now in progress.",
+  [
+    {
+      text: "OK",
+      onPress: () =>
+        router.replace("/seller-hub/orders/orders-to-ship"),
+    },
+  ]
+)
+
   }
 
   if (loading) {

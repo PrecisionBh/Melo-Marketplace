@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons"
 import { useRouter } from "expo-router"
 import { useEffect, useState } from "react"
 import {
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -33,30 +34,54 @@ export default function NotificationsScreen() {
 
       setNotifications(data ?? [])
       setLoading(false)
-
-      // mark all as read
-      await supabase
-        .from("notifications")
-        .update({ read: true })
-        .eq("user_id", userId)
-        .eq("read", false)
     }
 
     loadNotifications()
   }, [userId])
 
+  const openNotification = async (n: any) => {
+    if (!n.read) {
+      await supabase
+        .from("notifications")
+        .update({ read: true })
+        .eq("id", n.id)
+    }
+
+    if (n.data?.route) {
+      router.push({
+        pathname: n.data.route,
+        params: n.data.params ?? {},
+      })
+    }
+  }
+
+  const clearAllNotifications = async () => {
+    if (!userId) return
+    await supabase.from("notifications").delete().eq("user_id", userId)
+    setNotifications([])
+  }
+
   return (
     <View style={styles.screen}>
-      {/* TOP BAR */}
+      {/* HEADER */}
       <View style={styles.topBar}>
         <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={22} color="#E8F5EE" />
+          <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
         </TouchableOpacity>
 
         <Text style={styles.title}>Notifications</Text>
 
         <View style={{ width: 22 }} />
       </View>
+
+      {/* CLEAR ALL */}
+      {notifications.length > 0 && (
+        <View style={styles.clearRow}>
+          <TouchableOpacity onPress={clearAllNotifications}>
+            <Text style={styles.clearText}>Clear all</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* CONTENT */}
       {!userId ? (
@@ -78,10 +103,24 @@ export default function NotificationsScreen() {
       ) : (
         <ScrollView>
           {notifications.map((n) => (
-            <View key={n.id} style={styles.notificationCard}>
-              <Text style={styles.notifTitle}>{n.title}</Text>
+            <Pressable
+              key={n.id}
+              style={styles.notificationCard}
+              onPress={() => openNotification(n)}
+            >
+              {!n.read && <View style={styles.unreadDot} />}
+
+              <Text
+                style={[
+                  styles.notifTitle,
+                  !n.read && { fontWeight: "900" },
+                ]}
+              >
+                {n.title}
+              </Text>
+
               <Text style={styles.notifBody}>{n.body}</Text>
-            </View>
+            </Pressable>
           ))}
         </ScrollView>
       )}
@@ -102,13 +141,25 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "#0F1E17",
+    backgroundColor: "#7FAF9B",
   },
 
   title: {
     fontSize: 18,
     fontWeight: "800",
-    color: "#E8F5EE",
+    color: "#FFFFFF",
+  },
+
+  clearRow: {
+    alignItems: "flex-end",
+    paddingHorizontal: 16,
+    paddingTop: 6,
+  },
+
+  clearText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#C0392B",
   },
 
   center: {
@@ -140,6 +191,17 @@ const styles = StyleSheet.create({
     marginTop: 12,
     padding: 14,
     borderRadius: 12,
+    position: "relative",
+  },
+
+  unreadDot: {
+    position: "absolute",
+    top: 10,
+    left: 10,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#FF4D4D",
   },
 
   notifTitle: {

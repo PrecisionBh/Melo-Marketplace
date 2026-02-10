@@ -1,3 +1,4 @@
+import { notify } from "@/lib/notifications/notify"
 import { Ionicons } from "@expo/vector-icons"
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { useEffect, useMemo, useState } from "react"
@@ -112,25 +113,29 @@ export default function MakeOfferScreen() {
 
     setLoading(true)
 
-    const { error } = await supabase.from("offers").insert({
-      listing_id: listing.id,
-      buyer_id: session.user.id,
-      seller_id: listing.user_id,
+    const { data: newOffer, error } = await supabase
+  .from("offers")
+  .insert({
+    listing_id: listing.id,
+    buyer_id: session.user.id,
+    seller_id: listing.user_id,
 
-      offer_amount: numericOffer,
-      original_offer: numericOffer,
-      current_amount: numericOffer,
+    offer_amount: numericOffer,
+    original_offer: numericOffer,
+    current_amount: numericOffer,
 
-      buyer_fee: buyerFee,
-      total_due: totalDue,
+    buyer_fee: buyerFee,
+    total_due: totalDue,
 
-      status: "pending",
-      last_action: "buyer",
-      last_actor: "buyer",
-      counter_count: 0,
+    status: "pending",
+    last_action: "buyer",
+    last_actor: "buyer",
+    counter_count: 0,
 
-      expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-    })
+    expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+  })
+  .select("id")
+  .single()
 
     setLoading(false)
 
@@ -146,6 +151,20 @@ export default function MakeOfferScreen() {
       }
       return
     }
+
+    /* ✅ NOTIFY AFTER SUCCESS */
+await notify({
+  userId: listing.user_id, // seller
+  type: "offer",
+  title: "New offer received",
+  body: `You received a new offer on "${listing.title}"`,
+  data: {
+    route: "/seller-hub/offers/[id]",
+    params: {
+      id: newOffer.id,
+    },
+  },
+})
 
     Alert.alert(
       "Offer Sent",

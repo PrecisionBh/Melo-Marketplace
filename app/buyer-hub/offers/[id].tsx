@@ -1,3 +1,4 @@
+import { notify } from "@/lib/notifications/notify"
 import { Ionicons } from "@expo/vector-icons"
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { useEffect, useMemo, useState } from "react"
@@ -201,6 +202,18 @@ export default function BuyerOfferDetailScreen() {
       return
     }
 
+    await notify({
+  userId: offer.seller_id,
+  type: "offer",
+  title: "Offer accepted!",
+  body: "The buyer accepted your offer.",
+  data: {
+    route: "/seller-hub/offers/[id]",
+    params: { id: offer.id },
+  },
+})
+
+
     loadOffer()
   }
 
@@ -231,6 +244,17 @@ export default function BuyerOfferDetailScreen() {
             Alert.alert("Failed to decline offer", error.message)
             return
           }
+
+          await notify({
+  userId: offer.seller_id,
+  type: "offer",
+  title: "Offer declined",
+  body: "The buyer declined your offer.",
+  data: {
+    route: "/seller-hub/offers",
+  },
+})
+
 
           loadOffer()
         },
@@ -271,6 +295,18 @@ export default function BuyerOfferDetailScreen() {
 
     setShowCounter(false)
     setCounterAmount("")
+
+  await notify({
+  userId: offer.seller_id,
+  type: "offer",
+  title: "Offer countered",
+  body: "The buyer sent a counter offer.",
+  data: {
+    route: "/seller-hub/offers/[id]",
+    params: { id: offer.id },
+  },
+})
+
     loadOffer()
   }
 

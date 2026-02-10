@@ -1,3 +1,4 @@
+import { notify } from "@/lib/notifications/notify"
 import { Ionicons } from "@expo/vector-icons"
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { useEffect, useState } from "react"
@@ -29,6 +30,7 @@ type OrderStatus =
 type Order = {
   id: string
   buyer_id: string
+  seller_id: string
   status: OrderStatus
   amount_cents: number
   item_price_cents: number | null
@@ -66,6 +68,7 @@ export default function BuyerOrderDetailScreen() {
       .select(`
         id,
         buyer_id,
+        seller_id,
         status,
         amount_cents,
         item_price_cents,
@@ -144,6 +147,18 @@ export default function BuyerOrderDetailScreen() {
 
     setConfirmVisible(false)
     setProcessing(false)
+
+    await notify({
+  userId: order.seller_id, // seller gets notified
+  type: "order",
+  title: "Order completed",
+  body: "The buyer confirmed delivery. Funds have been released.",
+  data: {
+    route: "/seller-hub/orders/[id]",
+    params: { id: order.id },
+  },
+})
+
 
     router.replace("/buyer-hub/orders/completed")
   }
