@@ -67,8 +67,8 @@ async function markOrderPaid(params: {
     return json(404, { error: "Order not found" })
   }
 
-  // 🔒 Idempotency
-  if (order.paid_at || order.escrow_funded_at || order.status === "paid") {
+  // 🔒 Idempotency (FIXED — does not block listing update)
+  if (order.wallet_credited && order.status === "paid") {
     console.log("⚠️ Order already paid:", orderId)
     return json(200, { received: true })
   }
@@ -113,7 +113,6 @@ async function markOrderPaid(params: {
     return json(500, { error: "Missing item price for escrow" })
   }
 
-  // 🔧 UPDATED — correct Melo escrow math
   const sellerFeeCents = Math.round(order.item_price_cents * 0.04)
   const escrowAmountCents =
     order.item_price_cents + (order.shipping_amount_cents ?? 0)
@@ -138,10 +137,9 @@ async function markOrderPaid(params: {
       stripe_session_id: sessionId ?? null,
       stripe_payment_intent: paymentIntentId ?? null,
 
-      // 🔧 UPDATED — escrow + seller accounting
       seller_fee_cents: sellerFeeCents,
       seller_net_cents: sellerNetCents,
-      seller_payout_cents: null,              // finalized at escrow release
+      seller_payout_cents: null,
       escrow_amount_cents: escrowAmountCents,
 
       escrow_status: "pending",

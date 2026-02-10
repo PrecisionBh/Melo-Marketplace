@@ -148,23 +148,24 @@ export default function CheckoutScreen() {
     )
   }
 
+  /* ---------------- CORRECT MATH ---------------- */
+
   const shipping =
     item.shipping_type === "free" ? 0 : item.shipping_price
 
-  const buyerProtectionFee = item.price * 0.015
-  const stripePercentageFee = item.price * 0.029
-  const stripeFlatFee = 0.3
+  const escrow = item.price + shipping
 
   const buyerFee = +(
-    buyerProtectionFee +
-    stripePercentageFee +
-    stripeFlatFee
+    escrow * 0.03 + 0.3
   ).toFixed(2)
 
-  const total = +(item.price + shipping + buyerFee).toFixed(2)
+  const total = +(
+    escrow + buyerFee
+  ).toFixed(2)
 
-  // ✅ ONLY ADDITION
   const totalCents = Math.round(total * 100)
+
+  /* ---------------- UI ---------------- */
 
   return (
     <View style={styles.screen}>
@@ -211,7 +212,7 @@ export default function CheckoutScreen() {
               params: {
                 listingId,
                 offerId,
-                totalCents: String(totalCents), // ✅ ONLY CHANGE
+                totalCents: String(totalCents),
               },
             })
           }

@@ -116,6 +116,42 @@ Deno.serve(async (req) => {
       payout_type,
     })
 
+    /* =====================================================
+       ✅ ADDITION: TAKE INSTANT FEE AT PAYOUT TIME (MERCARI STYLE)
+       - Transfer fee from connected account → platform account
+       - Then payout net_cents
+       ===================================================== */
+    if (payout_type === "instant" && fee_cents > 0) {
+      const platformAccountId = Deno.env.get("STRIPE_PLATFORM_ACCOUNT_ID")
+      if (!platformAccountId) {
+        console.error("❌ Missing STRIPE_PLATFORM_ACCOUNT_ID env var")
+        throw new Error("Missing STRIPE_PLATFORM_ACCOUNT_ID")
+      }
+
+      console.log("🏦 Collecting instant fee via transfer", {
+        fee_cents,
+        platformAccountId,
+      })
+
+      await stripe.transfers.create(
+        {
+          amount: fee_cents,
+          currency: "usd",
+          destination: platformAccountId,
+          metadata: {
+            user_id,
+            gross_amount_cents: amount_cents.toString(),
+            fee_cents: fee_cents.toString(),
+            fee_type: "instant_payout_fee",
+          },
+        },
+        { stripeAccount: profile.stripe_account_id }
+      )
+
+      console.log("✅ Instant fee transferred to platform")
+    }
+    /* ===================================================== */
+
     /* ---------- Stripe payout ---------- */
     console.log("💸 Creating Stripe payout")
 
@@ -166,6 +202,21 @@ Deno.serve(async (req) => {
       stripe_payout_id: payout.id,
       status: payout.status,
     })
+
+    /* ---------- Record wallet transaction (MVP withdrawal tracking) ---------- */
+    try {
+      await supabase.from("wallet_transactions").insert({
+        wallet_id: wallet.id,
+        user_id,
+        type: "withdrawal",
+        direction: "debit",
+        amount_cents,
+        status: "completed",
+        description: "Seller withdrawal",
+      })
+    } catch (logErr) {
+      console.error("⚠️ Wallet transaction log failed (non-blocking)", logErr)
+    }
 
     console.log("🏁 Withdrawal completed successfully")
 

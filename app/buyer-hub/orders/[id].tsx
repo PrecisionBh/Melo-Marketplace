@@ -9,7 +9,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
 } from "react-native"
 
 import { useAuth } from "@/context/AuthContext"
@@ -31,14 +31,16 @@ type Order = {
   buyer_id: string
   status: OrderStatus
   amount_cents: number
+  item_price_cents: number | null
+  shipping_amount_cents: number | null
+  buyer_fee_cents: number | null
   image_url: string | null
   tracking_url: string | null
   carrier: string | null
   completed_at: string | null
   listing_snapshot: {
     title?: string | null
-    shipping_amount_cents?: number | null
-  }
+  } | null
 }
 
 /* ---------------- SCREEN ---------------- */
@@ -55,6 +57,7 @@ export default function BuyerOrderDetailScreen() {
 
   useEffect(() => {
     if (id && session?.user?.id) loadOrder()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
   const loadOrder = async () => {
@@ -65,6 +68,9 @@ export default function BuyerOrderDetailScreen() {
         buyer_id,
         status,
         amount_cents,
+        item_price_cents,
+        shipping_amount_cents,
+        buyer_fee_cents,
         image_url,
         tracking_url,
         carrier,
@@ -119,20 +125,18 @@ export default function BuyerOrderDetailScreen() {
 
     setProcessing(true)
 
-    const { error } = await supabase.functions.invoke(
-      "execute-stripe-payout",
-      {
-        body: {
-          order_id: order.id,
-          user_id: order.buyer_id,
-        },
-      }
-    )
+    const { error } = await supabase.functions.invoke("execute-stripe-payout", {
+      body: {
+        order_id: order.id,
+        user_id: order.buyer_id,
+      },
+    })
 
     if (error) {
       Alert.alert(
         "Payment Pending",
-        error.message ?? "Funds are not available yet. Please try again shortly."
+        error.message ??
+          "Funds are not available yet. Please try again shortly."
       )
       setProcessing(false)
       return
@@ -157,16 +161,12 @@ export default function BuyerOrderDetailScreen() {
 
   const canConfirmDelivery = order.status === "shipped"
 
-  /* ---------------- RECEIPT MATH ---------------- */
+  /* ---------------- RECEIPT (SOURCE OF TRUTH = ORDERS TABLE) ---------------- */
 
-  const itemTotal = order.amount_cents / 100
-  const shipping =
-    (order.listing_snapshot?.shipping_amount_cents ?? 0) / 100
-
-  const protectionFee = Math.max(+(itemTotal * 0.015).toFixed(2), 0.5)
-  const processingFee = +(itemTotal * 0.029 + 0.3).toFixed(2)
-  const buyerFee = +(protectionFee + processingFee).toFixed(2)
-  const totalPaid = +(itemTotal + shipping + buyerFee).toFixed(2)
+  const itemPrice = (order.item_price_cents ?? 0) / 100
+  const shipping = (order.shipping_amount_cents ?? 0) / 100
+  const buyerFee = (order.buyer_fee_cents ?? 0) / 100
+  const totalPaid = (order.amount_cents ?? 0) / 100
 
   /* ---------------- RENDER ---------------- */
 
@@ -186,9 +186,7 @@ export default function BuyerOrderDetailScreen() {
       />
 
       <View style={styles.content}>
-        <Text style={styles.orderNumber}>
-          Order #{order.id.slice(0, 8)}
-        </Text>
+        <Text style={styles.orderNumber}>Order #{order.id.slice(0, 8)}</Text>
 
         {order.listing_snapshot?.title && (
           <Text style={styles.title}>{order.listing_snapshot.title}</Text>
@@ -210,7 +208,7 @@ export default function BuyerOrderDetailScreen() {
         </View>
 
         <View style={styles.receipt}>
-          <ReceiptRow label="Item price" value={`$${itemTotal.toFixed(2)}`} />
+          <ReceiptRow label="Item price" value={`$${itemPrice.toFixed(2)}`} />
           <ReceiptRow label="Shipping" value={`$${shipping.toFixed(2)}`} />
           <ReceiptRow
             label="Buyer protection & processing"
@@ -218,19 +216,18 @@ export default function BuyerOrderDetailScreen() {
             subtle
           />
           <View style={styles.receiptDivider} />
-          <ReceiptRow
-            label="Total paid"
-            value={`$${totalPaid.toFixed(2)}`}
-            bold
-          />
+          <ReceiptRow label="Total paid" value={`$${totalPaid.toFixed(2)}`} bold />
         </View>
 
+        {/* Optional actions (kept as-is; you can wire these pills later) */}
         {!isCompleted && canConfirmDelivery && (
           <TouchableOpacity
             style={styles.completeBtn}
             onPress={() => setConfirmVisible(true)}
           >
-            <Text style={styles.completeText}>Confirm Delivery</Text>
+            <Text style={styles.completeText}>
+              {processing ? "Processing…" : "Confirm Delivery"}
+            </Text>
           </TouchableOpacity>
         )}
       </View>
@@ -243,12 +240,14 @@ export default function BuyerOrderDetailScreen() {
             <Text style={styles.modalText}>
               Please inspect your item before confirming delivery.
               {"\n\n"}
-              Once confirmed, the seller will be paid and disputes will no longer be available.
+              Once confirmed, the seller will be paid and disputes will no longer
+              be available.
             </Text>
 
             <TouchableOpacity
               style={styles.completeBtn}
               onPress={confirmDelivery}
+              disabled={processing}
             >
               <Text style={styles.completeText}>
                 {processing ? "Processing…" : "Yes, Confirm Delivery"}
@@ -374,28 +373,6 @@ const styles = StyleSheet.create({
     marginVertical: 8,
   },
 
-  pillRow: {
-    marginTop: 20,
-    flexDirection: "row",
-    gap: 8,
-  },
-
-  pill: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 999,
-    alignItems: "center",
-  },
-
-  cancelPill: { backgroundColor: "#FDE2E2" },
-  cancelText: { fontWeight: "900", color: "#C0392B" },
-
-  disputePill: { backgroundColor: "#FFF3CD" },
-  disputeText: { fontWeight: "900", color: "#B8860B" },
-
-  trackPill: { backgroundColor: "#E8F5EE" },
-  trackText: { fontWeight: "900", color: "#1F7A63" },
-
   completeBtn: {
     marginTop: 16,
     backgroundColor: "#1F7A63",
@@ -407,21 +384,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontWeight: "900",
     color: "#fff",
-  },
-
-  completedBadge: {
-    marginTop: 20,
-    flexDirection: "row",
-    gap: 8,
-    backgroundColor: "#E8F5EE",
-    padding: 14,
-    borderRadius: 14,
-    alignItems: "center",
-  },
-
-  completedText: {
-    fontWeight: "900",
-    color: "#1F7A63",
   },
 
   modalBackdrop: {

@@ -40,22 +40,39 @@ type OfferWithListing = {
   }
 }
 
+type OfferForTotal = {
+  current_amount: number
+  listing: {
+    shipping_type: "seller_pays" | "buyer_pays"
+    shipping_price: number | null
+  } | null
+}
+
+type ListingForTotal = {
+  price: number
+  shipping_type: "seller_pays" | "buyer_pays"
+  shipping_price: number | null
+}
+
 /* ---------------- SCREEN ---------------- */
 
 export default function FinalPaymentScreen() {
   const router = useRouter()
-  const { listingId, offerId, totalCents } = useLocalSearchParams<{
+  const { listingId, offerId } = useLocalSearchParams<{
     listingId?: string
     offerId?: string
-    totalCents?: string
   }>()
 
   const { session } = useAuth()
-  const total = Number(totalCents ?? 0) / 100
 
   const [paying, setPaying] = useState(false)
   const [useSaved, setUseSaved] = useState(true)
   const [saveAsDefault, setSaveAsDefault] = useState(false)
+
+  /* ---------------- TOTAL DISPLAY ---------------- */
+
+  const [displayTotalCents, setDisplayTotalCents] =
+    useState<number | null>(null)
 
   /* ---------------- SHIPPING ---------------- */
 
@@ -67,7 +84,7 @@ export default function FinalPaymentScreen() {
   const [postal, setPostal] = useState("")
   const [phone, setPhone] = useState("")
 
-  /* ---------------- LOAD SAVED SHIPPING (ONCE) ---------------- */
+  /* ---------------- LOAD SAVED SHIPPING ---------------- */
 
   useEffect(() => {
     if (!session?.user?.id) return
@@ -95,6 +112,64 @@ export default function FinalPaymentScreen() {
       })
   }, [session?.user?.id])
 
+  /* ---------------- CALCULATE DISPLAY TOTAL ---------------- */
+
+  useEffect(() => {
+    const loadTotal = async () => {
+      if (!listingId && !offerId) return
+
+      let itemCents = 0
+      let shippingCents = 0
+
+      try {
+        if (offerId) {
+          const { data, error } = await supabase
+            .from("offers")
+            .select(
+              `
+              current_amount,
+              listing: listings (shipping_type, shipping_price)
+            `
+            )
+            .eq("id", offerId)
+            .single<OfferForTotal>()
+
+          if (error || !data) return
+
+          itemCents = Math.round(Number(data.current_amount) * 100)
+
+          const listing = data.listing
+          if (listing?.shipping_type === "buyer_pays") {
+            shippingCents = Math.round((listing.shipping_price ?? 0) * 100)
+          }
+        } else if (listingId) {
+          const { data, error } = await supabase
+            .from("listings")
+            .select(`price, shipping_type, shipping_price`)
+            .eq("id", listingId)
+            .single<ListingForTotal>()
+
+          if (error || !data) return
+
+          itemCents = Math.round(Number(data.price) * 100)
+
+          if (data.shipping_type === "buyer_pays") {
+            shippingCents = Math.round((data.shipping_price ?? 0) * 100)
+          }
+        }
+
+        const escrow = itemCents + shippingCents
+        const buyerFee = Math.round(escrow * 0.03) + 30
+        setDisplayTotalCents(escrow + buyerFee)
+      } catch {
+        // If anything unexpected happens, just leave total null
+        setDisplayTotalCents(null)
+      }
+    }
+
+    loadTotal()
+  }, [listingId, offerId])
+
   /* ---------------- PAY ---------------- */
 
   const payNow = async () => {
@@ -103,21 +178,20 @@ export default function FinalPaymentScreen() {
       return
     }
 
-    if (!totalCents || Number(totalCents) <= 0) {
-      Alert.alert("Error", "Invalid order total.")
+    if (!displayTotalCents || displayTotalCents <= 0) {
+      Alert.alert("Error", "Unable to calculate order total.")
       return
     }
 
     if (
-  (!useSaved &&
-    (!name || !line1 || !city || !state || !postal || !phone)) ||
-  (useSaved &&
-    (!name || !line1 || !city || !state || !postal))
-) {
-  Alert.alert("Missing info", "Please complete shipping address.")
-  return
-}
-
+      (!useSaved &&
+        (!name || !line1 || !city || !state || !postal || !phone)) ||
+      (useSaved &&
+        (!name || !line1 || !city || !state || !postal))
+    ) {
+      Alert.alert("Missing info", "Please complete shipping address.")
+      return
+    }
 
     setPaying(true)
 
@@ -125,8 +199,6 @@ export default function FinalPaymentScreen() {
       let sellerId: string | null = null
       let imageUrl: string | null = null
       let listingSnapshot: ListingSnapshot | null = null
-
-      // 🔧 REQUIRED — persist item price source
       let itemPriceCents: number | null = null
 
       /* ---------- OFFER FLOW ---------- */
@@ -155,8 +227,6 @@ export default function FinalPaymentScreen() {
 
         sellerId = data.seller_id
         imageUrl = data.listing.image_urls?.[0] ?? null
-
-        // 🔧 REQUIRED
         itemPriceCents = Math.round(Number(data.current_amount) * 100)
 
         listingSnapshot = {
@@ -191,8 +261,6 @@ export default function FinalPaymentScreen() {
 
         sellerId = data.user_id
         imageUrl = data.image_urls?.[0] ?? null
-
-        // 🔧 REQUIRED
         itemPriceCents = Math.round(Number(data.price) * 100)
 
         listingSnapshot = {
@@ -209,18 +277,19 @@ export default function FinalPaymentScreen() {
         throw new Error("Missing listing pricing data")
       }
 
-      // 🔧 REQUIRED — derive shipping + buyer fee
+      /* ---------- PRICING (SINGLE SOURCE OF TRUTH) ---------- */
+
       const shippingCents =
         listingSnapshot.shipping_type === "buyer_pays"
           ? Math.round((listingSnapshot.shipping_price ?? 0) * 100)
           : 0
 
-      const buyerFeeCents = Math.round(itemPriceCents * 0.015)
-
-      // 🔧 REQUIRED — true escrow base
       const escrowCents = itemPriceCents + shippingCents
+      const buyerFeeCents = Math.round(escrowCents * 0.03) + 30
+      const stripeTotalCents = escrowCents + buyerFeeCents
 
       /* ---------- CREATE ORDER ---------- */
+
       const { data: order, error } = await supabase
         .from("orders")
         .insert({
@@ -234,16 +303,12 @@ export default function FinalPaymentScreen() {
 
           status: "pending_payment",
 
-          // 🔧 REQUIRED — Stripe total
-          amount_cents: Number(totalCents),
+          amount_cents: stripeTotalCents,
           currency: "usd",
 
-          // 🔧 REQUIRED — pricing breakdown
           item_price_cents: itemPriceCents,
           shipping_amount_cents: shippingCents,
           buyer_fee_cents: buyerFeeCents,
-
-          // 🔧 REQUIRED — escrow ≠ Stripe total
           escrow_amount_cents: escrowCents,
 
           shipping_name: name,
@@ -262,7 +327,7 @@ export default function FinalPaymentScreen() {
 
       if (!order) throw error
 
-      /* ---------- SAVE AS DEFAULT (OPT-IN) ---------- */
+      /* ---------- SAVE DEFAULT SHIPPING ---------- */
       if (!useSaved && saveAsDefault) {
         await supabase
           .from("profiles")
@@ -279,11 +344,12 @@ export default function FinalPaymentScreen() {
       }
 
       /* ---------- STRIPE ---------- */
+
       const { data, error: stripeErr } =
         await supabase.functions.invoke("create-checkout-session", {
           body: {
             order_id: order.id,
-            amount: Number(totalCents),
+            amount: stripeTotalCents,
             email: session.user.email,
           },
         })
@@ -336,25 +402,19 @@ export default function FinalPaymentScreen() {
                 color="#1F7A63"
               />
             </TouchableOpacity>
-            <Text style={styles.toggleText}>
-              Use default shipping address
-            </Text>
+            <Text style={styles.toggleText}>Use default shipping address</Text>
           </View>
 
           {!useSaved && (
             <View style={styles.toggleRow}>
-              <TouchableOpacity
-                onPress={() => setSaveAsDefault(!saveAsDefault)}
-              >
+              <TouchableOpacity onPress={() => setSaveAsDefault(!saveAsDefault)}>
                 <Ionicons
                   name={saveAsDefault ? "checkbox" : "square-outline"}
                   size={18}
                   color="#1F7A63"
                 />
               </TouchableOpacity>
-              <Text style={styles.toggleText}>
-                Save as default shipping address
-              </Text>
+              <Text style={styles.toggleText}>Save as default shipping address</Text>
             </View>
           )}
 
@@ -418,23 +478,22 @@ export default function FinalPaymentScreen() {
           </View>
         </View>
 
-        <TouchableOpacity
-          style={styles.primaryBtn}
-          onPress={payNow}
-          disabled={paying}
-        >
+        <TouchableOpacity style={styles.primaryBtn} onPress={payNow} disabled={paying}>
           <Text style={styles.primaryText}>
-            Pay Now • ${total.toFixed(2)}
+            {paying
+              ? "Processing..."
+              : displayTotalCents
+              ? `Pay Now • $${(displayTotalCents / 100).toFixed(2)}`
+              : "Pay Now"}
           </Text>
         </TouchableOpacity>
 
-        <Text style={styles.reassurance}>
-          Secure checkout powered by Stripe
-        </Text>
+        <Text style={styles.reassurance}>Secure checkout powered by Stripe</Text>
       </ScrollView>
     </View>
   )
 }
+
 /* ---------------- STYLES ---------------- */
 
 const styles = StyleSheet.create({
