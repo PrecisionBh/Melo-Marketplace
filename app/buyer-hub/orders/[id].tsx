@@ -6,7 +6,9 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Linking,
   Modal,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -40,6 +42,7 @@ type Order = {
   tracking_url: string | null
   carrier: string | null
   completed_at: string | null
+  is_disputed: boolean | null
   listing_snapshot: {
     title?: string | null
   } | null
@@ -59,7 +62,6 @@ export default function BuyerOrderDetailScreen() {
 
   useEffect(() => {
     if (id && session?.user?.id) loadOrder()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
   const loadOrder = async () => {
@@ -78,6 +80,7 @@ export default function BuyerOrderDetailScreen() {
         tracking_url,
         carrier,
         completed_at,
+        is_disputed,
         listing_snapshot
       `)
       .eq("id", id)
@@ -94,35 +97,6 @@ export default function BuyerOrderDetailScreen() {
 
   /* ---------------- ACTIONS ---------------- */
 
-  const cancelOrder = async () => {
-    Alert.alert(
-      "Cancel Order",
-      "Item price and shipping will be refunded. Buyer Protection & Processing fees are non-refundable.",
-      [
-        { text: "Never mind" },
-        {
-          text: "Cancel Order",
-          style: "destructive",
-          onPress: async () => {
-            await supabase
-              .from("orders")
-              .update({ status: "completed" })
-              .eq("id", order!.id)
-
-            router.replace("/buyer-hub/orders")
-          },
-        },
-      ]
-    )
-  }
-
-  /**
-   * ✅ Confirm Delivery
-   * This triggers:
-   * 1. Stripe balance check
-   * 2. Platform → Seller transfer
-   * 3. Supabase escrow + wallet updates (inside function)
-   */
   const confirmDelivery = async () => {
     if (!order || processing) return
 
@@ -149,16 +123,15 @@ export default function BuyerOrderDetailScreen() {
     setProcessing(false)
 
     await notify({
-  userId: order.seller_id, // seller gets notified
-  type: "order",
-  title: "Order completed",
-  body: "The buyer confirmed delivery. Funds have been released.",
-  data: {
-    route: "/seller-hub/orders/[id]",
-    params: { id: order.id },
-  },
-})
-
+      userId: order.seller_id,
+      type: "order",
+      title: "Order completed",
+      body: "The buyer confirmed delivery. Funds have been released.",
+      data: {
+        route: "/seller-hub/orders/[id]",
+        params: { id: order.id },
+      },
+    })
 
     router.replace("/buyer-hub/orders/completed")
   }
@@ -168,7 +141,6 @@ export default function BuyerOrderDetailScreen() {
   }
 
   const isCompleted = order.status === "completed"
-  const canCancel = order.status === "paid"
 
   const canTrack =
     !!order.tracking_url &&
@@ -176,14 +148,14 @@ export default function BuyerOrderDetailScreen() {
 
   const canConfirmDelivery = order.status === "shipped"
 
-  /* ---------------- RECEIPT (SOURCE OF TRUTH = ORDERS TABLE) ---------------- */
+  const canDispute =
+    !order.is_disputed &&
+    ["shipped", "delivered"].includes(order.status)
 
   const itemPrice = (order.item_price_cents ?? 0) / 100
   const shipping = (order.shipping_amount_cents ?? 0) / 100
   const buyerFee = (order.buyer_fee_cents ?? 0) / 100
   const totalPaid = (order.amount_cents ?? 0) / 100
-
-  /* ---------------- RENDER ---------------- */
 
   return (
     <View style={styles.screen}>
@@ -195,57 +167,102 @@ export default function BuyerOrderDetailScreen() {
         <View style={{ width: 22 }} />
       </View>
 
-      <Image
-        source={{ uri: order.image_url ?? undefined }}
-        style={styles.image}
-      />
+      <ScrollView contentContainerStyle={{ paddingBottom: 140 }}>
+        <Image
+          source={{ uri: order.image_url ?? undefined }}
+          style={styles.image}
+        />
 
-      <View style={styles.content}>
-        <Text style={styles.orderNumber}>Order #{order.id.slice(0, 8)}</Text>
-
-        {order.listing_snapshot?.title && (
-          <Text style={styles.title}>{order.listing_snapshot.title}</Text>
-        )}
-
-        <View
-          style={[
-            styles.badge,
-            isCompleted && { backgroundColor: "#27AE60" },
-          ]}
-        >
-          <Text style={styles.badgeText}>
-            {isCompleted
-              ? "COMPLETED"
-              : order.status === "paid"
-              ? "WAITING FOR SELLER TO SHIP"
-              : order.status.replace("_", " ").toUpperCase()}
+        <View style={styles.content}>
+          <Text style={styles.orderNumber}>
+            Order #{order.id.slice(0, 8)}
           </Text>
-        </View>
 
-        <View style={styles.receipt}>
-          <ReceiptRow label="Item price" value={`$${itemPrice.toFixed(2)}`} />
-          <ReceiptRow label="Shipping" value={`$${shipping.toFixed(2)}`} />
-          <ReceiptRow
-            label="Buyer protection & processing"
-            value={`$${buyerFee.toFixed(2)}`}
-            subtle
-          />
-          <View style={styles.receiptDivider} />
-          <ReceiptRow label="Total paid" value={`$${totalPaid.toFixed(2)}`} bold />
-        </View>
-
-        {/* Optional actions (kept as-is; you can wire these pills later) */}
-        {!isCompleted && canConfirmDelivery && (
-          <TouchableOpacity
-            style={styles.completeBtn}
-            onPress={() => setConfirmVisible(true)}
-          >
-            <Text style={styles.completeText}>
-              {processing ? "Processing…" : "Confirm Delivery"}
+          {order.listing_snapshot?.title && (
+            <Text style={styles.title}>
+              {order.listing_snapshot.title}
             </Text>
-          </TouchableOpacity>
-        )}
-      </View>
+          )}
+
+          <View
+            style={[
+              styles.badge,
+              isCompleted && { backgroundColor: "#27AE60" },
+            ]}
+          >
+            <Text style={styles.badgeText}>
+              {isCompleted
+                ? "COMPLETED"
+                : order.status === "paid"
+                ? "WAITING FOR SELLER TO SHIP"
+                : order.status.replace("_", " ").toUpperCase()}
+            </Text>
+          </View>
+
+          <View style={styles.receipt}>
+            <ReceiptRow label="Item price" value={`$${itemPrice.toFixed(2)}`} />
+            <ReceiptRow label="Shipping" value={`$${shipping.toFixed(2)}`} />
+            <ReceiptRow
+              label="Buyer protection & processing"
+              value={`$${buyerFee.toFixed(2)}`}
+              subtle
+            />
+            <View style={styles.receiptDivider} />
+            <ReceiptRow
+              label="Total paid"
+              value={`$${totalPaid.toFixed(2)}`}
+              bold
+            />
+          </View>
+
+          {/* TRACK PACKAGE BUTTON */}
+          {canTrack && (
+            <TouchableOpacity
+              style={styles.trackBtn}
+              onPress={() =>
+                order.tracking_url &&
+                Linking.openURL(order.tracking_url)
+              }
+            >
+              <Ionicons name="car-outline" size={18} color="#fff" />
+              <Text style={styles.trackText}>Track Package</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* CONFIRM DELIVERY */}
+          {!isCompleted && canConfirmDelivery && (
+            <TouchableOpacity
+              style={styles.completeBtn}
+              onPress={() => setConfirmVisible(true)}
+            >
+              <Text style={styles.completeText}>
+                {processing ? "Processing…" : "Confirm Delivery"}
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {/* DISPUTE */}
+          {canDispute && (
+            <TouchableOpacity
+              style={styles.disputeBtn}
+              onPress={() =>
+                router.push(
+                  `/buyer-hub/orders/dispute-issue?id=${order.id}`
+                )
+              }
+            >
+              <Ionicons
+                name="alert-circle-outline"
+                size={18}
+                color="#fff"
+              />
+              <Text style={styles.disputeText}>
+                Report an Issue
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </ScrollView>
 
       {/* CONFIRM MODAL */}
       <Modal transparent visible={confirmVisible} animationType="fade">
@@ -253,8 +270,6 @@ export default function BuyerOrderDetailScreen() {
           <View style={styles.modal}>
             <Text style={styles.modalTitle}>Confirm Delivery?</Text>
             <Text style={styles.modalText}>
-              Please inspect your item before confirming delivery.
-              {"\n\n"}
               Once confirmed, the seller will be paid and disputes will no longer
               be available.
             </Text>
@@ -310,126 +325,154 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#EAF4EF" },
 
   header: {
-    height: 85,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 14,
-    backgroundColor: "#7FAF9B",
-  },
+  paddingTop: 60,
+  paddingBottom: 14,
+  paddingHorizontal: 14,
+  flexDirection: "row",
+  justifyContent: "space-between",
+  alignItems: "center",
+  backgroundColor: "#7FAF9B", // ✅ THIS is what you want
+},
+
 
   headerTitle: {
-    fontSize: 16,
-    fontWeight: "900",
-    color: "#0F1E17",
-  },
+    fontSize: 22,
+    fontWeight: "800",
+    color: "#ffffff",
+  }, 
 
   image: {
     width: "100%",
     height: 260,
-    backgroundColor: "#D6E6DE",
+    resizeMode: "cover",
   },
 
   content: { padding: 16 },
 
   orderNumber: {
-    fontSize: 14,
-    fontWeight: "800",
+    fontSize: 13,
     color: "#6B8F7D",
+    fontWeight: "700",
   },
 
   title: {
     fontSize: 18,
     fontWeight: "900",
-    color: "#0F1E17",
     marginTop: 4,
+    color: "#0F1E17",
   },
 
   badge: {
-    marginTop: 8,
+    marginTop: 10,
+    alignSelf: "flex-start",
     backgroundColor: "#7FAF9B",
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
-    alignSelf: "flex-start",
   },
 
   badgeText: {
     fontSize: 11,
     fontWeight: "900",
-    color: "#0F1E17",
+    color: "#fff",
   },
 
-  receipt: {
-    marginTop: 20,
-    backgroundColor: "#fff",
-    borderRadius: 14,
-    padding: 14,
-  },
+  receipt: { marginTop: 20 },
 
   receiptRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 6,
+    paddingVertical: 6,
   },
 
-  receiptLabel: {
-    fontWeight: "700",
-    color: "#0F1E17",
-  },
+  receiptLabel: { fontSize: 14, color: "#0F1E17" },
 
-  receiptValue: {
-    fontWeight: "800",
-  },
+  receiptValue: { fontSize: 14, color: "#0F1E17" },
 
   receiptDivider: {
     height: 1,
-    backgroundColor: "#E0E0E0",
-    marginVertical: 8,
+    backgroundColor: "#D6E6DE",
+    marginVertical: 6,
+  },
+
+  trackBtn: {
+    marginTop: 18,
+    backgroundColor: "#7FAF9B",
+    height: 46,
+    borderRadius: 23,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+
+  trackText: {
+    color: "#fff",
+    fontWeight: "800",
+    fontSize: 14,
   },
 
   completeBtn: {
-    marginTop: 16,
-    backgroundColor: "#1F7A63",
-    paddingVertical: 14,
-    borderRadius: 14,
+    marginTop: 14,
+    backgroundColor: "#27AE60",
+    height: 46,
+    borderRadius: 23,
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   completeText: {
-    textAlign: "center",
-    fontWeight: "900",
     color: "#fff",
+    fontWeight: "900",
+    fontSize: 14,
+  },
+
+  disputeBtn: {
+    marginTop: 14,
+    backgroundColor: "#e58383",
+    height: 46,
+    borderRadius: 23,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+
+  disputeText: {
+    color: "#fff",
+    fontWeight: "800",
+    fontSize: 14,
   },
 
   modalBackdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.45)",
+    backgroundColor: "rgba(0,0,0,0.5)",
     justifyContent: "center",
     padding: 20,
   },
 
   modal: {
     backgroundColor: "#fff",
-    borderRadius: 16,
+    borderRadius: 14,
     padding: 20,
   },
 
   modalTitle: {
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: "900",
     marginBottom: 10,
   },
 
   modalText: {
     fontSize: 14,
-    color: "#555",
     marginBottom: 20,
+    color: "#333",
   },
 
   modalCancel: {
-    marginTop: 10,
+    marginTop: 12,
     textAlign: "center",
+    color: "#7FAF9B",
     fontWeight: "700",
-    color: "#999",
   },
 })

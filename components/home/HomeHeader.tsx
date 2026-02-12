@@ -92,7 +92,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontSize: 22,
     fontWeight: "700",
-    color: "#0F1E17", // 🔥 dark text
+    color: "#ffffff", // 🔥 dark text
   },
 
   headerIcons: {

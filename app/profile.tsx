@@ -81,6 +81,20 @@ export default function ProfileScreen() {
         <Text style={styles.username}>
           {session?.user?.email ?? ""}
         </Text>
+
+        {/* 🔥 VIEW PUBLIC PROFILE BUTTON */}
+        <TouchableOpacity
+          style={styles.publicProfileBtn}
+          onPress={() =>
+            router.push(
+          `/public-profile/${session?.user?.id}`
+           )
+        }
+        >
+          <Text style={styles.publicProfileText}>
+            View Public Profile
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {/* MENU */}
@@ -109,7 +123,6 @@ export default function ProfileScreen() {
           onPress={() => router.push("/settings")}
         />
 
-        {/* ADMIN PANEL (ADMIN ONLY) */}
         {showAdmin && (
           <MenuItem
             icon="shield-checkmark-outline"
@@ -170,7 +183,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#000000",
+    color: "#ffffff",
   },
 
   profileCard: {
@@ -202,6 +215,21 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#6B8F7D",
     marginTop: 2,
+  },
+
+  /* 🔥 PUBLIC PROFILE BUTTON */
+  publicProfileBtn: {
+    marginTop: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: "#1F7A63",
+    borderRadius: 999,
+  },
+
+  publicProfileText: {
+    color: "#ffffff",
+    fontSize: 13,
+    fontWeight: "700",
   },
 
   menu: {

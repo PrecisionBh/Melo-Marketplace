@@ -32,7 +32,7 @@ type Order = {
 
 /* ---------------- SCREEN ---------------- */
 
-export default function BuyerCompletedOrdersScreen() {
+export default function SellerCompletedOrdersScreen() {
   const router = useRouter()
   const { session } = useAuth()
 
@@ -62,13 +62,14 @@ export default function BuyerCompletedOrdersScreen() {
         listing_snapshot
       `
       )
-      .eq("buyer_id", session!.user.id)
+      .eq("seller_id", session!.user.id)
       .in("status", ["completed", "cancelled", "refunded"])
       .order("completed_at", { ascending: false })
 
     if (!error && data) {
       setOrders(data as Order[])
     } else {
+      console.log("Seller completed orders load error:", error)
       setOrders([])
     }
 
@@ -93,13 +94,12 @@ export default function BuyerCompletedOrdersScreen() {
         <View style={styles.headerRow}>
           <TouchableOpacity
             style={styles.headerBtn}
-            onPress={() => router.replace("/buyer-hub/orders")}
+            onPress={() => router.replace("/seller-hub/orders")}
           >
-            <Ionicons name="arrow-back" size={22} color="#0F1E17" />
-            <Text style={styles.headerSub}>My Orders</Text>
+            <Ionicons name="arrow-back" size={22} color="#ffffff" />
           </TouchableOpacity>
 
-          <Text style={styles.headerTitle}>Completed Orders</Text>
+          <Text style={styles.headerTitle}>Completed Sales</Text>
           <View style={{ width: 60 }} />
         </View>
 
@@ -136,7 +136,7 @@ export default function BuyerCompletedOrdersScreen() {
             size={40}
             color="#7FAF9B"
           />
-          <Text style={styles.emptyText}>No orders found</Text>
+          <Text style={styles.emptyText}>No sales found</Text>
         </View>
       ) : (
         <FlatList
@@ -153,7 +153,7 @@ export default function BuyerCompletedOrdersScreen() {
               <TouchableOpacity
                 style={styles.card}
                 onPress={() =>
-                  router.push(`/buyer-hub/orders/${item.id}`)
+                  router.push(`/seller-hub/orders/${item.id}`)
                 }
               >
                 <Image source={{ uri: imageUri }} style={styles.image} />
@@ -252,7 +252,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: "800",
-    color: "#0F1E17",
+    color: "#ffffff",
   },
 
   headerBtn: {
@@ -267,7 +267,6 @@ const styles = StyleSheet.create({
     color: "#0F1E17",
   },
 
-  /* FILTERS */
   filterRow: {
     flexDirection: "row",
     gap: 8,
@@ -295,7 +294,6 @@ const styles = StyleSheet.create({
     color: "#fff",
   },
 
-  /* EMPTY */
   empty: {
     flex: 1,
     alignItems: "center",
@@ -310,7 +308,6 @@ const styles = StyleSheet.create({
     color: "#0F1E17",
   },
 
-  /* CARD */
   card: {
     flexDirection: "row",
     gap: 12,
@@ -332,7 +329,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 15,
     fontWeight: "800",
-    color: "#0F1E17",
+    color: "#ffffff",
   },
 
   price: {

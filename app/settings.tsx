@@ -156,7 +156,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: "800",
-    color: "#0F1E17",
+    color: "#ffffff",
   },
 
   section: {

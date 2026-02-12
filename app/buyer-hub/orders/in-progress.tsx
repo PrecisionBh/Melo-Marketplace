@@ -93,8 +93,8 @@ export default function BuyerInProgressOrdersScreen() {
             style={styles.headerBtn}
             onPress={() => router.replace("/buyer-hub/orders")}
           >
-            <Ionicons name="arrow-back" size={22} color="#0F1E17" />
-            <Text style={styles.headerSub}>My Orders</Text>
+            <Ionicons name="arrow-back" size={22} color="#ffffff" />
+            
           </TouchableOpacity>
 
           <Text style={styles.headerTitle}>In-Progress</Text>
@@ -222,7 +222,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: "800",
-    color: "#0F1E17",
+    color: "#ffffff",
   },
 
   headerBtn: {

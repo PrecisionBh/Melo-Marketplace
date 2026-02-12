@@ -20,10 +20,11 @@ type Order = {
   id: string
   amount_cents: number
   buyer_id: string
-  completed_at: string
-  image_url: string | null
+  completed_at: string | null
+  escrow_status: string | null
   listing_snapshot: {
     title?: string | null
+    image_urls?: string[] | null
     image_url?: string | null
   } | null
 }
@@ -54,16 +55,17 @@ export default function SellerCompletedOrdersScreen() {
         amount_cents,
         buyer_id,
         completed_at,
-        image_url,
+        escrow_status,
         listing_snapshot
       `)
       .eq("seller_id", session!.user.id)
-      .eq("status", "completed")
+      .in("status", ["completed", "paid"]) // catch both cases safely
       .order("completed_at", { ascending: false })
 
     if (!error && data) {
       setOrders(data as Order[])
     } else {
+      console.log("Completed orders load error:", error)
       setOrders([])
     }
 
@@ -106,7 +108,7 @@ export default function SellerCompletedOrdersScreen() {
           contentContainerStyle={{ padding: 16, paddingBottom: 140 }}
           renderItem={({ item }) => {
             const imageUri =
-              item.image_url ||
+              item.listing_snapshot?.image_urls?.[0] ||
               item.listing_snapshot?.image_url ||
               "https://via.placeholder.com/150"
 
@@ -114,7 +116,10 @@ export default function SellerCompletedOrdersScreen() {
               <TouchableOpacity
                 style={styles.card}
                 onPress={() =>
-                  router.push(`/seller-hub/orders/${item.id}`)
+                  router.push({
+                    pathname: "/seller-hub/orders/[id]",
+                    params: { id: item.id },
+                  })
                 }
               >
                 {/* IMAGE */}
@@ -135,8 +140,11 @@ export default function SellerCompletedOrdersScreen() {
                   </Text>
 
                   <Text style={styles.subText}>
-                    Completed{" "}
-                    {new Date(item.completed_at).toLocaleDateString()}
+                    {item.completed_at
+                      ? `Completed ${new Date(
+                          item.completed_at
+                        ).toLocaleDateString()}`
+                      : "Completed"}
                   </Text>
                 </View>
 
@@ -160,7 +168,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#EAF4EF",
   },
 
-  /* HEADER */
   headerWrap: {
     backgroundColor: "#7FAF9B",
     paddingTop: 50,
@@ -177,10 +184,9 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: "800",
-    color: "#0F1E17",
+    color: "#ffffff",
   },
 
-  /* EMPTY */
   emptyWrap: {
     flex: 1,
     alignItems: "center",
@@ -196,7 +202,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 
-  /* CARD */
   card: {
     flexDirection: "row",
     gap: 12,
@@ -205,7 +210,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     marginBottom: 12,
     alignItems: "center",
-    opacity: 0.85,
+    opacity: 0.95,
   },
 
   image: {

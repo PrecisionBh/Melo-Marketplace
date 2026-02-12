@@ -43,6 +43,10 @@ export default function ListingDetailScreen() {
 
   const [sellerName, setSellerName] = useState<string | null>(null)
 
+  const [sellerRatingAvg, setSellerRatingAvg] = useState<number | null>(null)
+  const [sellerRatingCount, setSellerRatingCount] = useState(0)
+
+
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null)
 
   const [liked, setLiked] = useState(false)
@@ -121,6 +125,21 @@ export default function ListingDetailScreen() {
     }
 
     setSellerName(data?.display_name ?? null)
+
+    // Load seller ratings
+const { data: ratings } = await supabase
+  .from("ratings")
+  .select("rating")
+  .eq("to_user_id", listing.user_id)
+
+if (!ratings || ratings.length === 0) {
+  setSellerRatingAvg(null)
+  setSellerRatingCount(0)
+} else {
+  const total = ratings.reduce((sum, r) => sum + r.rating, 0)
+  setSellerRatingAvg(Number((total / ratings.length).toFixed(1)))
+  setSellerRatingCount(ratings.length)
+}
   }
 
   /* ---------------- MESSAGE SELLER ---------------- */
@@ -298,20 +317,25 @@ export default function ListingDetailScreen() {
           </ScrollView>
         )}
 
-        {/* SELLER (MOVED ABOVE TITLE, CLICKABLE, BUTTON REMOVED) */}
-        {!isSeller && (
-          <View style={styles.sellerRowTop}>
-            <TouchableOpacity
-              onPress={() =>
-                router.push(`/public-profile/${listing.user_id}`)
-              }
-            >
-              <Text style={styles.sellerTextTop}>
-                Sold by {sellerName ?? "Seller"}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
+        {/* SELLER INFO */}
+<View style={styles.sellerInfoRow}>
+  <TouchableOpacity
+    onPress={() =>
+      router.push(`/public-profile/${listing.user_id}`)
+    }
+  >
+    <Text style={styles.sellerNameSmall}>
+      {sellerName ?? "Seller"}
+    </Text>
+  </TouchableOpacity>
+
+  {sellerRatingCount > 0 && (
+    <Text style={styles.sellerRatingSmall}>
+      {sellerRatingAvg} ★ ({sellerRatingCount})
+    </Text>
+  )}
+</View>
+
 
         {/* CONTENT */}
         <View style={styles.content}>
@@ -655,4 +679,26 @@ const styles = StyleSheet.create({
     height: "100%",
     resizeMode: "contain",
   },
+
+  sellerInfoRow: {
+  paddingHorizontal: 16,
+  paddingTop: 10,
+  paddingBottom: 6,
+  flexDirection: "row",
+  alignItems: "center",
+  gap: 8,
+},
+
+sellerNameSmall: {
+  fontSize: 13,
+  fontWeight: "700",
+  color: "#0F1E17",
+},
+
+sellerRatingSmall: {
+  fontSize: 12,
+  color: "#6B8F7D",
+  fontWeight: "600",
+},
+
 })

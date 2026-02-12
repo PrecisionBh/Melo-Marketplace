@@ -1,9 +1,52 @@
 import { Ionicons } from "@expo/vector-icons"
-import { useRouter } from "expo-router"
+import { useFocusEffect, useRouter } from "expo-router"
+import { useCallback, useState } from "react"
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native"
+
+import { useAuth } from "@/context/AuthContext"
+import { supabase } from "@/lib/supabase"
 
 export default function BuyerOrdersHubScreen() {
   const router = useRouter()
+  const { session } = useAuth()
+  const buyerId = session?.user?.id
+
+  const [inProgressCount, setInProgressCount] = useState(0)
+  const [openDisputesCount, setOpenDisputesCount] = useState(0)
+
+  /* ---------------- LOAD COUNTS ---------------- */
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!buyerId) return
+      loadInProgressCount()
+      loadOpenDisputesCount()
+    }, [buyerId])
+  )
+
+  const loadInProgressCount = async () => {
+    if (!buyerId) return
+
+    const { count } = await supabase
+      .from("orders")
+      .select("id", { count: "exact", head: true })
+      .eq("buyer_id", buyerId)
+      .in("status", ["paid", "shipped", "delivered"])
+
+    setInProgressCount(count ?? 0)
+  }
+
+  const loadOpenDisputesCount = async () => {
+    if (!buyerId) return
+
+    const { count } = await supabase
+      .from("disputes")
+      .select("id", { count: "exact", head: true })
+      .eq("buyer_id", buyerId)
+      .eq("status", "open")
+
+    setOpenDisputesCount(count ?? 0)
+  }
 
   return (
     <View style={styles.screen}>
@@ -25,6 +68,8 @@ export default function BuyerOrdersHubScreen() {
         <MenuItem
           icon="time-outline"
           label="In Progress"
+          badgeCount={inProgressCount}
+          badgeColor="blue"
           onPress={() => router.push("/buyer-hub/orders/in-progress")}
         />
 
@@ -37,6 +82,8 @@ export default function BuyerOrdersHubScreen() {
         <MenuItem
           icon="alert-circle-outline"
           label="Disputes"
+          badgeCount={openDisputesCount}
+          badgeColor="red"
           onPress={() => router.push("/buyer-hub/orders/disputes")}
         />
       </View>
@@ -49,21 +96,38 @@ export default function BuyerOrdersHubScreen() {
 function MenuItem({
   icon,
   label,
+  badgeCount,
+  badgeColor = "red",
   onPress,
 }: {
   icon: any
   label: string
+  badgeCount?: number
+  badgeColor?: "red" | "blue"
   onPress: () => void
 }) {
   return (
     <TouchableOpacity style={styles.menuItem} onPress={onPress}>
       <Ionicons name={icon} size={22} color="#0F1E17" />
       <Text style={styles.menuText}>{label}</Text>
+
+      <View style={{ flex: 1 }} />
+
+      {typeof badgeCount === "number" && badgeCount > 0 && (
+        <View
+          style={[
+            styles.countBadge,
+            badgeColor === "blue" && styles.blueBadge,
+          ]}
+        >
+          <Text style={styles.countText}>{badgeCount}</Text>
+        </View>
+      )}
+
       <Ionicons
         name="chevron-forward"
         size={18}
         color="#9FB8AC"
-        style={{ marginLeft: "auto" }}
       />
     </TouchableOpacity>
   )
@@ -124,5 +188,25 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: "#0F1E17",
     fontWeight: "500",
+  },
+
+  countBadge: {
+    backgroundColor: "#EB5757",
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 8,
+  },
+
+  blueBadge: {
+    backgroundColor: "#2F80ED",
+  },
+
+  countText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "900",
   },
 })

@@ -5,12 +5,13 @@ import { Platform } from "react-native"
 
 /**
  * 🔔 Notification behavior while app is foregrounded
- * Expo will infer the types correctly here
+ * Updated for new Expo API (no deprecated shouldShowAlert)
  */
 const notificationHandler: Notifications.NotificationHandler = {
   handleNotification: async () => {
     return {
-      shouldShowAlert: true,
+      shouldShowBanner: true,   // 👈 replaces shouldShowAlert
+      shouldShowList: true,     // 👈 replaces shouldShowAlert
       shouldPlaySound: true,
       shouldSetBadge: true,
     } as Notifications.NotificationBehavior
@@ -18,6 +19,7 @@ const notificationHandler: Notifications.NotificationHandler = {
 }
 
 Notifications.setNotificationHandler(notificationHandler)
+
 /**
  * 📲 Register for Expo push notifications
  * Returns Expo push token (NO Firebase)

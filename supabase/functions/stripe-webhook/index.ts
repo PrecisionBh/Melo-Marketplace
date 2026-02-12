@@ -55,6 +55,7 @@ async function markOrderPaid(params: {
       item_price_cents,
       shipping_amount_cents,
       seller_id,
+      buyer_id,
       paid_at,
       escrow_funded_at,
       wallet_credited
@@ -201,6 +202,91 @@ async function markOrderPaid(params: {
       console.log("📦 Listing marked sold:", resolvedListingId)
     }
   }
+
+  try {
+    if (order.seller_id) {
+      await supabase.from("notifications").insert({
+        user_id: order.seller_id,
+        type: "order",
+        title: "New Sale 🎉",
+        body: "A buyer has paid. Please ship your item.",
+        data: {
+          route: "/seller-hub/orders/[id]",
+          params: { id: orderId },
+        },
+      })
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("expo_push_token, notifications_enabled")
+        .eq("id", order.seller_id)
+        .single()
+
+      if (
+        profile?.expo_push_token &&
+        profile.notifications_enabled !== false
+      ) {
+        await fetch("https://exp.host/--/api/v2/push/send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            to: profile.expo_push_token,
+            title: "New Sale 🎉",
+            body: "A buyer has paid. Please ship your item.",
+            data: {
+              type: "order",
+              route: "/seller-hub/orders/[id]",
+              params: { id: orderId },
+            },
+          }),
+        })
+      }
+    }
+
+    // ---------------- NOTIFY BUYER (ORDER PLACED) ----------------
+  if (order.buyer_id) {
+    await supabase.from("notifications").insert({
+      user_id: order.buyer_id,
+      type: "order",
+      title: "Order Placed ✅",
+      body: "Your order was placed successfully.",
+      data: {
+        route: "/buyer-hub/orders/[id]",
+        params: { id: orderId },
+      },
+    })
+
+    const { data: buyerProfile } = await supabase
+      .from("profiles")
+      .select("expo_push_token, notifications_enabled")
+      .eq("id", order.buyer_id)
+      .single()
+
+    if (
+      buyerProfile?.expo_push_token &&
+      buyerProfile.notifications_enabled !== false
+    ) {
+      await fetch("https://exp.host/--/api/v2/push/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to: buyerProfile.expo_push_token,
+          title: "Order Placed ✅",
+          body: "Your order was placed successfully.",
+          data: {
+            type: "order",
+            route: "/buyer-hub/orders/[id]",
+            params: { id: orderId },
+          },
+        }),
+      })
+    }
+  }
+
+  } catch (err) {
+    console.warn("[notify order_paid] failed:", err)
+  }
+
 
   return json(200, { received: true })
 }

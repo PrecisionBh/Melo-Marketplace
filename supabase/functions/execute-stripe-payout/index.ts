@@ -151,8 +151,49 @@ Deno.serve(async (req) => {
         stripe_transfer_id: transfer.id,
       }),
       { status: 500 }
-    )
+    ) 
   }
+
+  // ---------------- NOTIFY SELLER (ESCROW RELEASED) ----------------
+try {
+  await supabase.from("notifications").insert({
+    user_id: seller_id,
+    type: "order",
+    title: "Funds Released 💰",
+    body: "Escrow has been released. Your funds are now available.",
+    data: {
+      route: "/seller-hub/wallet",
+    },
+  })
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("expo_push_token, notifications_enabled")
+    .eq("id", seller_id)
+    .single()
+
+  if (
+    profile?.expo_push_token &&
+    profile.notifications_enabled !== false
+  ) {
+    await fetch("https://exp.host/--/api/v2/push/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        to: profile.expo_push_token,
+        title: "Funds Released 💰",
+        body: "Escrow has been released. Your funds are now available.",
+        data: {
+          type: "order",
+          route: "/seller-hub/wallet",
+        },
+      }),
+    })
+  }
+} catch (err) {
+  console.warn("[notify escrow_released] failed:", err)
+}
+
 
   return Response.json({
     success: true,

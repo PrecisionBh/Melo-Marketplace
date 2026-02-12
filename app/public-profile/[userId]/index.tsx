@@ -40,7 +40,6 @@ export default function PublicProfileScreen() {
   const params = useLocalSearchParams()
   const router = useRouter()
 
-  // normalize param ONCE
   const userId =
     typeof params.userId === "string"
       ? params.userId
@@ -59,8 +58,6 @@ export default function PublicProfileScreen() {
   const [ratingCount, setRatingCount] = useState(0)
   const [soldCount, setSoldCount] = useState(0)
 
-  /* ---------------- EFFECT ---------------- */
-
   useEffect(() => {
     if (!userId) return
     loadProfile()
@@ -68,8 +65,6 @@ export default function PublicProfileScreen() {
     loadSales()
     loadListings(true)
   }, [userId])
-
-  /* ---------------- LOADERS ---------------- */
 
   const loadProfile = async () => {
     const { data } = await supabase
@@ -141,8 +136,6 @@ export default function PublicProfileScreen() {
     }
   }
 
-  /* ---------------- RENDER ---------------- */
-
   if (loading) {
     return <ActivityIndicator style={{ marginTop: 60 }} />
   }
@@ -172,15 +165,19 @@ export default function PublicProfileScreen() {
         data={listings}
         keyExtractor={(item) => item.id}
         numColumns={2}
-        contentContainerStyle={{ paddingBottom: 120 }}
+        contentContainerStyle={{
+          paddingHorizontal: 16,
+          paddingBottom: 120,
+        }}
+        columnWrapperStyle={{
+          justifyContent: "space-between",
+          marginBottom: 16,
+        }}
         onEndReached={() => loadListings()}
         onEndReachedThreshold={0.6}
-        ListEmptyComponent={
-          <Text style={styles.emptyText}>No listings yet</Text>
-        }
         ListHeaderComponent={
           <>
-            {/* IDENTITY */}
+            {/* PROFILE INFO */}
             <View style={styles.identity}>
               <Image
                 source={
@@ -217,22 +214,28 @@ export default function PublicProfileScreen() {
               </View>
             )}
 
-            <Text style={styles.sectionTitle}>Listings</Text>
+            {/* GREEN DIVIDER */}
+            <View style={styles.dividerWrap}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>LISTINGS</Text>
+            </View>
           </>
         }
         renderItem={({ item }) => (
-          <ListingCard
-            listing={{
-              ...item,
-              image_url: item.image_urls?.[0] ?? null,
-            }}
-            onPress={() =>
-              router.push({
-                pathname: "/listing/[id]",
-                params: { id: item.id },
-              })
-            }
-          />
+          <View style={{ width: "48%" }}>
+            <ListingCard
+              listing={{
+                ...item,
+                image_url: item.image_urls?.[0] ?? null,
+              }}
+              onPress={() =>
+                router.push({
+                  pathname: "/listing/[id]",
+                  params: { id: item.id },
+                })
+              }
+            />
+          </View>
         )}
       />
     </View>
@@ -347,19 +350,29 @@ const styles = StyleSheet.create({
   bioText: {
     color: "#0F1E17",
     lineHeight: 20,
-  },
-
-  sectionTitle: {
-    marginTop: 20,
-    marginLeft: 16,
-    marginBottom: 8,
-    fontSize: 16,
-    fontWeight: "800",
-  },
-
-  emptyText: {
     textAlign: "center",
-    marginTop: 40,
-    color: "#6B8F7D",
+  },
+
+  dividerWrap: {
+    marginTop: 24,
+    marginBottom: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  dividerLine: {
+    position: "absolute",
+    width: "100%",
+    height: 2,
+    backgroundColor: "#7FAF9B",
+  },
+
+  dividerText: {
+    backgroundColor: "#EAF4EF",
+    paddingHorizontal: 12,
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#0F1E17",
+    letterSpacing: 1,
   },
 })

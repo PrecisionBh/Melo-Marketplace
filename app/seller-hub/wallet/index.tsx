@@ -215,7 +215,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     backgroundColor: "#7FAF9B",
   },
-  headerTitle: { fontSize: 16, fontWeight: "900", color: "#0F1E17" },
+  headerTitle: { fontSize: 18, fontWeight: "900", color: "#ffffff" },
   content: { padding: 16, gap: 16 },
 
   lifetimeBlock: {

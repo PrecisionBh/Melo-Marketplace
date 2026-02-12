@@ -49,17 +49,55 @@ export default function MyListingsScreen() {
     setLoading(false)
   }
 
-  const toggleListingStatus = async (
-    id: string,
-    current: "active" | "inactive"
-  ) => {
-    const next = current === "active" ? "inactive" : "active"
+  /* ---------------- DEACTIVATE ---------------- */
 
+  const deactivateListing = async (id: string) => {
     await supabase
       .from("listings")
-      .update({ status: next })
+      .update({ status: "inactive" })
       .eq("id", id)
 
+    loadListings()
+  }
+
+  /* ---------------- DUPLICATE ---------------- */
+
+  const duplicateListing = async (id: string) => {
+    const { data: oldListing, error } = await supabase
+      .from("listings")
+      .select("*")
+      .eq("id", id)
+      .single()
+
+    if (error || !oldListing) {
+      Alert.alert("Error", "Could not duplicate listing.")
+      return
+    }
+
+    const {
+      id: _,
+      created_at,
+      updated_at,
+      is_sold,
+      status,
+      ...rest
+    } = oldListing
+
+    const { error: insertError } = await supabase
+      .from("listings")
+      .insert({
+        ...rest,
+        status: "active",
+        is_sold: false,
+        created_at: new Date().toISOString(),
+      })
+
+    if (insertError) {
+      Alert.alert("Error", "Duplicate failed.")
+      return
+    }
+
+    Alert.alert("Success", "Listing duplicated.")
     loadListings()
   }
 
@@ -87,7 +125,6 @@ export default function MyListingsScreen() {
 
   return (
     <View style={styles.screen}>
-      {/* 🌿 SAGE GREEN HEADER */}
       <View style={styles.headerWrap}>
         <View style={styles.headerRow}>
           <TouchableOpacity onPress={() => router.back()}>
@@ -95,7 +132,6 @@ export default function MyListingsScreen() {
           </TouchableOpacity>
 
           <Text style={styles.headerTitle}>My Listings</Text>
-
           <View style={{ width: 22 }} />
         </View>
       </View>
@@ -112,66 +148,73 @@ export default function MyListingsScreen() {
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ padding: 14, paddingBottom: 140 }}
           renderItem={({ item }) => (
-            <TouchableOpacity
-              style={styles.card}
-              onPress={() => router.push(`/listing/${item.id}`)}
-            >
-              <Image
-                source={{
-                  uri:
-                    item.image_urls?.[0] ??
-                    "https://via.placeholder.com/150",
-                }}
-                style={styles.image}
-              />
+            <View style={styles.card}>
+              <TouchableOpacity
+                style={{ flexDirection: "row", gap: 12 }}
+                onPress={() => router.push(`/listing/${item.id}`)}
+              >
+                <Image
+                  source={{
+                    uri:
+                      item.image_urls?.[0] ??
+                      "https://via.placeholder.com/150",
+                  }}
+                  style={styles.image}
+                />
 
-              <View style={{ flex: 1 }}>
-                <Text style={styles.title}>{item.title}</Text>
-                <Text style={styles.price}>
-                  ${item.price.toFixed(2)}
-                </Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.title}>{item.title}</Text>
+                  <Text style={styles.price}>
+                    ${item.price.toFixed(2)}
+                  </Text>
 
-                {item.status === "active" && (
-                  <Text style={styles.activeText}>Active</Text>
-                )}
+                  {item.status === "active" && (
+                    <Text style={styles.activeText}>Active</Text>
+                  )}
+                </View>
+              </TouchableOpacity>
 
-                {/* ACTION ROW */}
-                <View style={styles.actionsRow}>
+              <View style={styles.actionsRow}>
+                {item.status === "active" ? (
                   <TouchableOpacity
                     style={styles.smallBtn}
-                    onPress={() =>
-                      toggleListingStatus(item.id, item.status)
-                    }
+                    onPress={() => deactivateListing(item.id)}
                   >
                     <Text style={styles.smallBtnText}>
-                      {item.status === "active"
-                        ? "De-List"
-                        : "Re-List"}
+                      Deactivate
                     </Text>
                   </TouchableOpacity>
-
+                ) : (
                   <TouchableOpacity
-                    style={[styles.smallBtn, styles.deleteBtn]}
-                    onPress={() => deleteListing(item.id)}
+                    style={styles.smallBtn}
+                    onPress={() => duplicateListing(item.id)}
                   >
-                    <Text style={styles.deleteText}>Delete</Text>
+                    <Text style={styles.smallBtnText}>
+                      Duplicate
+                    </Text>
                   </TouchableOpacity>
-                </View>
+                )}
 
-                {/* BIG EDIT BUTTON */}
                 <TouchableOpacity
-                  style={styles.editBtn}
-                  onPress={() =>
-                    router.push({
-                      pathname: "/edit-listing/[id]" as any,
-                      params: { id: item.id },
-                    } as any)
-                  }
+                  style={[styles.smallBtn, styles.deleteBtn]}
+                  onPress={() => deleteListing(item.id)}
                 >
-                  <Text style={styles.editText}>EDIT</Text>
+                  <Text style={styles.deleteText}>Delete</Text>
                 </TouchableOpacity>
               </View>
-            </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.editBtn}
+                onPress={() =>
+                  router.push({
+                    pathname: "/edit-listing/[id]" as any,
+                    params: { id: item.id },
+                  } as any)
+                }
+              >
+                <Text style={styles.editText}>EDIT</Text>
+              </TouchableOpacity>
+            </View>
           )}
         />
       )}
@@ -182,10 +225,7 @@ export default function MyListingsScreen() {
 /* ---------------- STYLES ---------------- */
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: "#EAF4EF",
-  },
+  screen: { flex: 1, backgroundColor: "#EAF4EF" },
 
   headerWrap: {
     backgroundColor: "#7FAF9B",
@@ -203,7 +243,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: "800",
-    color: "#0F1E17",
+    color: "#ffffff",
   },
 
   empty: {
@@ -219,8 +259,6 @@ const styles = StyleSheet.create({
   },
 
   card: {
-    flexDirection: "row",
-    gap: 12,
     backgroundColor: "#fff",
     padding: 12,
     borderRadius: 16,
