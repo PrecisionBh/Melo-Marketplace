@@ -17,8 +17,6 @@ import {
 import { useAuth } from "@/context/AuthContext"
 import { supabase } from "@/lib/supabase"
 
-/* ---------------- TYPES ---------------- */
-
 type Dispute = {
   id: string
   order_id: string
@@ -31,10 +29,8 @@ type Dispute = {
   seller_responded_at: string | null
 }
 
-/* ---------------- SCREEN ---------------- */
-
 export default function SellerDisputeIssue() {
-  const { orderId } = useLocalSearchParams<{ orderId: string }>()
+  const { id } = useLocalSearchParams<{ id: string }>()
   const router = useRouter()
   const { session } = useAuth()
   const user = session?.user
@@ -46,33 +42,46 @@ export default function SellerDisputeIssue() {
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
-    if (orderId && user) loadDispute()
-  }, [orderId, user])
+    if (id && user) {
+      loadDispute()
+    }
+  }, [id, user])
 
   const loadDispute = async () => {
-    setLoading(true)
+    try {
+      setLoading(true)
 
-    const { data } = await supabase
-      .from("disputes")
-      .select("*")
-      .eq("order_id", orderId)
-      .single()
+      const { data, error } = await supabase
+        .from("disputes")
+        .select("*")
+        .eq("order_id", id)
+        .single()
 
-    if (!data || data.seller_id !== user?.id) {
-      Alert.alert("Access denied")
-      router.back()
-      return
+      if (error || !data) {
+        Alert.alert("Dispute not found")
+        router.back()
+        return
+      }
+
+      if (data.seller_id !== user?.id) {
+        Alert.alert("Access denied")
+        router.back()
+        return
+      }
+
+      setDispute(data)
+    } catch (err) {
+      console.error("Load dispute error:", err)
+    } finally {
+      setLoading(false)
     }
-
-    setDispute(data)
-    setLoading(false)
   }
 
   /* ---------------- IMAGE PICKER ---------------- */
 
   const pickImage = async () => {
     const res = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ["images"],
       quality: 0.8,
     })
 
@@ -91,7 +100,9 @@ export default function SellerDisputeIssue() {
 
       const { error } = await supabase.storage
         .from("dispute-images")
-        .upload(fileName, blob)
+        .upload(fileName, blob, {
+          contentType: "image/jpeg",
+        })
 
       if (!error) {
         const { data } = supabase.storage
@@ -122,7 +133,7 @@ export default function SellerDisputeIssue() {
         .from("disputes")
         .update({
           seller_responded_at: new Date().toISOString(),
-          status: "under_review",
+          status: "seller_responded", // ← correct lifecycle status
           evidence_urls: [
             ...(dispute?.evidence_urls ?? []),
             ...uploadedUrls,
@@ -132,7 +143,7 @@ export default function SellerDisputeIssue() {
 
       Alert.alert(
         "Response submitted",
-        "Your response has been sent and is under review."
+        "Your response has been sent to review."
       )
 
       router.back()
@@ -147,22 +158,25 @@ export default function SellerDisputeIssue() {
   /* ---------------- UI ---------------- */
 
   if (loading) {
-    return <ActivityIndicator style={{ marginTop: 80 }} />
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" />
+      </View>
+    )
   }
 
-  if (!dispute) {
-    return null
-  }
+  if (!dispute) return null
 
   return (
     <View style={styles.screen}>
       {/* HEADER */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={20} color="#1F7A63" />
+          <Ionicons name="arrow-back" size={20} color="#FFFFFF" />
         </TouchableOpacity>
 
         <Text style={styles.headerTitle}>Dispute Response</Text>
+
         <View style={{ width: 24 }} />
       </View>
 
@@ -179,7 +193,7 @@ export default function SellerDisputeIssue() {
         {/* BUYER EVIDENCE */}
         {dispute.evidence_urls?.length ? (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Buyer Evidence</Text>
+            <Text style={styles.sectionTitle}>Evidence</Text>
             <ScrollView horizontal>
               {dispute.evidence_urls.map((url) => (
                 <Image
@@ -204,7 +218,10 @@ export default function SellerDisputeIssue() {
             onChangeText={setResponse}
           />
 
-          <TouchableOpacity style={styles.imageBtn} onPress={pickImage}>
+          <TouchableOpacity
+            style={styles.imageBtn}
+            onPress={pickImage}
+          >
             <Text style={styles.imageText}>
               Add Images / Screenshots
             </Text>
@@ -237,20 +254,18 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#F6F7F8" },
 
   header: {
-    height: 56,
-    backgroundColor: "#E8F5EE",
+    height: 60,
+    backgroundColor: "#7FAF9B",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#D1E9DD",
+    paddingHorizontal: 16,
   },
 
   headerTitle: {
     fontSize: 16,
     fontWeight: "800",
-    color: "#1F7A63",
+    color: "#FFFFFF",
   },
 
   content: { padding: 16, paddingBottom: 120 },
@@ -322,5 +337,11 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "900",
     textAlign: "center",
+  },
+
+  center: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
   },
 })

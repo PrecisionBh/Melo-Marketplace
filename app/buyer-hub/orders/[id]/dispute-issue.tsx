@@ -14,8 +14,8 @@ import {
   View,
 } from "react-native"
 
-import { useAuth } from "../../../context/AuthContext"
-import { supabase } from "../../../lib/supabase"
+import { useAuth } from "../../../../context/AuthContext"
+import { supabase } from "../../../../lib/supabase"
 
 const REASONS = [
   "Item not received",
@@ -26,7 +26,7 @@ const REASONS = [
 ]
 
 export default function DisputeIssuePage() {
-  const { orderId } = useLocalSearchParams<{ orderId: string }>()
+  const { id } = useLocalSearchParams<{ id: string }>()
   const router = useRouter()
   const { session } = useAuth()
   const user = session?.user
@@ -36,7 +36,7 @@ export default function DisputeIssuePage() {
   const [images, setImages] = useState<string[]>([])
   const [submitting, setSubmitting] = useState(false)
 
-  if (!orderId || !user) {
+  if (!id || !user) {
     return null
   }
 
@@ -94,51 +94,88 @@ export default function DisputeIssuePage() {
     try {
       setSubmitting(true)
 
+      // Get order buyer & seller
       const { data: order, error: orderError } = await supabase
         .from("orders")
         .select("buyer_id, seller_id")
-        .eq("id", orderId)
+        .eq("id", id)
         .single()
 
       if (orderError || !order) throw orderError
 
+      // 🔍 Check if dispute already exists
+      const { data: existingDispute } = await supabase
+        .from("disputes")
+        .select("id")
+        .eq("order_id", id)
+        .maybeSingle()
+
+      if (existingDispute) {
+        Alert.alert(
+          "Dispute Already Opened",
+          "A dispute has already been opened for this order."
+        )
+        setSubmitting(false)
+        return
+      }
+
+      // Insert dispute
       const { data: dispute, error: disputeError } = await supabase
         .from("disputes")
         .insert({
-          order_id: orderId,
+          order_id: id,
           buyer_id: order.buyer_id,
           seller_id: order.seller_id,
           reason,
           description,
-          status: "open",
+          status: "issue_open",
         })
         .select()
         .single()
 
       if (disputeError || !dispute) throw disputeError
 
+      // Upload evidence images
       if (images.length > 0) {
         const evidenceUrls = await uploadEvidenceImages(dispute.id)
 
-        await supabase
+        const { error: updateEvidenceError } = await supabase
           .from("disputes")
           .update({ evidence_urls: evidenceUrls })
           .eq("id", dispute.id)
+
+        if (updateEvidenceError) throw updateEvidenceError
       }
 
-      await supabase
+      // 🔔 Notify seller
+      await supabase.from("notifications").insert({
+        user_id: order.seller_id,
+        type: "dispute_opened",
+        title: "Dispute Opened",
+        message:
+          "A dispute was opened on one of your orders. Please respond promptly. If no response is received within 72 hours, we may automatically side with the buyer.",
+        related_id: dispute.id,
+        created_at: new Date().toISOString(),
+      })
+
+      // ✅ Flag order as disputed (DO NOT TOUCH ESCROW)
+      const { error: orderUpdateError } = await supabase
         .from("orders")
-        .update({ status: "disputed" })
-        .eq("id", orderId)
+        .update({ is_disputed: true })
+        .eq("id", id)
+
+      if (orderUpdateError) throw orderUpdateError
 
       Alert.alert(
-        "Dispute submitted",
-        "Your dispute has been submitted and is under review."
+        "Dispute Submitted",
+        "Your dispute has been submitted and the seller has been notified."
       )
 
-      router.back()
+      // 🔁 Reroute back to Orders page
+      router.replace("/buyer-hub/orders")
+
     } catch (err) {
-      console.error(err)
+      console.error("Dispute Error:", err)
       Alert.alert(
         "Error",
         "Unable to submit dispute. Please try again."
@@ -152,7 +189,6 @@ export default function DisputeIssuePage() {
 
   return (
     <View style={styles.screen}>
-      {/* HEADER */}
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backBtn}
@@ -162,17 +198,14 @@ export default function DisputeIssuePage() {
         </TouchableOpacity>
 
         <Text style={styles.headerTitle}>File a Dispute</Text>
-
         <View style={{ width: 32 }} />
       </View>
 
       <ScrollView contentContainerStyle={styles.container}>
-        {/* ORDER REFERENCE */}
         <Text style={styles.orderRef}>
-          Order #{orderId.slice(0, 8)}
+          Order #{id.slice(0, 8)}
         </Text>
 
-        {/* REASON */}
         <Text style={styles.label}>Reason</Text>
         {REASONS.map((r) => (
           <TouchableOpacity
@@ -194,7 +227,6 @@ export default function DisputeIssuePage() {
           </TouchableOpacity>
         ))}
 
-        {/* DESCRIPTION */}
         <Text style={styles.label}>Describe the issue</Text>
         <TextInput
           style={styles.textArea}
@@ -204,11 +236,10 @@ export default function DisputeIssuePage() {
           onChangeText={setDescription}
         />
 
-        {/* EVIDENCE */}
         <Text style={styles.label}>Upload evidence (optional)</Text>
         <View style={styles.imageRow}>
           {images.map((uri, idx) => (
-            <Image key={idx} source={{ uri }} style={styles.image} />
+            <Image key={idx} source={{ uri }} style={styles.previewImage} />
           ))}
 
           <TouchableOpacity style={styles.addImage} onPress={pickImage}>
@@ -216,7 +247,6 @@ export default function DisputeIssuePage() {
           </TouchableOpacity>
         </View>
 
-        {/* SUBMIT */}
         <TouchableOpacity
           style={styles.submitBtn}
           onPress={submitDispute}
@@ -236,11 +266,7 @@ export default function DisputeIssuePage() {
 /* ---------------- STYLES ---------------- */
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: "#F6F7F8",
-  },
-
+  screen: { flex: 1, backgroundColor: "#F6F7F8" },
   header: {
     height: 90,
     backgroundColor: "#E8F5EE",
@@ -251,56 +277,34 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#D1E9DD",
   },
-
-  backBtn: {
-    width: 32,
-    alignItems: "flex-start",
-  },
-
+  backBtn: { width: 32, alignItems: "flex-start" },
   headerTitle: {
     fontSize: 16,
     fontWeight: "700",
     color: "#1F7A63",
   },
-
-  container: {
-    padding: 16,
-    paddingBottom: 32,
-  },
-
+  container: { padding: 16, paddingBottom: 32 },
   orderRef: {
     fontSize: 12,
     fontWeight: "700",
     color: "#6B7280",
     marginBottom: 12,
   },
-
   label: {
     fontSize: 14,
     fontWeight: "600",
     marginTop: 16,
     marginBottom: 6,
   },
-
   reasonBtn: {
     padding: 12,
     borderRadius: 8,
     backgroundColor: "#E9ECEF",
     marginBottom: 8,
   },
-
-  reasonSelected: {
-    backgroundColor: "#1F7A63",
-  },
-
-  reasonText: {
-    color: "#000",
-  },
-
-  reasonTextSelected: {
-    color: "#fff",
-  },
-
+  reasonSelected: { backgroundColor: "#1F7A63" },
+  reasonText: { color: "#000" },
+  reasonTextSelected: { color: "#fff" },
   textArea: {
     minHeight: 120,
     borderRadius: 8,
@@ -308,21 +312,14 @@ const styles = StyleSheet.create({
     padding: 12,
     textAlignVertical: "top",
   },
-
-  imageRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    marginTop: 8,
-  },
-
-  image: {
+  imageRow: { flexDirection: "row", flexWrap: "wrap", marginTop: 8 },
+  previewImage: {
     width: 80,
     height: 80,
     borderRadius: 6,
     marginRight: 8,
     marginBottom: 8,
   },
-
   addImage: {
     width: 80,
     height: 80,
@@ -331,12 +328,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-
-  addImageText: {
-    fontSize: 32,
-    color: "#374151",
-  },
-
+  addImageText: { fontSize: 32, color: "#374151" },
   submitBtn: {
     marginTop: 22,
     backgroundColor: "#1F7A63",
@@ -344,7 +336,6 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: "center",
   },
-
   submitText: {
     color: "#fff",
     fontSize: 16,

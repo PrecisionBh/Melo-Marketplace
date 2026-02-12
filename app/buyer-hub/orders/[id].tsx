@@ -246,10 +246,10 @@ export default function BuyerOrderDetailScreen() {
             <TouchableOpacity
               style={styles.disputeBtn}
               onPress={() =>
-                router.push(
-                  `/buyer-hub/orders/dispute-issue?id=${order.id}`
-                )
-              }
+  router.push(`/buyer-hub/orders/${order.id}/dispute-issue`)
+}
+
+              
             >
               <Ionicons
                 name="alert-circle-outline"
