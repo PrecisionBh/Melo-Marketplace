@@ -136,6 +136,60 @@ export default function BuyerOrderDetailScreen() {
     router.replace("/buyer-hub/orders/completed")
   }
 
+  const cancelOrder = async () => {
+    if (!order || processing) return
+
+    Alert.alert(
+      "Cancel Order?",
+      "Are you sure you want to cancel this order? This will refund your payment. Fees are non-refundable.",
+      [
+        { text: "Go Back", style: "cancel" },
+        {
+          text: "Yes, Cancel Order",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              setProcessing(true)
+
+              const { error } = await supabase.functions.invoke(
+                "cancel-order-refund",
+                {
+                  body: {
+                    order_id: order.id,
+                  },
+                }
+              )
+
+              if (error) {
+                Alert.alert(
+                  "Cancellation Failed",
+                  error.message ?? "Unable to cancel this order."
+                )
+                setProcessing(false)
+                return
+              }
+
+              Alert.alert(
+                "Order Cancelled",
+                "Your order has been cancelled and refunded."
+              )
+
+              await loadOrder() // refresh order state
+              setProcessing(false)
+            } catch (err) {
+              console.error("Cancel order error:", err)
+              Alert.alert(
+                "Error",
+                "Something went wrong cancelling your order."
+              )
+              setProcessing(false)
+            }
+          },
+        },
+      ]
+    )
+  }
+
   if (loading || !order) {
     return <ActivityIndicator style={{ marginTop: 60 }} />
   }
@@ -147,6 +201,8 @@ export default function BuyerOrderDetailScreen() {
     ["shipped", "delivered", "completed"].includes(order.status)
 
   const canConfirmDelivery = order.status === "shipped"
+
+  const canCancel = order.status === "paid"
 
   const canDispute =
     !order.is_disputed &&
@@ -240,6 +296,32 @@ export default function BuyerOrderDetailScreen() {
               </Text>
             </TouchableOpacity>
           )}
+
+          {/* CANCEL ORDER (BEFORE SHIPMENT ONLY) */}
+{!isCompleted && canCancel && (
+  <TouchableOpacity
+    style={{
+      marginTop: 14,
+      backgroundColor: "#D64545",
+      height: 46,
+      borderRadius: 23,
+      alignItems: "center",
+      justifyContent: "center",
+    }}
+    onPress={cancelOrder}
+    disabled={processing}
+  >
+    <Text
+      style={{
+        color: "#fff",
+        fontWeight: "900",
+        fontSize: 14,
+      }}
+    >
+      {processing ? "Cancelling…" : "Cancel Order"}
+    </Text>
+  </TouchableOpacity>
+)}
 
           {/* DISPUTE */}
           {canDispute && (
