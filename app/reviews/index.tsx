@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import {
     ActivityIndicator,
     Alert,
+    ScrollView,
     StyleSheet,
     Text,
     TextInput,
@@ -12,6 +13,19 @@ import {
 } from "react-native"
 
 import { supabase } from "@/lib/supabase"
+
+/* ---------------- QUICK TAG OPTIONS ---------------- */
+
+const QUICK_TAGS = [
+  "Fast Shipper 🚀",
+  "Great Communication 💬",
+  "Item As Described 🎯",
+  "Fair Negotiation 🤝",
+  "Kind & Professional ⭐",
+  "Well Packaged 📦",
+  "Smooth Transaction ⚡",
+  "Honest Seller ✔️",
+]
 
 /* ---------------- SCREEN ---------------- */
 
@@ -23,6 +37,7 @@ export default function LeaveReviewScreen() {
   const [submitting, setSubmitting] = useState(false)
   const [rating, setRating] = useState<number>(0)
   const [comment, setComment] = useState("")
+  const [selectedTags, setSelectedTags] = useState<string[]>([])
   const [toUserId, setToUserId] = useState<string | null>(null)
   const [fromUserId, setFromUserId] = useState<string | null>(null)
   const [alreadyReviewed, setAlreadyReviewed] = useState(false)
@@ -34,7 +49,6 @@ export default function LeaveReviewScreen() {
       try {
         setLoading(true)
 
-        // Get current user
         const {
           data: { user },
         } = await supabase.auth.getUser()
@@ -47,7 +61,6 @@ export default function LeaveReviewScreen() {
 
         setFromUserId(user.id)
 
-        // Fetch order
         const { data: order, error } = await supabase
           .from("orders")
           .select("id, buyer_id, seller_id")
@@ -60,7 +73,6 @@ export default function LeaveReviewScreen() {
           return
         }
 
-        // Determine who we are reviewing
         let targetUserId: string | null = null
 
         if (user.id === order.buyer_id) {
@@ -75,7 +87,6 @@ export default function LeaveReviewScreen() {
 
         setToUserId(targetUserId)
 
-        // Check if already reviewed
         const { data: existing } = await supabase
           .from("ratings")
           .select("id")
@@ -98,6 +109,15 @@ export default function LeaveReviewScreen() {
     init()
   }, [orderId])
 
+  const toggleTag = (tag: string) => {
+    setSelectedTags((prev) => {
+      if (prev.includes(tag)) {
+        return prev.filter((t) => t !== tag)
+      }
+      return [...prev, tag]
+    })
+  }
+
   const handleSubmit = async () => {
     if (rating === 0) {
       Alert.alert("Select Rating", "Please select a star rating.")
@@ -114,6 +134,7 @@ export default function LeaveReviewScreen() {
         from_user_id: fromUserId,
         to_user_id: toUserId,
         rating,
+        review_tags: selectedTags, // <-- NEW COLUMN
         comment: comment.trim() || null,
       })
 
@@ -162,44 +183,76 @@ export default function LeaveReviewScreen() {
         <View style={{ width: 22 }} />
       </View>
 
-      {/* CONTENT */}
-      <View style={styles.card}>
-        <Text style={styles.label}>Rate your experience</Text>
+      <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
+        <View style={styles.card}>
+          {/* RATING */}
+          <Text style={styles.label}>Rate your experience</Text>
 
-        {/* STARS */}
-        <View style={styles.starRow}>
-          {[1, 2, 3, 4, 5].map((star) => (
-            <TouchableOpacity key={star} onPress={() => setRating(star)}>
-              <Ionicons
-                name={star <= rating ? "star" : "star-outline"}
-                size={36}
-                color="#F2C94C"
-                style={{ marginHorizontal: 6 }}
-              />
-            </TouchableOpacity>
-          ))}
+          <View style={styles.starRow}>
+            {[1, 2, 3, 4, 5].map((star) => (
+              <TouchableOpacity key={star} onPress={() => setRating(star)}>
+                <Ionicons
+                  name={star <= rating ? "star" : "star-outline"}
+                  size={36}
+                  color="#F2C94C"
+                  style={{ marginHorizontal: 6 }}
+                />
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {/* QUICK TAGS */}
+          <Text style={styles.label}>Quick review (optional)</Text>
+
+          <View style={styles.tagsWrap}>
+            {QUICK_TAGS.map((tag) => {
+              const selected = selectedTags.includes(tag)
+              return (
+                <TouchableOpacity
+                  key={tag}
+                  style={[
+                    styles.tag,
+                    selected && styles.tagSelected,
+                  ]}
+                  onPress={() => toggleTag(tag)}
+                  activeOpacity={0.85}
+                >
+                  <Text
+                    style={[
+                      styles.tagText,
+                      selected && styles.tagTextSelected,
+                    ]}
+                  >
+                    {tag}
+                  </Text>
+                </TouchableOpacity>
+              )
+            })}
+          </View>
+
+          {/* COMMENT */}
+          <Text style={styles.label}>Optional comment</Text>
+
+          <TextInput
+            placeholder="How was your experience?"
+            value={comment}
+            onChangeText={setComment}
+            style={styles.input}
+            multiline
+          />
+
+          {/* SUBMIT */}
+          <TouchableOpacity
+            style={styles.button}
+            onPress={handleSubmit}
+            disabled={submitting}
+          >
+            <Text style={styles.buttonText}>
+              {submitting ? "Submitting..." : "Submit Review"}
+            </Text>
+          </TouchableOpacity>
         </View>
-
-        <Text style={styles.label}>Optional comment</Text>
-
-        <TextInput
-          placeholder="How was your experience?"
-          value={comment}
-          onChangeText={setComment}
-          style={styles.input}
-          multiline
-        />
-
-        <TouchableOpacity
-          style={styles.button}
-          onPress={handleSubmit}
-          disabled={submitting}
-        >
-          <Text style={styles.buttonText}>
-            {submitting ? "Submitting..." : "Submit Review"}
-          </Text>
-        </TouchableOpacity>
-      </View>
+      </ScrollView>
     </View>
   )
 }
@@ -241,6 +294,33 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "center",
     marginBottom: 20,
+  },
+  tagsWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginBottom: 20,
+  },
+  tag: {
+    backgroundColor: "#F1F6F3",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    marginRight: 8,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: "#E0ECE6",
+  },
+  tagSelected: {
+    backgroundColor: "#7FAF9B",
+    borderColor: "#7FAF9B",
+  },
+  tagText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#0F1E17",
+  },
+  tagTextSelected: {
+    color: "#0F1E17",
   },
   input: {
     backgroundColor: "#F4F7F5",

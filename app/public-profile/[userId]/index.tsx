@@ -66,6 +66,15 @@ export default function PublicProfileScreen() {
     loadListings(true)
   }, [userId])
 
+  const handleOpenReviews = () => {
+    if (!userId || ratingCount === 0) return
+
+    router.push({
+      pathname: "/public-profile/[userId]/reviews",
+      params: { userId },
+    })
+  }
+
   const loadProfile = async () => {
     const { data } = await supabase
       .from("profiles")
@@ -193,12 +202,18 @@ export default function PublicProfileScreen() {
               </Text>
 
               <View style={styles.statsRow}>
-                <Stat
-                  label="Rating"
-                  value={hasReviews ? `${ratingAvg} ★` : "No reviews"}
-                  sub={hasReviews ? `${ratingCount} reviews` : undefined}
-                  muted={!hasReviews}
-                />
+                <TouchableOpacity
+                  onPress={handleOpenReviews}
+                  disabled={!hasReviews}
+                  activeOpacity={hasReviews ? 0.7 : 1}
+                >
+                  <Stat
+                    label="Rating"
+                    value={hasReviews ? `${ratingAvg} ★` : "No reviews"}
+                    sub={hasReviews ? `${ratingCount} reviews` : undefined}
+                    muted={!hasReviews}
+                  />
+                </TouchableOpacity>
 
                 <Stat
                   label="Sold"

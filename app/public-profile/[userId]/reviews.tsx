@@ -2,12 +2,13 @@ import { Ionicons } from "@expo/vector-icons"
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { useEffect, useMemo, useState } from "react"
 import {
-    ActivityIndicator,
-    FlatList,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  FlatList,
+  Image,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native"
 
 import { supabase } from "@/lib/supabase"
@@ -20,6 +21,13 @@ type Review = {
   comment: string | null
   created_at: string
   from_user_id: string
+  review_tags: string[] | null
+}
+
+type Profile = {
+  id: string
+  display_name: string | null
+  avatar_url: string | null
 }
 
 /* ---------------- SCREEN ---------------- */
@@ -29,34 +37,62 @@ export default function ReviewsScreen() {
   const router = useRouter()
 
   const [reviews, setReviews] = useState<Review[]>([])
+  const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     if (!userId) return
 
-    const loadReviews = async () => {
+    const loadData = async () => {
       setLoading(true)
 
-      const { data } = await supabase
+      // Load profile
+      const { data: profileData } = await supabase
+        .from("profiles")
+        .select("id, display_name, avatar_url")
+        .eq("id", userId)
+        .single()
+
+      setProfile(profileData ?? null)
+
+      // Load reviews WITH tags
+      const { data: reviewData } = await supabase
         .from("ratings")
-        .select("id, rating, comment, created_at, from_user_id")
+        .select(
+          "id, rating, comment, created_at, from_user_id, review_tags"
+        )
         .eq("to_user_id", userId)
         .order("created_at", { ascending: false })
 
-      setReviews(data ?? [])
+      setReviews(reviewData ?? [])
       setLoading(false)
     }
 
-    loadReviews()
+    loadData()
   }, [userId])
 
   /* ---------------- STATS ---------------- */
 
   const averageRating = useMemo(() => {
-    if (reviews.length === 0) return 0
+    if (reviews.length === 0) return "0.0"
     const sum = reviews.reduce((a, b) => a + b.rating, 0)
     return (sum / reviews.length).toFixed(1)
   }, [reviews])
+
+  const tagCounts = useMemo(() => {
+    const counts: Record<string, number> = {}
+
+    reviews.forEach((review) => {
+      review.review_tags?.forEach((tag) => {
+        counts[tag] = (counts[tag] || 0) + 1
+      })
+    })
+
+    // Convert to sorted array (most common first)
+    return Object.entries(counts).sort((a, b) => b[1] - a[1])
+  }, [reviews])
+
+  const hasBadges = tagCounts.length > 0
 
   /* ---------------- UI ---------------- */
 
@@ -77,66 +113,106 @@ export default function ReviewsScreen() {
         <ActivityIndicator style={{ marginTop: 60 }} />
       ) : reviews.length === 0 ? (
         <View style={styles.empty}>
-          <Ionicons
-            name="star-outline"
-            size={48}
-            color="#7FAF9B"
-          />
-          <Text style={styles.emptyTitle}>
-            No reviews yet
-          </Text>
+          <Ionicons name="star-outline" size={48} color="#7FAF9B" />
+          <Text style={styles.emptyTitle}>No reviews yet</Text>
           <Text style={styles.emptyText}>
             This user hasn’t received any reviews yet.
           </Text>
         </View>
       ) : (
-        <>
-          {/* SUMMARY */}
-          <View style={styles.summary}>
-            <Text style={styles.avg}>
-              {averageRating} ★
-            </Text>
-            <Text style={styles.count}>
-              {reviews.length} review
-              {reviews.length !== 1 ? "s" : ""}
-            </Text>
-          </View>
+        <FlatList
+          data={reviews}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={{ paddingBottom: 40 }}
+          ListHeaderComponent={
+            <>
+              {/* PROFILE HEADER */}
+              <View style={styles.profileHeader}>
+                <Image
+                  source={
+                    profile?.avatar_url
+                      ? { uri: profile.avatar_url }
+                      : require("../../../assets/images/avatar-placeholder.png")
+                  }
+                  style={styles.avatar}
+                />
 
-          {/* LIST */}
-          <FlatList
-            data={reviews}
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={{ padding: 16 }}
-            renderItem={({ item }) => (
-              <View style={styles.card}>
-                <View style={styles.ratingRow}>
-                  {Array.from({ length: 5 }).map((_, i) => (
-                    <Ionicons
-                      key={i}
-                      name={
-                        i < item.rating
-                          ? "star"
-                          : "star-outline"
-                      }
-                      size={16}
-                      color="#F2C94C"
-                    />
-                  ))}
+                <Text style={styles.username}>
+                  {profile?.display_name ?? "User"}
+                </Text>
+
+                {/* SUMMARY */}
+                <View style={styles.summary}>
+                  <Text style={styles.avg}>{averageRating} ★</Text>
+                  <Text style={styles.count}>
+                    {reviews.length} review
+                    {reviews.length !== 1 ? "s" : ""}
+                  </Text>
                 </View>
 
-                {item.comment && (
-                  <Text style={styles.comment}>
-                    {item.comment}
-                  </Text>
+                {/* BADGE COUNTS */}
+                {hasBadges && (
+                  <View style={styles.badgeSection}>
+                    <Text style={styles.badgeTitle}>
+                      Seller Highlights
+                    </Text>
+                    <View style={styles.badgeWrap}>
+                      {tagCounts.map(([tag, count]) => (
+                        <View key={tag} style={styles.badge}>
+                          <Text style={styles.badgeText}>
+                            {tag} × {count}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
                 )}
 
-                <Text style={styles.date}>
-                  {new Date(item.created_at).toLocaleDateString()}
-                </Text>
+                {/* DIVIDER */}
+                <View style={styles.dividerWrap}>
+                  <View style={styles.dividerLine} />
+                  <Text style={styles.dividerText}>REVIEWS</Text>
+                </View>
               </View>
-            )}
-          />
-        </>
+            </>
+          }
+          renderItem={({ item }) => (
+            <View style={styles.card}>
+              {/* STARS */}
+              <View style={styles.ratingRow}>
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <Ionicons
+                    key={i}
+                    name={i < item.rating ? "star" : "star-outline"}
+                    size={16}
+                    color="#F2C94C"
+                  />
+                ))}
+              </View>
+
+              {/* TAGS */}
+              {item.review_tags && item.review_tags.length > 0 && (
+                <View style={styles.tagWrap}>
+                  {item.review_tags.map((tag) => (
+                    <View key={tag} style={styles.tag}>
+                      <Text style={styles.tagText}>{tag}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              {/* COMMENT */}
+              {item.comment && (
+                <Text style={styles.comment}>{item.comment}</Text>
+              )}
+
+              {/* DATE */}
+              <Text style={styles.date}>
+                {new Date(item.created_at).toLocaleDateString()}
+              </Text>
+            </View>
+          )}
+        />
       )}
     </View>
   )
@@ -163,13 +239,32 @@ const styles = StyleSheet.create({
     color: "#0F1E17",
   },
 
-  summary: {
+  profileHeader: {
     alignItems: "center",
     paddingVertical: 20,
+    paddingHorizontal: 16,
+  },
+
+  avatar: {
+    width: 84,
+    height: 84,
+    borderRadius: 42,
+    marginBottom: 10,
+  },
+
+  username: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#0F1E17",
+  },
+
+  summary: {
+    alignItems: "center",
+    marginTop: 10,
   },
 
   avg: {
-    fontSize: 34,
+    fontSize: 30,
     fontWeight: "900",
     color: "#0F1E17",
   },
@@ -179,16 +274,94 @@ const styles = StyleSheet.create({
     color: "#6B8F7D",
   },
 
+  badgeSection: {
+    marginTop: 18,
+    alignItems: "center",
+  },
+
+  badgeTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#0F1E17",
+    marginBottom: 10,
+  },
+
+  badgeWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+  },
+
+  badge: {
+    backgroundColor: "#7FAF9B",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    margin: 4,
+  },
+
+  badgeText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#0F1E17",
+  },
+
+  dividerWrap: {
+    marginTop: 20,
+    marginBottom: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    width: "100%",
+  },
+
+  dividerLine: {
+    position: "absolute",
+    width: "100%",
+    height: 2,
+    backgroundColor: "#7FAF9B",
+  },
+
+  dividerText: {
+    backgroundColor: "#EAF4EF",
+    paddingHorizontal: 12,
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#0F1E17",
+    letterSpacing: 1,
+  },
+
   card: {
     backgroundColor: "#fff",
     padding: 14,
     borderRadius: 14,
+    marginHorizontal: 16,
     marginBottom: 12,
   },
 
   ratingRow: {
     flexDirection: "row",
     marginBottom: 6,
+  },
+
+  tagWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginBottom: 6,
+  },
+
+  tag: {
+    backgroundColor: "#F1F6F3",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    marginRight: 6,
+    marginBottom: 4,
+  },
+
+  tagText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#0F1E17",
   },
 
   comment: {

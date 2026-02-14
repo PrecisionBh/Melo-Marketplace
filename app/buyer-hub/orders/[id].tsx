@@ -1,7 +1,7 @@
 import { notify } from "@/lib/notifications/notify"
 import { Ionicons } from "@expo/vector-icons"
-import { useLocalSearchParams, useRouter } from "expo-router"
-import { useEffect, useState } from "react"
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router"
+import { useCallback, useEffect, useState } from "react"
 import {
   ActivityIndicator,
   Alert,
@@ -98,27 +98,29 @@ export default function BuyerOrderDetailScreen() {
     setLoading(false)
   }
 
-  // ADDED: check if this user already left a review for this order
-  useEffect(() => {
-    const checkIfReviewed = async () => {
-      if (!order?.id || !session?.user?.id) return
+  // UPDATED: re-check review status every time screen comes back into focus (so button disappears after review)
+  useFocusEffect(
+    useCallback(() => {
+      const checkIfReviewed = async () => {
+        if (!order?.id || !session?.user?.id) return
 
-      const { data } = await supabase
-        .from("ratings")
-        .select("id")
-        .eq("order_id", order.id)
-        .eq("from_user_id", session.user.id)
-        .maybeSingle()
+        const { data } = await supabase
+          .from("ratings")
+          .select("id")
+          .eq("order_id", order.id)
+          .eq("from_user_id", session.user.id)
+          .maybeSingle()
 
-      if (data) {
-        setHasReviewed(true)
-      } else {
-        setHasReviewed(false)
+        if (data) {
+          setHasReviewed(true)
+        } else {
+          setHasReviewed(false)
+        }
       }
-    }
 
-    checkIfReviewed()
-  }, [order?.id, session?.user?.id])
+      checkIfReviewed()
+    }, [order?.id, session?.user?.id])
+  )
 
   /* ---------------- ACTIONS ---------------- */
 
@@ -323,17 +325,17 @@ export default function BuyerOrderDetailScreen() {
           )}
 
           {/* LEAVE REVIEW (ADDED - COMPLETED ONLY, NOT DISPUTED, ONE PER USER) */}
-{isCompleted && !order.is_disputed && !hasReviewed && (
-  <TouchableOpacity
-    style={styles.reviewBtn}
-    onPress={() =>
-      router.push(`/reviews?orderId=${order.id}`)
-    }
-  >
-    <Ionicons name="star" size={18} color="#0F1E17" />
-    <Text style={styles.reviewText}>Leave a Review</Text>
-  </TouchableOpacity>
-)}
+          {isCompleted && !order.is_disputed && !hasReviewed && (
+            <TouchableOpacity
+              style={styles.reviewBtn}
+              onPress={() =>
+                router.push(`/reviews?orderId=${order.id}`)
+              }
+            >
+              <Ionicons name="star" size={18} color="#0F1E17" />
+              <Text style={styles.reviewText}>Leave a Review</Text>
+            </TouchableOpacity>
+          )}
 
 
           {/* CANCEL ORDER (BEFORE SHIPMENT ONLY) */}
