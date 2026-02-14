@@ -24,6 +24,7 @@ type OrderStatus =
   | "issue_open"
   | "disputed"
   | "completed"
+  | "cancelled" // added support (future safe)
 
 type Order = {
   id: string
@@ -67,8 +68,8 @@ export default function BuyerInProgressOrdersScreen() {
         image_url,
         listing_snapshot
       `)
-      .eq("buyer_id", session!.user.id) // ✅ ONLY this user's orders
-      .neq("status", "completed")
+      .eq("buyer_id", session!.user.id)
+      .in("status", ["paid", "shipped", "delivered", "disputed"])
       .order("created_at", { ascending: false })
 
     if (!error && data) {
@@ -94,7 +95,6 @@ export default function BuyerInProgressOrdersScreen() {
             onPress={() => router.replace("/buyer-hub/orders")}
           >
             <Ionicons name="arrow-back" size={22} color="#ffffff" />
-            
           </TouchableOpacity>
 
           <Text style={styles.headerTitle}>In-Progress</Text>
@@ -133,7 +133,7 @@ export default function BuyerInProgressOrdersScreen() {
                 style={styles.card}
                 onPress={() =>
                   router.push({
-                    pathname: "./[id]", // ✅ FIXED ROUTING
+                    pathname: "./[id]",
                     params: { id: item.id },
                   })
                 }
@@ -176,24 +176,55 @@ export default function BuyerInProgressOrdersScreen() {
   )
 }
 
-/* ---------------- STATUS BADGE ---------------- */
+/* ---------------- STATUS BADGE (UPGRADED) ---------------- */
 
 function StatusBadge({ status }: { status: OrderStatus }) {
-  const map: Record<OrderStatus, string> = {
-    created: "#BDBDBD",
-    paid: "#56CCF2",
-    shipped: "#9B51E0",
-    delivered: "#27AE60",
-    issue_open: "#F2C94C",
-    disputed: "#EB5757",
-    completed: "#999",
+  const config: Record<
+    OrderStatus,
+    { label: string; color: string }
+  > = {
+    created: {
+      label: "CREATED",
+      color: "#BDBDBD",
+    },
+    paid: {
+      label: "PAID",
+      color: "#56CCF2",
+    },
+    shipped: {
+      label: "SHIPPED",
+      color: "#9B51E0",
+    },
+    delivered: {
+      label: "DELIVERED",
+      color: "#27AE60",
+    },
+    issue_open: {
+      label: "ISSUE OPEN",
+      color: "#F2C94C",
+    },
+    disputed: {
+      label: "IN DISPUTE",
+      color: "#EB5757",
+    },
+    completed: {
+      label: "COMPLETED",
+      color: "#6FCF97",
+    },
+    cancelled: {
+      label: "CANCELLED",
+      color: "#4F4F4F",
+    },
+  }
+
+  const badge = config[status] ?? {
+    label: status.toUpperCase(),
+    color: "#999",
   }
 
   return (
-    <View style={[styles.badge, { backgroundColor: map[status] }]}>
-      <Text style={styles.badgeText}>
-        {status.replace("_", " ").toUpperCase()}
-      </Text>
+    <View style={[styles.badge, { backgroundColor: badge.color }]}>
+      <Text style={styles.badgeText}>{badge.label}</Text>
     </View>
   )
 }

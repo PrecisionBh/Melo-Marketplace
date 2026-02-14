@@ -154,8 +154,9 @@ Deno.serve(async (req) => {
     ) 
   }
 
-  // ---------------- NOTIFY SELLER (ESCROW RELEASED) ----------------
+  // ---------------- NOTIFY SELLER (ESCROW RELEASED) + REVIEWS ----------------
 try {
+  // ---------------- FUNDS RELEASED (SELLER) ----------------
   await supabase.from("notifications").insert({
     user_id: seller_id,
     type: "order",
@@ -166,21 +167,21 @@ try {
     },
   })
 
-  const { data: profile } = await supabase
+  const { data: sellerProfile } = await supabase
     .from("profiles")
     .select("expo_push_token, notifications_enabled")
     .eq("id", seller_id)
     .single()
 
   if (
-    profile?.expo_push_token &&
-    profile.notifications_enabled !== false
+    sellerProfile?.expo_push_token &&
+    sellerProfile.notifications_enabled !== false
   ) {
     await fetch("https://exp.host/--/api/v2/push/send", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        to: profile.expo_push_token,
+        to: sellerProfile.expo_push_token,
         title: "Funds Released 💰",
         body: "Escrow has been released. Your funds are now available.",
         data: {
@@ -190,6 +191,78 @@ try {
       }),
     })
   }
+
+  // ---------------- REVIEW NOTIFICATIONS (BOTH SIDES - REQUIRED) ----------------
+
+  // In-app: Buyer reviews Seller
+  await supabase.from("notifications").insert({
+    user_id: order.buyer_id,
+    type: "review",
+    title: "Order Complete ⭐",
+    body: "Your order is complete. Please leave a review for the seller.",
+    data: {
+      route: `/reviews?orderId=${order_id}`,
+    },
+  })
+
+  // In-app: Seller reviews Buyer
+  await supabase.from("notifications").insert({
+    user_id: seller_id,
+    type: "review",
+    title: "Order Complete ⭐",
+    body: "This order is complete. Please leave a review for the buyer.",
+    data: {
+      route: `/reviews?orderId=${order_id}`,
+    },
+  })
+
+  // Fetch buyer profile for push
+  const { data: buyerProfile } = await supabase
+    .from("profiles")
+    .select("expo_push_token, notifications_enabled")
+    .eq("id", order.buyer_id)
+    .single()
+
+  // Push: Buyer reviews Seller
+  if (
+    buyerProfile?.expo_push_token &&
+    buyerProfile.notifications_enabled !== false
+  ) {
+    await fetch("https://exp.host/--/api/v2/push/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        to: buyerProfile.expo_push_token,
+        title: "Leave a Review ⭐",
+        body: "Your order is complete. Please review your seller.",
+        data: {
+          type: "review",
+          route: `/reviews?orderId=${order_id}`,
+        },
+      }),
+    })
+  }
+
+  // Push: Seller reviews Buyer
+  if (
+    sellerProfile?.expo_push_token &&
+    sellerProfile.notifications_enabled !== false
+  ) {
+    await fetch("https://exp.host/--/api/v2/push/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        to: sellerProfile.expo_push_token,
+        title: "Leave a Review ⭐",
+        body: "Order complete. Please review your buyer.",
+        data: {
+          type: "review",
+          route: `/reviews?orderId=${order_id}`,
+        },
+      }),
+    })
+  }
+
 } catch (err) {
   console.warn("[notify escrow_released] failed:", err)
 }

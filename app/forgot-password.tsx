@@ -1,44 +1,51 @@
 import { useRouter } from "expo-router"
 import { useState } from "react"
 import {
-  ActivityIndicator,
-  Alert,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native"
 import { supabase } from "../lib/supabase"
 
-export default function SignInScreen() {
+export default function ForgotPasswordScreen() {
   const router = useRouter()
-
   const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
-  const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
 
-  const isFormValid = email.trim().length > 0 && password.length > 0
+  const handleReset = async () => {
+    const normalizedEmail = email.trim().toLowerCase()
 
-  const handleEmailLogin = async () => {
-    if (!isFormValid || loading) return
+    if (!normalizedEmail) {
+      Alert.alert("Missing Email", "Please enter your account email.")
+      return
+    }
 
     setLoading(true)
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
+    const { error } = await supabase.auth.resetPasswordForEmail(
+      normalizedEmail,
+      {
+        redirectTo: "melomp://reset-password",
+      }
+    )
 
     setLoading(false)
 
     if (error) {
-      Alert.alert("Sign in failed", error.message)
+      Alert.alert("Reset Failed", error.message)
       return
     }
 
-    router.replace("/home")
+    Alert.alert(
+      "Check Your Email 📩",
+      "If an account exists with this email, a password reset link has been sent."
+    )
+
+    router.back()
   }
 
   return (
@@ -47,75 +54,49 @@ export default function SignInScreen() {
       <View style={styles.branding}>
         <Text style={styles.brandTitle}>MELO</Text>
         <Text style={styles.subtitle}>
-          Your Sports Only Marketplace
+          Reset your password securely
         </Text>
       </View>
 
       {/* CARD */}
       <View style={styles.card}>
-        <Text style={styles.title}>Sign In</Text>
+        <Text style={styles.title}>Forgot Password</Text>
+
+        <Text style={styles.description}>
+          Enter your email and we’ll send you a password reset link.
+        </Text>
 
         <TextInput
           style={styles.input}
           placeholder="Email"
           placeholderTextColor="#6B8F82"
           autoCapitalize="none"
+          autoCorrect={false}
           keyboardType="email-address"
           value={email}
           onChangeText={setEmail}
         />
 
-        <View style={styles.passwordWrapper}>
-          <TextInput
-            style={styles.passwordInput}
-            placeholder="Password"
-            placeholderTextColor="#6B8F82"
-            secureTextEntry={!showPassword}
-            value={password}
-            onChangeText={setPassword}
-          />
-
-          <TouchableOpacity onPress={() => setShowPassword(p => !p)}>
-            <Text style={styles.eye}>{showPassword ? "🙈" : "👁️"}</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* FORGOT PASSWORD LINK (ADDED ONLY) */}
-        <TouchableOpacity
-          onPress={() => router.push("/forgot-password")}
-          style={{ alignSelf: "flex-end", marginBottom: 12 }}
-        >
-          <Text
-            style={{
-              color: "#7FAF9B",
-              fontWeight: "700",
-              fontSize: 13,
-            }}
-          >
-            Forgot Password?
-          </Text>
-        </TouchableOpacity>
-
         <TouchableOpacity
           style={[
             styles.button,
-            !isFormValid && styles.buttonDisabled,
-            loading && { opacity: 0.6 },
+            (!email.trim() || loading) && styles.buttonDisabled,
           ]}
-          onPress={handleEmailLogin}
-          disabled={!isFormValid || loading}
+          onPress={handleReset}
+          disabled={!email.trim() || loading}
         >
           {loading ? (
             <ActivityIndicator color="#FFFFFF" />
           ) : (
-            <Text style={styles.buttonText}>Sign In</Text>
+            <Text style={styles.buttonText}>
+              Send Reset Email
+            </Text>
           )}
         </TouchableOpacity>
 
-        <TouchableOpacity onPress={() => router.push("/register")}>
-          <Text style={styles.link}>
-            Don’t have an account?{" "}
-            <Text style={styles.linkBold}>Create one</Text>
+        <TouchableOpacity onPress={() => router.back()}>
+          <Text style={styles.backText}>
+            Back to Sign In
           </Text>
         </TouchableOpacity>
       </View>
@@ -141,7 +122,7 @@ const styles = StyleSheet.create({
   branding: {
     alignItems: "center",
     marginBottom: 28,
-    transform: [{ translateY: -40 }], // raises MELO + subtitle ~20%
+    transform: [{ translateY: -40 }],
   },
 
   brandTitle: {
@@ -173,9 +154,16 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: "800",
-    marginBottom: 20,
+    marginBottom: 10,
     textAlign: "center",
     color: "#2E5F4F",
+  },
+
+  description: {
+    fontSize: 14,
+    color: "#6B8F82",
+    textAlign: "center",
+    marginBottom: 20,
   },
 
   input: {
@@ -186,37 +174,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     fontSize: 16,
     color: "#0F1E17",
-    marginBottom: 12,
-  },
-
-  passwordWrapper: {
-    flexDirection: "row",
-    borderWidth: 1,
-    borderColor: "#D3DED8",
-    borderRadius: 14,
-    alignItems: "center",
     marginBottom: 18,
   },
 
-  passwordInput: {
-    flex: 1,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    fontSize: 16,
-    color: "#0F1E17",
-  },
-
-  eye: {
-    paddingHorizontal: 14,
-    fontSize: 16,
-  },
-
   button: {
-    backgroundColor: "#7FAF9B",
+    backgroundColor: "#7FAF9B", // Melo brand color
     paddingVertical: 15,
     borderRadius: 14,
     alignItems: "center",
-    marginBottom: 16,
   },
 
   buttonDisabled: {
@@ -229,14 +194,11 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
 
-  link: {
+  backText: {
     textAlign: "center",
     color: "#6B8F82",
-  },
-
-  linkBold: {
-    fontWeight: "800",
-    color: "#2E5F4F",
+    marginTop: 16,
+    fontWeight: "600",
   },
 
   footerContainer: {

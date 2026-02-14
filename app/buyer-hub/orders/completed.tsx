@@ -32,7 +32,7 @@ type Order = {
 
 /* ---------------- SCREEN ---------------- */
 
-export default function SellerCompletedOrdersScreen() {
+export default function BuyerCompletedOrdersScreen() {
   const router = useRouter()
   const { session } = useAuth()
 
@@ -62,14 +62,15 @@ export default function SellerCompletedOrdersScreen() {
         listing_snapshot
       `
       )
-      .eq("seller_id", session!.user.id)
+      // 🔥 FIX: pull BUYER orders, not seller sales
+      .eq("buyer_id", session!.user.id)
       .in("status", ["completed", "cancelled", "refunded"])
       .order("completed_at", { ascending: false })
 
     if (!error && data) {
       setOrders(data as Order[])
     } else {
-      console.log("Seller completed orders load error:", error)
+      console.log("Buyer completed orders load error:", error)
       setOrders([])
     }
 
@@ -94,12 +95,13 @@ export default function SellerCompletedOrdersScreen() {
         <View style={styles.headerRow}>
           <TouchableOpacity
             style={styles.headerBtn}
-            onPress={() => router.replace("/seller-hub/orders")}
+            // 🔥 FIX: back to buyer hub, not seller hub
+            onPress={() => router.replace("/buyer-hub/orders")}
           >
             <Ionicons name="arrow-back" size={22} color="#ffffff" />
           </TouchableOpacity>
 
-          <Text style={styles.headerTitle}>Completed Sales</Text>
+          <Text style={styles.headerTitle}>Completed Orders</Text>
           <View style={{ width: 60 }} />
         </View>
 
@@ -136,7 +138,7 @@ export default function SellerCompletedOrdersScreen() {
             size={40}
             color="#7FAF9B"
           />
-          <Text style={styles.emptyText}>No sales found</Text>
+          <Text style={styles.emptyText}>No orders found</Text>
         </View>
       ) : (
         <FlatList
@@ -153,7 +155,8 @@ export default function SellerCompletedOrdersScreen() {
               <TouchableOpacity
                 style={styles.card}
                 onPress={() =>
-                  router.push(`/seller-hub/orders/${item.id}`)
+                  // 🔥 FIX: route to buyer order detail, NOT seller hub
+                  router.push(`/buyer-hub/orders/${item.id}`)
                 }
               >
                 <Image source={{ uri: imageUri }} style={styles.image} />
@@ -231,7 +234,7 @@ function FilterPill({
   )
 }
 
-/* ---------------- STYLES ---------------- */
+/* ---------------- STYLES (UNCHANGED) ---------------- */
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#EAF4EF" },

@@ -60,6 +60,9 @@ export default function BuyerOrderDetailScreen() {
   const [confirmVisible, setConfirmVisible] = useState(false)
   const [processing, setProcessing] = useState(false)
 
+  // ADDED: review state (does not change existing logic)
+  const [hasReviewed, setHasReviewed] = useState(false)
+
   useEffect(() => {
     if (id && session?.user?.id) loadOrder()
   }, [id])
@@ -94,6 +97,28 @@ export default function BuyerOrderDetailScreen() {
     setOrder(data)
     setLoading(false)
   }
+
+  // ADDED: check if this user already left a review for this order
+  useEffect(() => {
+    const checkIfReviewed = async () => {
+      if (!order?.id || !session?.user?.id) return
+
+      const { data } = await supabase
+        .from("ratings")
+        .select("id")
+        .eq("order_id", order.id)
+        .eq("from_user_id", session.user.id)
+        .maybeSingle()
+
+      if (data) {
+        setHasReviewed(true)
+      } else {
+        setHasReviewed(false)
+      }
+    }
+
+    checkIfReviewed()
+  }, [order?.id, session?.user?.id])
 
   /* ---------------- ACTIONS ---------------- */
 
@@ -174,7 +199,7 @@ export default function BuyerOrderDetailScreen() {
                 "Your order has been cancelled and refunded."
               )
 
-              await loadOrder() // refresh order state
+              await loadOrder()
               setProcessing(false)
             } catch (err) {
               console.error("Cancel order error:", err)
@@ -297,41 +322,53 @@ export default function BuyerOrderDetailScreen() {
             </TouchableOpacity>
           )}
 
-          {/* CANCEL ORDER (BEFORE SHIPMENT ONLY) */}
-{!isCompleted && canCancel && (
+          {/* LEAVE REVIEW (ADDED - COMPLETED ONLY, NOT DISPUTED, ONE PER USER) */}
+{isCompleted && !order.is_disputed && !hasReviewed && (
   <TouchableOpacity
-    style={{
-      marginTop: 14,
-      backgroundColor: "#D64545",
-      height: 46,
-      borderRadius: 23,
-      alignItems: "center",
-      justifyContent: "center",
-    }}
-    onPress={cancelOrder}
-    disabled={processing}
+    style={styles.reviewBtn}
+    onPress={() =>
+      router.push(`/reviews?orderId=${order.id}`)
+    }
   >
-    <Text
-      style={{
-        color: "#fff",
-        fontWeight: "900",
-        fontSize: 14,
-      }}
-    >
-      {processing ? "Cancelling…" : "Cancel Order"}
-    </Text>
+    <Ionicons name="star" size={18} color="#0F1E17" />
+    <Text style={styles.reviewText}>Leave a Review</Text>
   </TouchableOpacity>
 )}
+
+
+          {/* CANCEL ORDER (BEFORE SHIPMENT ONLY) */}
+          {!isCompleted && canCancel && (
+            <TouchableOpacity
+              style={{
+                marginTop: 14,
+                backgroundColor: "#D64545",
+                height: 46,
+                borderRadius: 23,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+              onPress={cancelOrder}
+              disabled={processing}
+            >
+              <Text
+                style={{
+                  color: "#fff",
+                  fontWeight: "900",
+                  fontSize: 14,
+                }}
+              >
+                {processing ? "Cancelling…" : "Cancel Order"}
+              </Text>
+            </TouchableOpacity>
+          )}
 
           {/* DISPUTE */}
           {canDispute && (
             <TouchableOpacity
               style={styles.disputeBtn}
               onPress={() =>
-  router.push(`/buyer-hub/orders/${order.id}/dispute-issue`)
-}
-
-              
+                router.push(`/buyer-hub/orders/${order.id}/dispute-issue`)
+              }
             >
               <Ionicons
                 name="alert-circle-outline"
@@ -557,4 +594,21 @@ const styles = StyleSheet.create({
     color: "#7FAF9B",
     fontWeight: "700",
   },
+    reviewBtn: {
+    marginTop: 16,
+    backgroundColor: "#7FAF9B",
+    height: 48,
+    borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+
+  reviewText: {
+    color: "#0F1E17",
+    fontWeight: "900",
+    fontSize: 15,
+  },
+  
 })
