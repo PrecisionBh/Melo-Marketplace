@@ -159,8 +159,16 @@ export default function FinalPaymentScreen() {
         }
 
         const escrow = itemCents + shippingCents
-        const buyerFee = Math.round(escrow * 0.03) + 30
-        setDisplayTotalCents(escrow + buyerFee)
+
+// Florida sales tax (7.5%) on item + shipping ONLY
+const taxRate = 0.075
+const taxCents = Math.round(escrow * taxRate)
+
+// Buyer fee (DO NOT charge fee on tax)
+const buyerFee = Math.round(escrow * 0.03) + 30
+
+// Final display total must match Stripe total
+setDisplayTotalCents(escrow + buyerFee + taxCents)
       } catch {
         // If anything unexpected happens, just leave total null
         setDisplayTotalCents(null)
@@ -280,50 +288,62 @@ export default function FinalPaymentScreen() {
       /* ---------- PRICING (SINGLE SOURCE OF TRUTH) ---------- */
 
       const shippingCents =
-        listingSnapshot.shipping_type === "buyer_pays"
-          ? Math.round((listingSnapshot.shipping_price ?? 0) * 100)
-          : 0
+  listingSnapshot.shipping_type === "buyer_pays"
+    ? Math.round((listingSnapshot.shipping_price ?? 0) * 100)
+    : 0
 
-      const escrowCents = itemPriceCents + shippingCents
-      const buyerFeeCents = Math.round(escrowCents * 0.03) + 30
-      const stripeTotalCents = escrowCents + buyerFeeCents
+// Seller escrow (DO NOT include tax here)
+const escrowCents = itemPriceCents + shippingCents
+
+// Florida sales tax (7.5%) applied to item + shipping only
+const taxRate = 0.075
+const taxCents = Math.round(escrowCents * taxRate)
+
+// Platform buyer fee (DO NOT charge fee on tax)
+const buyerFeeCents = Math.round(escrowCents * 0.03) + 30
+
+// Final amount charged to the buyer via Stripe
+const stripeTotalCents = escrowCents + buyerFeeCents + taxCents
 
       /* ---------- CREATE ORDER ---------- */
 
       const { data: order, error } = await supabase
-        .from("orders")
-        .insert({
-          buyer_id: session.user.id,
-          seller_id: sellerId,
+  .from("orders")
+  .insert({
+    buyer_id: session.user.id,
+    seller_id: sellerId,
 
-          listing_id: listingId ?? listingSnapshot.id,
-          offer_id: offerId ?? null,
+    listing_id: listingId ?? listingSnapshot.id,
+    offer_id: offerId ?? null,
 
-          listing_snapshot: listingSnapshot,
+    listing_snapshot: listingSnapshot,
 
-          status: "pending_payment",
+    status: "pending_payment",
 
-          amount_cents: stripeTotalCents,
-          currency: "usd",
+    amount_cents: stripeTotalCents,
+    currency: "usd",
 
-          item_price_cents: itemPriceCents,
-          shipping_amount_cents: shippingCents,
-          buyer_fee_cents: buyerFeeCents,
-          escrow_amount_cents: escrowCents,
+    // 🔒 CORE SNAPSHOT FIELDS
+    item_price_cents: itemPriceCents,
+    shipping_amount_cents: shippingCents,
+    tax_cents: taxCents, // ✅ THIS is why it was missing
+    buyer_fee_cents: buyerFeeCents,
+    escrow_amount_cents: escrowCents,
 
-          shipping_name: name,
-          shipping_line1: line1,
-          shipping_line2: line2,
-          shipping_city: city,
-          shipping_state: state,
-          shipping_postal_code: postal,
-          shipping_country: "US",
-          shipping_phone: phone,
+    shipping_name: name,
+    shipping_line1: line1,
+    shipping_line2: line2,
+    shipping_city: city,
+    shipping_state: state,
+    shipping_postal_code: postal,
+    shipping_country: "US",
+    shipping_phone: phone,
 
-          image_url: imageUrl,
-        })
-        .select()
-        .single()
+    image_url: imageUrl,
+  })
+  .select()
+  .single()
+
 
       if (!order) throw error
 

@@ -37,6 +37,7 @@ type Order = {
   amount_cents: number
   item_price_cents: number | null
   shipping_amount_cents: number | null
+  tax_cents: number | null
   buyer_fee_cents: number | null
   image_url: string | null
   tracking_url: string | null
@@ -78,6 +79,7 @@ export default function BuyerOrderDetailScreen() {
         amount_cents,
         item_price_cents,
         shipping_amount_cents,
+        tax_cents, 
         buyer_fee_cents,
         image_url,
         tracking_url,
@@ -236,9 +238,11 @@ export default function BuyerOrderDetailScreen() {
     ["shipped", "delivered"].includes(order.status)
 
   const itemPrice = (order.item_price_cents ?? 0) / 100
-  const shipping = (order.shipping_amount_cents ?? 0) / 100
-  const buyerFee = (order.buyer_fee_cents ?? 0) / 100
-  const totalPaid = (order.amount_cents ?? 0) / 100
+const shipping = (order.shipping_amount_cents ?? 0) / 100
+const tax = (order.tax_cents ?? 0) / 100 
+const buyerFee = (order.buyer_fee_cents ?? 0) / 100
+const totalPaid = (order.amount_cents ?? 0) / 100
+
 
   return (
     <View style={styles.screen}>
@@ -283,20 +287,26 @@ export default function BuyerOrderDetailScreen() {
           </View>
 
           <View style={styles.receipt}>
-            <ReceiptRow label="Item price" value={`$${itemPrice.toFixed(2)}`} />
-            <ReceiptRow label="Shipping" value={`$${shipping.toFixed(2)}`} />
-            <ReceiptRow
-              label="Buyer protection & processing"
-              value={`$${buyerFee.toFixed(2)}`}
-              subtle
-            />
-            <View style={styles.receiptDivider} />
-            <ReceiptRow
-              label="Total paid"
-              value={`$${totalPaid.toFixed(2)}`}
-              bold
-            />
-          </View>
+  <ReceiptRow label="Item price" value={`$${itemPrice.toFixed(2)}`} />
+  <ReceiptRow label="Shipping" value={`$${shipping.toFixed(2)}`} />
+  <ReceiptRow
+    label="Sales tax (FL)"
+    value={`$${tax.toFixed(2)}`}
+    subtle
+  />
+  <ReceiptRow
+    label="Buyer protection & processing"
+    value={`$${buyerFee.toFixed(2)}`}
+    subtle
+  />
+  <View style={styles.receiptDivider} />
+  <ReceiptRow
+    label="Total paid"
+    value={`$${totalPaid.toFixed(2)}`}
+    bold
+  />
+</View>
+
 
           {/* TRACK PACKAGE BUTTON */}
           {canTrack && (

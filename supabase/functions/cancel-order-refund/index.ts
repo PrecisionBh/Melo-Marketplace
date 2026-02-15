@@ -125,16 +125,20 @@ serve(async (req) => {
     }
 
     /* ---------------- STRIPE REFUND (ITEM + SHIPPING ONLY) ---------------- */
-    console.log("💸 Creating partial refund (item + shipping only):", {
-      order_id: order.id,
-      item_price_cents: order.item_price_cents,
-      shipping_amount_cents: order.shipping_amount_cents,
-      buyer_fee_cents: order.buyer_fee_cents,
-    })
+    /* ---------------- STRIPE REFUND (ITEM + SHIPPING + TAX, EXCLUDES BUYER FEE) ---------------- */
+console.log("💸 Creating refund (item + shipping + tax, excluding buyer fee):", {
+  order_id: order.id,
+  item_price_cents: order.item_price_cents,
+  shipping_amount_cents: order.shipping_amount_cents,
+  tax_cents: order.tax_cents,
+  buyer_fee_cents: order.buyer_fee_cents,
+})
 
-    const refundableAmount =
-      (order.item_price_cents ?? 0) +
-      (order.shipping_amount_cents ?? 0)
+const refundableAmount =
+  (order.item_price_cents ?? 0) +
+  (order.shipping_amount_cents ?? 0) +
+  (order.tax_cents ?? 0) // ✅ Refund tax to buyer
+
 
     if (refundableAmount <= 0) {
       return json(400, { error: "Invalid refundable amount" })

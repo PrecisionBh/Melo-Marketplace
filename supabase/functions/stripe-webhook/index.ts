@@ -54,6 +54,7 @@ async function markOrderPaid(params: {
       amount_cents,
       item_price_cents,
       shipping_amount_cents,
+      tax_cents,
       seller_id,
       buyer_id,
       paid_at,
@@ -109,17 +110,23 @@ async function markOrderPaid(params: {
   }
 
   // ---------------- ESCROW MATH ----------------
+   // ---------------- ESCROW MATH (UPDATED: fee includes shipping, never tax) ----------------
   if (!order.item_price_cents) {
     console.error("❌ Missing item_price_cents for escrow", orderId)
     return json(500, { error: "Missing item price for escrow" })
   }
 
-  const sellerFeeCents = Math.round(order.item_price_cents * 0.04)
+  // Total seller escrow = item + shipping (NEVER include tax)
   const escrowAmountCents =
     order.item_price_cents + (order.shipping_amount_cents ?? 0)
+
+  // 4% platform fee on FULL transaction (item + shipping)
+  const sellerFeeCents = Math.round(escrowAmountCents * 0.04)
+
+  // Seller receives escrow minus platform fee
   const sellerNetCents = escrowAmountCents - sellerFeeCents
 
-  console.log("🧮 Escrow calculation", {
+  console.log("🧮 Escrow calculation (fee includes shipping, excludes tax)", {
     orderId,
     item_price_cents: order.item_price_cents,
     shipping_amount_cents: order.shipping_amount_cents ?? 0,
@@ -128,27 +135,33 @@ async function markOrderPaid(params: {
     seller_net_cents: sellerNetCents,
   })
 
+
+
   // ---------------- UPDATE ORDER ----------------
-  const { error: updateErr } = await supabase
-    .from("orders")
-    .update({
-      status: "paid",
-      paid_at: now,
+const { error: updateErr } = await supabase
+  .from("orders")
+  .update({
+    status: "paid",
+    paid_at: now,
 
-      stripe_session_id: sessionId ?? null,
-      stripe_payment_intent: paymentIntentId ?? null,
+    stripe_session_id: sessionId ?? null,
+    stripe_payment_intent: paymentIntentId ?? null,
 
-      seller_fee_cents: sellerFeeCents,
-      seller_net_cents: sellerNetCents,
-      seller_payout_cents: null,
-      escrow_amount_cents: escrowAmountCents,
+    // Ledger snapshot (DO NOT touch tax math here)
+    seller_fee_cents: sellerFeeCents,
+    seller_net_cents: sellerNetCents,
+    seller_payout_cents: null,
+    escrow_amount_cents: escrowAmountCents,
 
-      escrow_status: "pending",
-      escrow_funded_at: now,
+    // 🔥 NEW: Preserve tax snapshot for accounting (already calculated at checkout)
+    tax_cents: order.tax_cents ?? 0,
 
-      updated_at: now,
-    })
-    .eq("id", orderId)
+    escrow_status: "pending",
+    escrow_funded_at: now,
+
+    updated_at: now,
+  })
+  .eq("id", orderId)
 
   if (updateErr) {
     console.error("❌ Order update failed:", orderId, updateErr)

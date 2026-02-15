@@ -12,6 +12,7 @@ import {
 } from "react-native"
 
 import ListingCard from "@/components/home/ListingCard"
+import { useAuth } from "@/context/AuthContext"
 import { supabase } from "@/lib/supabase"
 
 const PAGE_SIZE = 12
@@ -39,6 +40,8 @@ type Listing = {
 export default function PublicProfileScreen() {
   const params = useLocalSearchParams()
   const router = useRouter()
+  const { session } = useAuth()
+  const currentUser = session?.user
 
   const userId =
     typeof params.userId === "string"
@@ -58,6 +61,10 @@ export default function PublicProfileScreen() {
   const [ratingCount, setRatingCount] = useState(0)
   const [soldCount, setSoldCount] = useState(0)
 
+  // FOLLOW STATES (ADDED)
+  const [isFollowing, setIsFollowing] = useState(false)
+  const [followLoading, setFollowLoading] = useState(false)
+
   useEffect(() => {
     if (!userId) return
     loadProfile()
@@ -66,6 +73,28 @@ export default function PublicProfileScreen() {
     loadListings(true)
   }, [userId])
 
+  // CHECK FOLLOW STATUS (ADDED)
+  useEffect(() => {
+    if (!userId || !currentUser) return
+
+    const checkFollowStatus = async () => {
+      const { data, error } = await supabase
+        .from("followers")
+        .select("id")
+        .eq("follower_id", currentUser.id)
+        .eq("following_id", userId)
+        .maybeSingle()
+
+      if (!error && data) {
+        setIsFollowing(true)
+      } else {
+        setIsFollowing(false)
+      }
+    }
+
+    checkFollowStatus()
+  }, [userId, currentUser])
+
   const handleOpenReviews = () => {
     if (!userId || ratingCount === 0) return
 
@@ -73,6 +102,37 @@ export default function PublicProfileScreen() {
       pathname: "/public-profile/[userId]/reviews",
       params: { userId },
     })
+  }
+
+  // FOLLOW TOGGLE FUNCTION (ADDED)
+  const handleFollowToggle = async () => {
+    if (!currentUser || !userId) return
+    if (currentUser.id === userId) return
+
+    try {
+      setFollowLoading(true)
+
+      if (isFollowing) {
+        const { error } = await supabase
+          .from("followers")
+          .delete()
+          .eq("follower_id", currentUser.id)
+          .eq("following_id", userId)
+
+        if (!error) setIsFollowing(false)
+      } else {
+        const { error } = await supabase.from("followers").insert({
+          follower_id: currentUser.id,
+          following_id: userId,
+        })
+
+        if (!error) setIsFollowing(true)
+      }
+    } catch (err) {
+      console.error("Follow toggle error:", err)
+    } finally {
+      setFollowLoading(false)
+    }
   }
 
   const loadProfile = async () => {
@@ -158,6 +218,7 @@ export default function PublicProfileScreen() {
   }
 
   const hasReviews = ratingCount > 0
+  const isOwnProfile = currentUser?.id === userId
 
   return (
     <View style={styles.screen}>
@@ -200,6 +261,26 @@ export default function PublicProfileScreen() {
               <Text style={styles.name}>
                 {profile.display_name ?? "User"}
               </Text>
+
+              {/* FOLLOW BUTTON (ADDED) */}
+              {!isOwnProfile && (
+                <TouchableOpacity
+                  onPress={handleFollowToggle}
+                  disabled={followLoading}
+                  style={[
+                    styles.followButton,
+                    isFollowing && styles.followingButton,
+                  ]}
+                >
+                  <Text style={styles.followButtonText}>
+                    {followLoading
+                      ? "Loading..."
+                      : isFollowing
+                      ? "Unfollow"
+                      : "Follow Seller"}
+                  </Text>
+                </TouchableOpacity>
+              )}
 
               <View style={styles.statsRow}>
                 <TouchableOpacity
@@ -332,6 +413,24 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "800",
     color: "#0F1E17",
+  },
+
+  followButton: {
+    marginTop: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 14,
+    backgroundColor: "#7FAF9B",
+  },
+
+  followingButton: {
+    backgroundColor: "#2E2E2E",
+  },
+
+  followButtonText: {
+    color: "#FFFFFF",
+    fontWeight: "800",
+    fontSize: 14,
   },
 
   statsRow: {

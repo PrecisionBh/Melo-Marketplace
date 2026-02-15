@@ -148,19 +148,26 @@ export default function CheckoutScreen() {
     )
   }
 
-  /* ---------------- CORRECT MATH ---------------- */
+  /* ---------------- CORRECT MATH (UPDATED WITH 7.5% TAX) ---------------- */
 
   const shipping =
     item.shipping_type === "free" ? 0 : item.shipping_price
 
+  // Seller escrow base (item + shipping)
   const escrow = item.price + shipping
 
+  // Buyer fee (still ONLY based on escrow, not tax)
   const buyerFee = +(
     escrow * 0.03 + 0.3
   ).toFixed(2)
 
+  // Florida sales tax (7.5%) on item + shipping ONLY
+  const taxRate = 0.075
+  const tax = +(escrow * taxRate).toFixed(2)
+
+  // Final total buyer pays
   const total = +(
-    escrow + buyerFee
+    escrow + buyerFee + tax
   ).toFixed(2)
 
   const totalCents = Math.round(total * 100)
@@ -199,6 +206,10 @@ export default function CheckoutScreen() {
           <Row
             label="Buyer protection & processing"
             value={`$${buyerFee.toFixed(2)}`}
+          />
+          <Row
+            label="Sales tax (7.5%)"
+            value={`$${tax.toFixed(2)}`}
           />
           <View style={styles.divider} />
           <Row label="Total" value={`$${total.toFixed(2)}`} bold />

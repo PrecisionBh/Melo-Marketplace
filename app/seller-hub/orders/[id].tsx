@@ -24,9 +24,17 @@ type OrderStatus = "paid" | "shipped" | "delivered" | "completed"
 type Order = {
   id: string
   seller_id: string
-  buyer_id: string 
+  buyer_id: string
   status: OrderStatus
+
+  // 💰 NEW: Proper ledger fields (source of truth)
   amount_cents: number
+  item_price_cents: number | null
+  shipping_amount_cents: number | null
+  tax_cents: number | null
+  seller_fee_cents: number | null
+  seller_net_cents: number | null
+
   image_url: string | null
 
   carrier: string | null
@@ -108,47 +116,46 @@ export default function SellerOrderDetailScreen() {
     const trackingUrl = buildTrackingUrl(carrier, tracking)
 
     const { error } = await supabase
-  .from("orders")
-  .update({
-    carrier,
-    tracking_number: tracking,
-    tracking_url: trackingUrl,
-    status: "shipped",
-    shipped_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  })
-  .eq("id", order.id)
+      .from("orders")
+      .update({
+        carrier,
+        tracking_number: tracking,
+        tracking_url: trackingUrl,
+        status: "shipped",
+        shipped_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", order.id)
 
-setSaving(false)
+    setSaving(false)
 
-if (error) {
-  Alert.alert("Error", "Failed to mark order as shipped.")
-  return
-}
+    if (error) {
+      Alert.alert("Error", "Failed to mark order as shipped.")
+      return
+    }
 
-await notify({
-  userId: order.buyer_id, // buyer gets notified
-  type: "order",
-  title: "Order shipped",
-  body: "Your order has been shipped. Tracking information is now available.",
-  data: {
-    route: "/buyer-hub/orders/[id]",
-    params: { id: order.id },
-  },
-})
+    await notify({
+      userId: order.buyer_id,
+      type: "order",
+      title: "Order shipped",
+      body: "Your order has been shipped. Tracking information is now available.",
+      data: {
+        route: "/buyer-hub/orders/[id]",
+        params: { id: order.id },
+      },
+    })
 
-Alert.alert(
-  "Order Shipped",
-  "Tracking has been added and the order is now in progress.",
-  [
-    {
-      text: "OK",
-      onPress: () =>
-        router.replace("/seller-hub/orders/orders-to-ship"),
-    },
-  ]
-)
-
+    Alert.alert(
+      "Order Shipped",
+      "Tracking has been added and the order is now in progress.",
+      [
+        {
+          text: "OK",
+          onPress: () =>
+            router.replace("/seller-hub/orders/orders-to-ship"),
+        },
+      ]
+    )
   }
 
   if (loading) {
@@ -157,14 +164,17 @@ Alert.alert(
 
   if (!order) return null
 
-  /* ---------------- MONEY (LOCKED RATES) ---------------- */
+  /* ---------------- MONEY (CORRECT LEDGER LOGIC) ---------------- */
 
-  const gross = order.amount_cents / 100
+  // 🔐 Use DB snapshots — NEVER recompute from amount_cents
+  const itemPrice = (order.item_price_cents ?? 0) / 100
+  const shipping = (order.shipping_amount_cents ?? 0) / 100
+  const tax = (order.tax_cents ?? 0) / 100
+  const sellerFee = (order.seller_fee_cents ?? 0) / 100
+  const sellerNet = (order.seller_net_cents ?? 0) / 100
 
-  // ✅ LOCKED: 4% seller fee
-  const sellerFee = +(gross * 0.04).toFixed(2)
-
-  const sellerNet = +(gross - sellerFee).toFixed(2)
+  // What the seller actually sold (item + shipping)
+  const saleSubtotal = itemPrice + shipping
 
   /* ---------------- RENDER ---------------- */
 
@@ -268,15 +278,14 @@ Alert.alert(
           )}
         </View>
 
-        {/* RECEIPT */}
+        {/* RECEIPT (ACCOUNTING-CORRECT) */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Sale Breakdown</Text>
 
-          <Row label="Sale Price" value={`$${gross.toFixed(2)}`} />
-          <Row
-            label="Seller Fee (4%)"
-            value={`-$${sellerFee.toFixed(2)}`}
-          />
+          <Row label="Item Price" value={`$${itemPrice.toFixed(2)}`} />
+          <Row label="Shipping" value={`$${shipping.toFixed(2)}`} />
+          <Row label="Subtotal" value={`$${saleSubtotal.toFixed(2)}`} />
+          <Row label="Platform Fee (4%)" value={`-$${sellerFee.toFixed(2)}`} />
           <Row
             label="Your Payout"
             value={`$${sellerNet.toFixed(2)}`}
@@ -334,136 +343,210 @@ function Row({
 
 /* ---------------- STYLES ---------------- */
 
+/* ---------------- STYLES ---------------- */
+
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#F6F7F8" },
+  screen: {
+    flex: 1,
+    backgroundColor: "#EAF4EF", // Melo soft background
+  },
+
+  /* ---------- HEADER ---------- */
   header: {
-    height: 56,
-    backgroundColor: "#EAF4EF",
+    paddingTop: 50,
+    paddingBottom: 14,
+    paddingHorizontal: 16,
+    backgroundColor: "#7FAF9B", // Melo brand color
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: "#DCEDE4",
   },
   headerTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "900",
     color: "#0F1E17",
+    letterSpacing: 0.3,
   },
-  content: { padding: 16, paddingBottom: 180 },
+
+  /* ---------- LAYOUT ---------- */
+  content: {
+    padding: 18,
+    paddingBottom: 140,
+  },
+
   card: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 18,
     padding: 16,
+    shadowColor: "#000",
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
   },
+
   image: {
     width: "100%",
     height: 220,
     borderRadius: 14,
-    marginBottom: 12,
+    marginBottom: 14,
+    backgroundColor: "#F2F2F2",
   },
+
   titleRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
+
   title: {
     fontSize: 18,
     fontWeight: "900",
     color: "#0F1E17",
     flex: 1,
-    marginRight: 10,
+    marginRight: 12,
   },
+
   badge: {
-    backgroundColor: "#7FAF9B",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
+    backgroundColor: "#1F7A63",
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 14,
   },
   badgeText: {
     fontSize: 11,
     fontWeight: "900",
-    color: "#fff",
+    color: "#FFFFFF",
+    letterSpacing: 0.5,
   },
-  section: { marginTop: 24 },
+
+  /* ---------- SECTIONS ---------- */
+  section: {
+    marginTop: 26,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#E2EFE8",
+  },
+
   sectionTitle: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "900",
-    marginBottom: 10,
+    marginBottom: 12,
+    color: "#0F1E17",
+    letterSpacing: 0.3,
   },
+
+  /* ---------- ADDRESS ---------- */
   addressText: {
     fontSize: 13,
     fontWeight: "600",
-    marginBottom: 2,
+    color: "#2E5F4F",
+    marginBottom: 3,
   },
+
+  /* ---------- TRACKING ---------- */
   carrierRow: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
-    marginBottom: 12,
+    marginBottom: 14,
   },
+
   carrierBtn: {
     borderWidth: 1,
-    borderColor: "#D1E9DD",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
+    borderColor: "#CFE6DD",
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 14,
+    backgroundColor: "#F4FAF7",
   },
+
   carrierActive: {
     backgroundColor: "#7FAF9B",
     borderColor: "#7FAF9B",
   },
+
   carrierText: {
     fontSize: 12,
     fontWeight: "800",
     color: "#0F1E17",
   },
-  carrierTextActive: { color: "#fff" },
-  input: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderWidth: 1,
-    borderColor: "#D1E9DD",
+
+  carrierTextActive: {
+    color: "#FFFFFF",
   },
+
+  input: {
+    backgroundColor: "#F4FAF7",
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: "#D6E6DE",
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#0F1E17",
+  },
+
   infoText: {
     fontSize: 13,
     fontWeight: "700",
+    color: "#2E5F4F",
     marginBottom: 4,
   },
+
+  /* ---------- RECEIPT / LEDGER ---------- */
   row: {
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingVertical: 6,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#EEF5F1",
   },
+
   rowLabel: {
     color: "#6B8F7D",
-    fontWeight: "600",
-  },
-  rowValue: {
     fontWeight: "700",
+    fontSize: 13,
   },
+
+  rowValue: {
+    fontWeight: "800",
+    fontSize: 13,
+    color: "#0F1E17",
+  },
+
+  /* ---------- ACTION BAR ---------- */
   actionBar: {
     position: "absolute",
     bottom: 85,
     left: 0,
     right: 0,
-    paddingHorizontal: 16,
+    paddingHorizontal: 18,
   },
+
   primaryBtn: {
-    backgroundColor: "#1F7A63",
-    paddingVertical: 14,
-    borderRadius: 16,
+    backgroundColor: "#0F1E17",
+    paddingVertical: 16,
+    borderRadius: 18,
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
   },
+
   primaryDisabled: {
     backgroundColor: "#A7C8BB",
   },
+
   primaryText: {
-    color: "#fff",
+    color: "#FFFFFF",
     fontWeight: "900",
     fontSize: 15,
     textAlign: "center",
+    letterSpacing: 0.3,
   },
 })

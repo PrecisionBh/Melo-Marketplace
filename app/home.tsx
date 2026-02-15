@@ -43,6 +43,7 @@ type ListingRow = {
   shipping_type?: "seller_pays" | "buyer_pays" | null
   is_sold: boolean
   is_removed: boolean
+  user_id?: string
 }
 
 /* ---------------- SCREEN ---------------- */
@@ -81,33 +82,103 @@ export default function HomeScreen() {
   const loadListings = async () => {
     setLoading(true)
 
-    const { data, error } = await supabase
-      .from("listings")
-      .select(
-        "id,title,price,category,condition,image_urls,allow_offers,shipping_type,is_sold,is_removed"
-      )
-      .eq("status", "active")
-      .eq("is_sold", false)
-      .eq("is_removed", false)
-      .order("created_at", { ascending: false })
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
 
-    if (error) {
-      console.error("Load listings error:", error)
-      setLoading(false)
-      return
-    }
+      // Get followed sellers (safe if not logged in or none followed)
+      let followedSellerIds: string[] = []
 
-    const rows = data as ListingRow[]
+      if (user) {
+        const { data: followsData } = await supabase
+          .from("follows")
+          .select("following_id")
+          .eq("follower_id", user.id)
 
-    const normalized: Listing[] = rows
-      .filter(
+        followedSellerIds =
+          followsData?.map((f: any) => f.following_id) ?? []
+      }
+
+      // Fetch ALL active listings (UNCHANGED behavior)
+      const { data, error } = await supabase
+        .from("listings")
+        .select(
+          "id,title,price,category,condition,image_urls,allow_offers,shipping_type,is_sold,is_removed,user_id"
+        )
+        .eq("status", "active")
+        .eq("is_sold", false)
+        .eq("is_removed", false)
+        .order("created_at", { ascending: false })
+
+      if (error) {
+        console.error("Load listings error:", error)
+        setLoading(false)
+        return
+      }
+
+      const rows = (data ?? []) as ListingRow[]
+
+      const validRows = rows.filter(
         (l) =>
           Array.isArray(l.image_urls) &&
           l.image_urls.length > 0 &&
           l.title?.trim().length > 0 &&
           Number(l.price) > 0
       )
-      .map((l) => ({
+
+      // If user follows nobody, show ALL listings normally (NO algorithm)
+      if (!followedSellerIds.length) {
+        const normalized: Listing[] = validRows.map((l) => ({
+          id: l.id,
+          title: l.title,
+          price: Number(l.price),
+          category: l.category,
+          image_url: l.image_urls![0],
+          allow_offers: l.allow_offers ?? false,
+          shipping_type: l.shipping_type ?? null,
+        }))
+
+        setListings(normalized)
+        setLoading(false)
+        return
+      }
+
+      // Split listings
+      const followedRows = validRows.filter((l) =>
+        followedSellerIds.includes(l.user_id ?? "")
+      )
+
+      const newRows = validRows.filter(
+        (l) => !followedSellerIds.includes(l.user_id ?? "")
+      )
+
+      // Merge WITHOUT truncating (2 followed : 4 new)
+      const merged: ListingRow[] = []
+      let fIndex = 0
+      let nIndex = 0
+
+      while (fIndex < followedRows.length || nIndex < newRows.length) {
+        // Add up to 2 followed listings
+        for (let i = 0; i < 2 && fIndex < followedRows.length; i++) {
+          merged.push(followedRows[fIndex])
+          fIndex++
+        }
+
+        // Add up to 4 new listings
+        for (let i = 0; i < 4 && nIndex < newRows.length; i++) {
+          merged.push(newRows[nIndex])
+          nIndex++
+        }
+
+        // Safety fallback: if no followed left, just append remaining new listings
+        if (fIndex >= followedRows.length && nIndex < newRows.length) {
+          merged.push(...newRows.slice(nIndex))
+          break
+        }
+      }
+
+      const normalized: Listing[] = merged.map((l) => ({
         id: l.id,
         title: l.title,
         price: Number(l.price),
@@ -117,8 +188,12 @@ export default function HomeScreen() {
         shipping_type: l.shipping_type ?? null,
       }))
 
-    setListings(normalized)
-    setLoading(false)
+      setListings(normalized)
+    } catch (err) {
+      console.error("Load listings error:", err)
+    } finally {
+      setLoading(false)
+    }
   }
 
   const refreshListings = async () => {

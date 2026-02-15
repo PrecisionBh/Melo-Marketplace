@@ -42,6 +42,10 @@ export default function LeaveReviewScreen() {
   const [fromUserId, setFromUserId] = useState<string | null>(null)
   const [alreadyReviewed, setAlreadyReviewed] = useState(false)
 
+  // FOLLOW STATES (ADDED)
+  const [isFollowing, setIsFollowing] = useState(false)
+  const [followLoading, setFollowLoading] = useState(false)
+
   useEffect(() => {
     if (!orderId) return
 
@@ -87,6 +91,18 @@ export default function LeaveReviewScreen() {
 
         setToUserId(targetUserId)
 
+        // CHECK IF ALREADY FOLLOWING (ADDED)
+        if (targetUserId) {
+          const { data: followRow } = await supabase
+            .from("followers")
+            .select("id")
+            .eq("follower_id", user.id)
+            .eq("following_id", targetUserId)
+            .maybeSingle()
+
+          setIsFollowing(!!followRow)
+        }
+
         const { data: existing } = await supabase
           .from("ratings")
           .select("id")
@@ -118,6 +134,37 @@ export default function LeaveReviewScreen() {
     })
   }
 
+  // FOLLOW TOGGLE (ADDED)
+  const handleFollowToggle = async () => {
+    if (!toUserId || !fromUserId) return
+
+    try {
+      setFollowLoading(true)
+
+      if (isFollowing) {
+        const { error } = await supabase
+          .from("followers")
+          .delete()
+          .eq("follower_id", fromUserId)
+          .eq("following_id", toUserId)
+
+        if (!error) setIsFollowing(false)
+      } else {
+        const { error } = await supabase.from("followers").insert({
+          follower_id: fromUserId,
+          following_id: toUserId,
+        })
+
+        if (!error) setIsFollowing(true)
+      }
+    } catch (err) {
+      console.log("Follow toggle error:", err)
+      Alert.alert("Error", "Failed to update follow status.")
+    } finally {
+      setFollowLoading(false)
+    }
+  }
+
   const handleSubmit = async () => {
     if (rating === 0) {
       Alert.alert("Select Rating", "Please select a star rating.")
@@ -134,7 +181,7 @@ export default function LeaveReviewScreen() {
         from_user_id: fromUserId,
         to_user_id: toUserId,
         rating,
-        review_tags: selectedTags, // <-- NEW COLUMN
+        review_tags: selectedTags,
         comment: comment.trim() || null,
       })
 
@@ -230,6 +277,35 @@ export default function LeaveReviewScreen() {
             })}
           </View>
 
+          {/* FOLLOW SELLER (ADDED - HIGH CONVERSION SPOT) */}
+          {toUserId && (
+            <View style={styles.followCard}>
+              <Text style={styles.followTitle}>
+                Liked this seller?
+              </Text>
+              <Text style={styles.followSubtitle}>
+                Follow their listings to see future drops 🔔
+              </Text>
+
+              <TouchableOpacity
+                style={[
+                  styles.followButton,
+                  isFollowing && styles.followingButton,
+                ]}
+                onPress={handleFollowToggle}
+                disabled={followLoading}
+              >
+                <Text style={styles.followButtonText}>
+                  {followLoading
+                    ? "Loading..."
+                    : isFollowing
+                    ? "Following"
+                    : "Follow Seller"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           {/* COMMENT */}
           <Text style={styles.label}>Optional comment</Text>
 
@@ -322,6 +398,42 @@ const styles = StyleSheet.create({
   tagTextSelected: {
     color: "#0F1E17",
   },
+
+  // FOLLOW UI (ADDED)
+  followCard: {
+    marginBottom: 20,
+    padding: 16,
+    backgroundColor: "#F4F7F5",
+    borderRadius: 14,
+    alignItems: "center",
+  },
+  followTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#0F1E17",
+  },
+  followSubtitle: {
+    fontSize: 12,
+    color: "#6B8F7D",
+    marginTop: 4,
+    marginBottom: 12,
+    textAlign: "center",
+  },
+  followButton: {
+    backgroundColor: "#7FAF9B",
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 999,
+  },
+  followingButton: {
+    backgroundColor: "#2E2E2E",
+  },
+  followButtonText: {
+    color: "#0F1E17",
+    fontWeight: "800",
+    fontSize: 14,
+  },
+
   input: {
     backgroundColor: "#F4F7F5",
     borderRadius: 12,

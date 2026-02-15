@@ -88,7 +88,6 @@ export default function ReviewsScreen() {
       })
     })
 
-    // Convert to sorted array (most common first)
     return Object.entries(counts).sort((a, b) => b[1] - a[1])
   }, [reviews])
 
@@ -150,17 +149,18 @@ export default function ReviewsScreen() {
                   </Text>
                 </View>
 
-                {/* BADGE COUNTS */}
+                {/* SELLER HIGHLIGHTS */}
                 {hasBadges && (
                   <View style={styles.badgeSection}>
                     <Text style={styles.badgeTitle}>
                       Seller Highlights
                     </Text>
+
                     <View style={styles.badgeWrap}>
                       {tagCounts.map(([tag, count]) => (
                         <View key={tag} style={styles.badge}>
                           <Text style={styles.badgeText}>
-                            {tag} × {count}
+                            {tag} • {count}
                           </Text>
                         </View>
                       ))}
@@ -190,7 +190,7 @@ export default function ReviewsScreen() {
                 ))}
               </View>
 
-              {/* TAGS */}
+              {/* REVIEW TAGS (UNCHANGED) */}
               {item.review_tags && item.review_tags.length > 0 && (
                 <View style={styles.tagWrap}>
                   {item.review_tags.map((tag) => (
@@ -277,6 +277,7 @@ const styles = StyleSheet.create({
   badgeSection: {
     marginTop: 18,
     alignItems: "center",
+    width: "100%",
   },
 
   badgeTitle: {
@@ -286,24 +287,37 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
 
+  // SMART WRAPPING GRID (2 per row unless too long)
   badgeWrap: {
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "center",
+    width: "100%",
+    paddingHorizontal: 10,
+    marginTop: 6,
   },
 
   badge: {
     backgroundColor: "#7FAF9B",
-    paddingHorizontal: 12,
+    borderRadius: 14,
+    minHeight: 40,
+    paddingHorizontal: 14,
     paddingVertical: 6,
-    borderRadius: 999,
-    margin: 4,
+    margin: 6,
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: "42%",
+    maxWidth: "100%",
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   badgeText: {
     fontSize: 12,
     fontWeight: "800",
     color: "#0F1E17",
+    textAlign: "center",
+    lineHeight: 16,
   },
 
   dividerWrap: {
