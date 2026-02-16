@@ -12,6 +12,7 @@ import {
 } from "react-native"
 
 import AppHeader from "@/components/app-header"
+import { handleAppError } from "@/lib/errors/appError"
 import { supabase } from "@/lib/supabase"
 
 /* ---------------- TYPES ---------------- */
@@ -44,20 +45,24 @@ export default function OrdersToShipScreen() {
   )
 
   const loadOrders = async () => {
-    setLoading(true)
+    try {
+      setLoading(true)
 
-    const { data: authData } = await supabase.auth.getUser()
-    const sellerId = authData?.user?.id
+      const { data: authData, error: authError } =
+        await supabase.auth.getUser()
 
-    if (!sellerId) {
-      setOrders([])
-      setLoading(false)
-      return
-    }
+      if (authError) throw authError
 
-    const { data, error } = await supabase
-      .from("orders")
-      .select(`
+      const sellerId = authData?.user?.id
+
+      if (!sellerId) {
+        setOrders([])
+        return
+      }
+
+      const { data, error } = await supabase
+        .from("orders")
+        .select(`
         id,
         status,
         amount_cents,
@@ -66,17 +71,21 @@ export default function OrdersToShipScreen() {
         image_url,
         listing_snapshot
       `)
-      .eq("status", "paid")
-      .eq("seller_id", sellerId)
-      .order("created_at", { ascending: true })
+        .eq("status", "paid")
+        .eq("seller_id", sellerId)
+        .order("created_at", { ascending: true })
 
-    if (!error && data) {
-      setOrders(data as Order[])
-    } else {
+      if (error) throw error
+
+      setOrders((data as Order[]) ?? [])
+    } catch (err) {
+      handleAppError(err, {
+        fallbackMessage: "Failed to load orders to ship.",
+      })
       setOrders([])
+    } finally {
+      setLoading(false)
     }
-
-    setLoading(false)
   }
 
   if (loading) {

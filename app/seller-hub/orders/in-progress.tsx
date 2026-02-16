@@ -12,6 +12,7 @@ import {
 } from "react-native"
 
 import AppHeader from "@/components/app-header"
+import { handleAppError } from "@/lib/errors/appError"
 import { supabase } from "@/lib/supabase"
 
 /* ---------------- TYPES ---------------- */
@@ -45,42 +46,49 @@ export default function SellerInProgressOrdersScreen() {
   }, [])
 
   const loadOrders = async () => {
-    setLoading(true)
+    try {
+      setLoading(true)
 
-    const {
-      data: authData,
-    } = await supabase.auth.getUser()
+      const {
+        data: authData,
+        error: authError,
+      } = await supabase.auth.getUser()
 
-    const sellerId = authData?.user?.id
-    if (!sellerId) {
+      if (authError) throw authError
+
+      const sellerId = authData?.user?.id
+      if (!sellerId) {
+        setOrders([])
+        return
+      }
+
+      const { data, error } = await supabase
+        .from("orders")
+        .select(`
+          id,
+          status,
+          amount_cents,
+          buyer_id,
+          seller_id,
+          created_at,
+          image_url,
+          listing_snapshot
+        `)
+        .eq("seller_id", sellerId)
+        .in("status", ["shipped", "delivered", "issue_reported"])
+        .order("created_at", { ascending: false })
+
+      if (error) throw error
+
+      setOrders((data as Order[]) ?? [])
+    } catch (err) {
+      handleAppError(err, {
+        fallbackMessage: "Failed to load in-progress orders.",
+      })
       setOrders([])
+    } finally {
       setLoading(false)
-      return
     }
-
-    const { data, error } = await supabase
-      .from("orders")
-      .select(`
-        id,
-        status,
-        amount_cents,
-        buyer_id,
-        seller_id,
-        created_at,
-        image_url,
-        listing_snapshot
-      `)
-      .eq("seller_id", sellerId)
-      .in("status", ["shipped", "delivered", "issue_reported"])
-      .order("created_at", { ascending: false })
-
-    if (!error && data) {
-      setOrders(data as Order[])
-    } else {
-      setOrders([])
-    }
-
-    setLoading(false)
   }
 
   /* ---------------- UI ---------------- */
@@ -137,7 +145,7 @@ export default function SellerInProgressOrdersScreen() {
                   </Text>
 
                   <Text style={styles.subText}>
-                    Buyer: {item.buyer_id.slice(0, 8)}
+                    Buyer: {item.buyer_id?.slice(0, 8) ?? "Unknown"}
                   </Text>
 
                   <Text style={styles.subText}>

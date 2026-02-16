@@ -11,6 +11,7 @@ import {
 
 import AppHeader from "@/components/app-header"
 import { useAuth } from "../../context/AuthContext"
+import { handleAppError } from "../../lib/errors/appError"
 import { supabase } from "../../lib/supabase"
 
 type Conversation = {
@@ -33,50 +34,65 @@ export default function MessagesScreen() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    loadConversations()
-  }, [])
+    if (session?.user?.id) {
+      loadConversations()
+    }
+  }, [session?.user?.id])
 
   /* ---------------- LOAD CONVERSATIONS ---------------- */
 
   const loadConversations = async () => {
-    if (!session?.user) return
+    try {
+      if (!session?.user?.id) {
+        setConversations([])
+        return
+      }
 
-    const { data, error } = await supabase.rpc(
-      "get_user_conversations",
-      { uid: session.user.id }
-    )
+      setLoading(true)
 
-    if (error) {
-      console.error("loadConversations error:", error)
+      const { data, error } = await supabase.rpc("get_user_conversations", {
+        uid: session.user.id,
+      })
+
+      if (error) throw error
+
+      setConversations(data ?? [])
+    } catch (err) {
+      handleAppError(err, {
+        fallbackMessage: "Failed to load conversations.",
+      })
+      setConversations([])
+    } finally {
       setLoading(false)
-      return
     }
-
-    setConversations(data ?? [])
-    setLoading(false)
   }
 
   /* ---------------- OPEN CHAT ---------------- */
 
   const openConversation = async (conversationId: string) => {
-    if (!session?.user) return
+    try {
+      if (!session?.user?.id) return
 
-    await supabase
-      .from("messages")
-      .update({ is_read: true })
-      .eq("conversation_id", conversationId)
-      .neq("sender_id", session.user.id)
+      const { error } = await supabase
+        .from("messages")
+        .update({ is_read: true })
+        .eq("conversation_id", conversationId)
+        .neq("sender_id", session.user.id)
 
-    router.push(`/messages/${conversationId}`)
+      if (error) throw error
+
+      router.push(`/messages/${conversationId}`)
+    } catch (err) {
+      handleAppError(err, {
+        fallbackMessage: "Failed to open conversation.",
+      })
+    }
   }
 
   /* ---------------- RENDER ITEM ---------------- */
 
   const renderItem = ({ item }: { item: Conversation }) => (
-    <TouchableOpacity
-      style={styles.row}
-      onPress={() => openConversation(item.id)}
-    >
+    <TouchableOpacity style={styles.row} onPress={() => openConversation(item.id)}>
       <Image
         source={
           item.other_user.avatar_url
@@ -87,9 +103,7 @@ export default function MessagesScreen() {
       />
 
       <View style={styles.textWrap}>
-        <Text style={styles.name}>
-          {item.other_user.display_name}
-        </Text>
+        <Text style={styles.name}>{item.other_user.display_name}</Text>
 
         <Text style={styles.preview} numberOfLines={1}>
           {item.last_message}
@@ -97,15 +111,11 @@ export default function MessagesScreen() {
       </View>
 
       <View style={styles.rightWrap}>
-        <Text style={styles.time}>
-          {formatTime(item.last_message_at)}
-        </Text>
+        <Text style={styles.time}>{formatTime(item.last_message_at)}</Text>
 
         {item.unread_count > 0 && (
           <View style={styles.unreadBadge}>
-            <Text style={styles.unreadText}>
-              {item.unread_count}
-            </Text>
+            <Text style={styles.unreadText}>{item.unread_count}</Text>
           </View>
         )}
       </View>
@@ -114,10 +124,7 @@ export default function MessagesScreen() {
 
   return (
     <View style={styles.screen}>
-      <AppHeader
-        title="Messages"
-        backLabel="Back"
-      />
+      <AppHeader title="Messages" backLabel="Back" />
 
       <FlatList
         data={conversations}

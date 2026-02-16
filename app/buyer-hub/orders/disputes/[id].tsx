@@ -11,7 +11,9 @@ import {
 
 
 import AppHeader from "@/components/app-header"
+import { handleAppError } from "../../../../lib/errors/appError"
 import { supabase } from "../../../../lib/supabase"
+
 
 export default function DisputeDetailPage() {
   const { id } = useLocalSearchParams<{ id: string }>()
@@ -26,18 +28,27 @@ export default function DisputeDetailPage() {
   }, [id])
 
   const fetchDispute = async () => {
-    const { data, error } = await supabase
-      .from("disputes")
-      .select("*")
-      .eq("id", id)
-      .single()
+  const { data, error } = await supabase
+    .from("disputes")
+    .select("*")
+    .eq("id", id)
+    .single()
 
-    if (!error && data) {
-      setDispute(data)
-    }
-
+  if (error) {
+    handleAppError(error, {
+      fallbackMessage: "Failed to load dispute details.",
+    })
     setLoading(false)
+    return
   }
+
+  if (data) {
+    setDispute(data)
+  }
+
+  setLoading(false)
+}
+
 
   const getStatusColor = (status: string) => {
     switch (status) {

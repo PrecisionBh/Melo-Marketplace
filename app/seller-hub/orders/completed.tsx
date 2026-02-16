@@ -13,6 +13,7 @@ import {
 
 import AppHeader from "@/components/app-header"
 import { useAuth } from "@/context/AuthContext"
+import { handleAppError } from "@/lib/errors/appError"
 import { supabase } from "@/lib/supabase"
 
 /* ---------------- TYPES ---------------- */
@@ -41,36 +42,49 @@ export default function SellerCompletedOrdersScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      if (!session?.user?.id) return
+      if (!session?.user?.id) {
+        setOrders([])
+        setLoading(false)
+        return
+      }
       loadOrders()
     }, [session?.user?.id])
   )
 
   const loadOrders = async () => {
-    setLoading(true)
+    try {
+      if (!session?.user?.id) {
+        setOrders([])
+        return
+      }
 
-    const { data, error } = await supabase
-      .from("orders")
-      .select(`
-        id,
-        amount_cents,
-        buyer_id,
-        completed_at,
-        escrow_status,
-        listing_snapshot
-      `)
-      .eq("seller_id", session!.user.id)
-      .in("status", ["completed", "paid"])
-      .order("completed_at", { ascending: false })
+      setLoading(true)
 
-    if (!error && data) {
-      setOrders(data as Order[])
-    } else {
-      console.log("Completed orders load error:", error)
+      const { data, error } = await supabase
+        .from("orders")
+        .select(`
+          id,
+          amount_cents,
+          buyer_id,
+          completed_at,
+          escrow_status,
+          listing_snapshot
+        `)
+        .eq("seller_id", session.user.id)
+        .in("status", ["completed", "paid"])
+        .order("completed_at", { ascending: false })
+
+      if (error) throw error
+
+      setOrders((data as Order[]) ?? [])
+    } catch (err) {
+      handleAppError(err, {
+        fallbackMessage: "Failed to load completed sales.",
+      })
       setOrders([])
+    } finally {
+      setLoading(false)
     }
-
-    setLoading(false)
   }
 
   if (loading) {
@@ -128,7 +142,7 @@ export default function SellerCompletedOrdersScreen() {
                   </Text>
 
                   <Text style={styles.subText}>
-                    Buyer: {item.buyer_id.slice(0, 8)}
+                    Buyer: {item.buyer_id?.slice(0, 8) ?? "Unknown"}
                   </Text>
 
                   <Text style={styles.subText}>

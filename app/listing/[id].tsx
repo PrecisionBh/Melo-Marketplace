@@ -15,7 +15,9 @@ import {
 
 import AppHeader from "@/components/app-header"
 import { useAuth } from "../../context/AuthContext"
+import { handleAppError } from "../../lib/errors/appError"
 import { supabase } from "../../lib/supabase"
+
 
 const SCREEN_WIDTH = Dimensions.get("window").width
 
@@ -76,7 +78,12 @@ export default function ListingDetailScreen() {
   /* ---------------- LOAD LISTING ---------------- */
 
   const loadListing = async () => {
+  try {
     setLoading(true)
+
+    if (!id) {
+      throw new Error("Missing listing id")
+    }
 
     const { data, error } = await supabase
       .from("listings")
@@ -98,19 +105,25 @@ export default function ListingDetailScreen() {
       .single()
 
     if (error || !data) {
-      console.error("loadListing error:", error)
-      setListing(null)
-      setLoading(false)
-      return
+      throw new Error("Listing not found")
     }
 
     setListing(data)
+  } catch (err) {
+    handleAppError(err, {
+      fallbackMessage: "Failed to load listing.",
+    })
+    setListing(null)
+  } finally {
     setLoading(false)
   }
+}
+
 
   /* ---------------- LOAD SELLER ---------------- */
 
   const loadSeller = async () => {
+  try {
     if (!listing?.user_id) return
 
     const { data, error } = await supabase
@@ -120,142 +133,183 @@ export default function ListingDetailScreen() {
       .single()
 
     if (error) {
-      console.error("loadSeller error:", error)
-      setSellerName(null)
-      return
+      throw error
     }
 
     setSellerName(data?.display_name ?? null)
 
     // Load seller ratings
-const { data: ratings } = await supabase
-  .from("ratings")
-  .select("rating")
-  .eq("to_user_id", listing.user_id)
+    const { data: ratings, error: ratingsError } = await supabase
+      .from("ratings")
+      .select("rating")
+      .eq("to_user_id", listing.user_id)
 
-if (!ratings || ratings.length === 0) {
-  setSellerRatingAvg(null)
-  setSellerRatingCount(0)
-} else {
-  const total = ratings.reduce((sum, r) => sum + r.rating, 0)
-  setSellerRatingAvg(Number((total / ratings.length).toFixed(1)))
-  setSellerRatingCount(ratings.length)
-}
+    if (ratingsError) throw ratingsError
+
+    if (!ratings || ratings.length === 0) {
+      setSellerRatingAvg(null)
+      setSellerRatingCount(0)
+    } else {
+      const total = ratings.reduce((sum, r) => sum + r.rating, 0)
+      setSellerRatingAvg(Number((total / ratings.length).toFixed(1)))
+      setSellerRatingCount(ratings.length)
+    }
+  } catch (err) {
+    handleAppError(err, {
+      fallbackMessage: "Failed to load seller info.",
+    })
+    setSellerName(null)
   }
+}
+
 
   /* ---------------- MESSAGE SELLER ---------------- */
 
 const handleMessageSeller = async () => {
-  if (!session?.user || !listing) return
+  try {
+    if (!session?.user || !listing) {
+      throw new Error("Missing session or listing")
+    }
 
-  const buyerId = session.user.id
-  const sellerId = listing.user_id
-  if (buyerId === sellerId) return
+    const buyerId = session.user.id
+    const sellerId = listing.user_id
+    if (buyerId === sellerId) return
 
-  let conversationId: string | null = null
+    let conversationId: string | null = null
 
-  // Check direct conversation
-  const { data: direct } = await supabase
-    .from("conversations")
-    .select("id")
-    .eq("user_one", buyerId)
-    .eq("user_two", sellerId)
-    .order("created_at", { ascending: true })
-    .limit(1)
-
-  if (direct && direct.length > 0) {
-    conversationId = direct[0].id
-  } else {
-    // Check reverse conversation
-    const { data: reverse } = await supabase
+    // Check direct conversation
+    const { data: direct, error: directError } = await supabase
       .from("conversations")
       .select("id")
-      .eq("user_one", sellerId)
-      .eq("user_two", buyerId)
+      .eq("user_one", buyerId)
+      .eq("user_two", sellerId)
       .order("created_at", { ascending: true })
       .limit(1)
 
-    if (reverse && reverse.length > 0) {
-      conversationId = reverse[0].id
+    if (directError) throw directError
+
+    if (direct && direct.length > 0) {
+      conversationId = direct[0].id
+    } else {
+      // Check reverse conversation
+      const { data: reverse, error: reverseError } = await supabase
+        .from("conversations")
+        .select("id")
+        .eq("user_one", sellerId)
+        .eq("user_two", buyerId)
+        .order("created_at", { ascending: true })
+        .limit(1)
+
+      if (reverseError) throw reverseError
+
+      if (reverse && reverse.length > 0) {
+        conversationId = reverse[0].id
+      }
     }
-  }
 
-  // Create conversation if none exists
-  if (!conversationId) {
-    const { data: created, error } = await supabase
-      .from("conversations")
-      .insert({
-        user_one: buyerId,
-        user_two: sellerId,
-      })
-      .select("id")
-      .single()
+    // Create conversation if none exists
+    if (!conversationId) {
+      const { data: created, error } = await supabase
+        .from("conversations")
+        .insert({
+          user_one: buyerId,
+          user_two: sellerId,
+        })
+        .select("id")
+        .single()
 
-    if (error || !created) {
-      console.error("conversation create error:", error)
-      return
+      if (error || !created) {
+        throw error ?? new Error("Failed to create conversation")
+      }
+
+      conversationId = created.id
     }
 
-    conversationId = created.id
+    router.push({
+      pathname: "/messages/[id]",
+      params: {
+        id: conversationId!,
+        listingId: listing.id,
+      },
+    })
+  } catch (err) {
+    handleAppError(err, {
+      fallbackMessage: "Unable to open chat with seller.",
+    })
   }
-
-  // 🚀 DO NOT auto-send a message anymore
-  // Just open the chat with listing context
-  router.push({
-    pathname: "/messages/[id]",
-    params: {
-      id: conversationId!,
-      listingId: listing.id, // 👈 critical for showing listing card
-    },
-  })
 }
+
 
   /* ---------------- WATCHLIST ---------------- */
 
   const loadWatchData = async () => {
+  try {
     if (!listing) return
 
-    const { count } = await supabase
+    const { count, error: countError } = await supabase
       .from("watchlist")
       .select("*", { count: "exact", head: true })
       .eq("listing_id", listing.id)
+
+    if (countError) throw countError
 
     setLikesCount(count ?? 0)
 
     if (!session?.user) return
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("watchlist")
       .select("id")
       .eq("listing_id", listing.id)
       .eq("user_id", session.user.id)
       .maybeSingle()
 
+    if (error) throw error
+
     setLiked(!!data)
+  } catch (err) {
+    handleAppError(err, {
+      fallbackMessage: "Failed to load watch data.",
+    })
   }
+}
+
 
   const toggleWatch = async () => {
-    if (!session?.user || !listing) return
+  try {
+    if (!session?.user || !listing) {
+      throw new Error("User or listing missing")
+    }
 
     if (liked) {
-      await supabase
+      const { error } = await supabase
         .from("watchlist")
         .delete()
         .eq("listing_id", listing.id)
         .eq("user_id", session.user.id)
 
+      if (error) throw error
+
       setLiked(false)
       setLikesCount((c) => Math.max(0, c - 1))
     } else {
-      await supabase.from("watchlist").insert({
+      const { error } = await supabase.from("watchlist").insert({
         listing_id: listing.id,
         user_id: session.user.id,
       })
 
+      if (error) throw error
+
       setLiked(true)
       setLikesCount((c) => c + 1)
     }
+  } catch (err) {
+    handleAppError(err, {
+      fallbackMessage: "Failed to update watchlist.",
+    })
   }
+}
+
 
   /* ---------------- RENDER ---------------- */
 

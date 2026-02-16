@@ -17,7 +17,9 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
 import { useAuth } from "../../context/AuthContext"
+import { handleAppError } from "../../lib/errors/appError"
 import { supabase } from "../../lib/supabase"
+
 
 type Message = {
   id: string
@@ -98,28 +100,37 @@ export default function ChatScreen() {
 
   /* 🟢 PRELOAD INITIAL LISTING CARD (CRITICAL FOR CARD BEFORE FIRST MESSAGE) */
   const preloadInitialListing = async () => {
+  try {
     if (!initialListingId) return
 
-    // If already cached, skip
     if (listingMap[initialListingId]) return
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("listings")
       .select("id,title,price,image_urls,allow_offers")
       .eq("id", initialListingId)
       .single()
 
-    if (!data) return
+    if (error || !data) {
+      throw error ?? new Error("Listing preload failed")
+    }
 
     setListingMap((prev) => ({
       ...prev,
       [data.id]: data,
     }))
+  } catch (err) {
+    handleAppError(err, {
+      fallbackMessage: "Failed to load product preview.",
+    })
   }
+}
+
 
   /* ---------------- LOAD MESSAGES ---------------- */
 
   const loadMessages = async () => {
+  try {
     if (!conversationId) return
 
     const { data, error } = await supabase
@@ -130,61 +141,84 @@ export default function ChatScreen() {
       .eq("conversation_id", conversationId)
       .order("created_at", { ascending: true })
 
-    if (!error && data) {
-      setMessages(data)
-      loadListingCards(data)
-    }
+    if (error) throw error
 
+    if (data) {
+      setMessages(data)
+      await loadListingCards(data)
+    }
+  } catch (err) {
+    handleAppError(err, {
+      fallbackMessage: "Failed to load messages.",
+    })
+  } finally {
     setLoading(false)
   }
+}
+
 
   /* ---------------- LOAD CONVERSATION USER ---------------- */
 
   const loadConversationUser = async () => {
+  try {
     if (!conversationId || !session?.user) return
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("conversations")
       .select("user_one, user_two")
       .eq("id", conversationId)
       .single()
 
-    if (!data) return
+    if (error || !data) {
+      throw error ?? new Error("Conversation not found")
+    }
 
-    const otherUserId =
+    const resolvedOtherUserId =
       data.user_one === session.user.id
         ? data.user_two
         : data.user_one
 
-    setOtherUserId(otherUserId)
+    setOtherUserId(resolvedOtherUserId)
 
-    const { data: profile } = await supabase
+    const { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select("display_name, avatar_url")
-      .eq("id", otherUserId)
+      .eq("id", resolvedOtherUserId)
       .single()
 
-    if (profile?.display_name)
-      setOtherUserName(profile.display_name)
+    if (profileError) throw profileError
 
-    if (profile?.avatar_url)
+    if (profile?.display_name) {
+      setOtherUserName(profile.display_name)
+    }
+
+    if (profile?.avatar_url) {
       setOtherUserAvatar(profile.avatar_url)
+    }
+  } catch (err) {
+    handleAppError(err, {
+      fallbackMessage: "Failed to load chat user.",
+    })
   }
+}
+
 
   /* ---------------- LOAD PRODUCT CARDS ---------------- */
 
-  const loadListingCards = async (msgs: Message[]) => {
+ const loadListingCards = async (msgs: Message[]) => {
+  try {
     const listingIds = Array.from(
       new Set(msgs.map((m) => m.listing_id).filter(Boolean))
     ) as string[]
 
     if (listingIds.length === 0) return
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("listings")
       .select("id,title,price,image_urls,allow_offers")
       .in("id", listingIds)
 
+    if (error) throw error
     if (!data) return
 
     const map: Record<string, ListingPreview> = {}
@@ -193,20 +227,35 @@ export default function ChatScreen() {
     })
 
     setListingMap(map)
+  } catch (err) {
+    handleAppError(err, {
+      fallbackMessage: "Failed to load listing cards.",
+    })
   }
+}
+
 
   /* ---------------- MARK READ ---------------- */
 
-  const markAsRead = async () => {
+ const markAsRead = async () => {
+  try {
     if (!conversationId || !session?.user) return
 
-    await supabase
+    const { error } = await supabase
       .from("messages")
       .update({ read_at: new Date().toISOString() })
       .eq("conversation_id", conversationId)
       .neq("sender_id", session.user.id)
       .is("read_at", null)
+
+    if (error) throw error
+  } catch (err) {
+    handleAppError(err, {
+      fallbackMessage: "Failed to update read status.",
+    })
   }
+}
+
 
 
 /* ---------------- REALTIME ---------------- */
@@ -370,15 +419,32 @@ const subscribeToMessages = () => {
   setText("")
 
   // 🚀 Send to Supabase (REAL MESSAGE)
-  const { error } = await supabase.from("messages").insert({
-    conversation_id: conversationId,
-    sender_id: session.user.id,
-    body: message,
-    listing_id: messageListingId, // 🟢 REAL DB card attachment
-  })
+    try {
+    const { error } = await supabase.from("messages").insert({
+      conversation_id: conversationId,
+      sender_id: session.user.id,
+      body: message,
+      listing_id: messageListingId,
+    })
 
-  if (error) {
-    console.error("Send message error:", error)
+    if (error) throw error
+
+    if (otherUserId) {
+      await notify({
+        userId: otherUserId,
+        type: "message",
+        title: "New message",
+        body: "You have a new message",
+        data: {
+          route: "/messages/[id]",
+          params: { id: conversationId },
+        },
+      })
+    }
+  } catch (err) {
+    handleAppError(err, {
+      fallbackMessage: "Message failed to send.",
+    })
   }
 
   // 🔔 Notify other user

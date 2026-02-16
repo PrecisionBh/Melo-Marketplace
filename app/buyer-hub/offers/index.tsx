@@ -13,7 +13,9 @@ import {
 
 import AppHeader from "@/components/app-header"
 import { useAuth } from "@/context/AuthContext"
+import { handleAppError } from "@/lib/errors/appError"
 import { supabase } from "@/lib/supabase"
+
 
 /* ---------------- TYPES ---------------- */
 
@@ -80,11 +82,14 @@ export default function BuyerOffersScreen() {
       .returns<Offer[]>()
 
     if (error) {
-      console.error("Error loading buyer offers:", error)
-      setOffers([])
-    } else {
-      setOffers(data ?? [])
-    }
+  handleAppError(error, {
+    fallbackMessage: "Failed to load your offers. Please try again.",
+  })
+  setOffers([])
+} else {
+  setOffers(data ?? [])
+}
+
 
     setLoading(false)
   }

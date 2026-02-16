@@ -16,6 +16,7 @@ import {
 
 import AppHeader from "@/components/app-header"
 import { useAuth } from "@/context/AuthContext"
+import { handleAppError } from "@/lib/errors/appError"
 import { supabase } from "@/lib/supabase"
 
 type Dispute = {
@@ -46,14 +47,20 @@ export default function SellerDisputeDetailPage() {
   /* 🔁 REFRESH EVERY TIME SCREEN GAINS FOCUS */
   useFocusEffect(
     useCallback(() => {
-      if (id && user) {
+      if (id && user?.id) {
         fetchDispute()
       }
-    }, [id, user])
+    }, [id, user?.id])
   )
 
   const fetchDispute = async () => {
     try {
+      if (!id || !user?.id) {
+        setDispute(null)
+        setLoading(false)
+        return
+      }
+
       setLoading(true)
 
       const { data, error } = await supabase
@@ -62,19 +69,24 @@ export default function SellerDisputeDetailPage() {
         .eq("id", id)
         .single()
 
-      if (error || !data) {
-        setLoading(false)
+      if (error) throw error
+
+      if (!data) {
+        setDispute(null)
         return
       }
 
-      if (data.seller_id !== user?.id) {
+      if (data.seller_id !== user.id) {
         router.back()
         return
       }
 
       setDispute(data)
     } catch (err) {
-      console.error("Seller dispute fetch error:", err)
+      handleAppError(err, {
+        fallbackMessage: "Failed to load dispute details.",
+      })
+      setDispute(null)
     } finally {
       setLoading(false)
     }

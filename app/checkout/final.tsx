@@ -14,7 +14,9 @@ import {
 
 import AppHeader from "@/components/app-header"
 import { useAuth } from "../../context/AuthContext"
+import { handleAppError } from "../../lib/errors/appError"
 import { supabase } from "../../lib/supabase"
+
 
 
 /* ---------------- TYPES ---------------- */
@@ -92,26 +94,34 @@ export default function FinalPaymentScreen() {
     if (!session?.user?.id) return
 
     supabase
-      .from("profiles")
-      .select(`
-        display_name,
-        address_line1,
-        address_line2,
-        city,
-        state,
-        postal_code
-      `)
-      .eq("id", session.user.id)
-      .single()
-      .then(({ data }) => {
-        if (!data) return
-        setName(data.display_name ?? "")
-        setLine1(data.address_line1 ?? "")
-        setLine2(data.address_line2 ?? "")
-        setCity(data.city ?? "")
-        setState(data.state ?? "")
-        setPostal(data.postal_code ?? "")
+  .from("profiles")
+  .select(`
+    display_name,
+    address_line1,
+    address_line2,
+    city,
+    state,
+    postal_code
+  `)
+  .eq("id", session.user.id)
+  .single()
+  .then(({ data, error }) => {
+    if (error) {
+      handleAppError(error, {
+        fallbackMessage: "Failed to load saved shipping address.",
       })
+      return
+    }
+
+    if (!data) return
+    setName(data.display_name ?? "")
+    setLine1(data.address_line1 ?? "")
+    setLine2(data.address_line2 ?? "")
+    setCity(data.city ?? "")
+    setState(data.state ?? "")
+    setPostal(data.postal_code ?? "")
+  })
+
   }, [session?.user?.id])
 
   /* ---------------- CALCULATE DISPLAY TOTAL ---------------- */
@@ -171,10 +181,13 @@ const buyerFee = Math.round(escrow * 0.03) + 30
 
 // Final display total must match Stripe total
 setDisplayTotalCents(escrow + buyerFee + taxCents)
-      } catch {
-        // If anything unexpected happens, just leave total null
-        setDisplayTotalCents(null)
-      }
+      } catch (err) {
+  handleAppError(err, {
+    fallbackMessage: "Failed to calculate checkout total.",
+  })
+  setDisplayTotalCents(null)
+}
+
     }
 
     loadTotal()
@@ -347,7 +360,10 @@ const stripeTotalCents = escrowCents + buyerFeeCents + taxCents
   .single()
 
 
-      if (!order) throw error
+      if (error || !order) {
+  throw new Error("Failed to create order.")
+}
+
 
       /* ---------- SAVE DEFAULT SHIPPING ---------- */
       if (!useSaved && saveAsDefault) {
@@ -376,16 +392,25 @@ const stripeTotalCents = escrowCents + buyerFeeCents + taxCents
           },
         })
 
-      if (stripeErr || !data?.url) {
-        throw stripeErr
-      }
+      if (stripeErr) {
+  throw stripeErr
+}
+
+if (!data?.url) {
+  throw new Error("Stripe session failed to return a checkout URL.")
+}
+
 
       await Linking.openURL(data.url)
     } catch (err: any) {
-      Alert.alert("Payment error", err?.message ?? "Checkout failed")
-    } finally {
-      setPaying(false)
-    }
+  handleAppError(err, {
+    fallbackMessage:
+      err?.message ?? "Checkout failed. Please try again.",
+  })
+} finally {
+  setPaying(false)
+}
+
   }
 
   /* ---------------- RENDER ---------------- */

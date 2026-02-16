@@ -13,7 +13,9 @@ import {
 
 import AppHeader from "@/components/app-header"
 import { useAuth } from "@/context/AuthContext"
+import { handleAppError } from "@/lib/errors/appError"
 import { supabase } from "@/lib/supabase"
+
 
 /* ---------------- TYPES ---------------- */
 
@@ -73,12 +75,16 @@ export default function BuyerInProgressOrdersScreen() {
       .in("status", ["paid", "shipped", "delivered", "disputed"])
       .order("created_at", { ascending: false })
 
-    if (!error && data) {
-      setOrders(data as Order[])
-    } else {
-      setOrders([])
-    }
-    setLoading(false)
+    if (error) {
+  handleAppError(error, {
+    fallbackMessage: "Failed to load active orders.",
+  })
+  setOrders([])
+} else {
+  setOrders((data as Order[]) ?? [])
+}
+setLoading(false)
+
   }
 
   if (loading) {

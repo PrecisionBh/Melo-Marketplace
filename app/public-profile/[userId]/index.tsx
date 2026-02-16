@@ -13,7 +13,9 @@ import {
 import AppHeader from "@/components/app-header"
 import ListingCard from "@/components/home/ListingCard"
 import { useAuth } from "@/context/AuthContext"
+import { handleAppError } from "@/lib/errors/appError"
 import { supabase } from "@/lib/supabase"
+
 
 const PAGE_SIZE = 12
 
@@ -146,9 +148,12 @@ export default function PublicProfileScreen() {
         .single()
 
       if (error || !created) {
-        console.error("conversation create error:", error)
-        return
-      }
+  handleAppError(error ?? new Error("Conversation creation failed"), {
+    fallbackMessage: "Unable to start chat.",
+  })
+  return
+}
+
 
       conversationId = created.id
     }
@@ -194,28 +199,49 @@ export default function PublicProfileScreen() {
         if (!error) setIsFollowing(true)
       }
     } catch (err) {
-      console.error("Follow toggle error:", err)
-    } finally {
+  handleAppError(err, {
+    fallbackMessage: "Failed to update follow status.",
+  })
+} finally {
+
       setFollowLoading(false)
     }
   }
 
   const loadProfile = async () => {
-    const { data } = await supabase
+  try {
+    if (!userId) return
+
+    const { data, error } = await supabase
       .from("profiles")
       .select("id, display_name, bio, avatar_url")
       .eq("id", userId)
       .single()
 
+    if (error) throw error
+
     setProfile(data ?? null)
+  } catch (err) {
+    handleAppError(err, {
+      fallbackMessage: "Failed to load profile.",
+    })
+    setProfile(null)
+  } finally {
     setLoading(false)
   }
+}
+
 
   const loadRatings = async () => {
-    const { data } = await supabase
+  try {
+    if (!userId) return
+
+    const { data, error } = await supabase
       .from("ratings")
       .select("rating")
       .eq("to_user_id", userId)
+
+    if (error) throw error
 
     if (!data || data.length === 0) {
       setRatingAvg(null)
@@ -226,24 +252,45 @@ export default function PublicProfileScreen() {
     const total = data.reduce((sum, r) => sum + r.rating, 0)
     setRatingAvg(Number((total / data.length).toFixed(1)))
     setRatingCount(data.length)
+  } catch (err) {
+    handleAppError(err, {
+      fallbackMessage: "Failed to load ratings.",
+    })
+    setRatingAvg(null)
+    setRatingCount(0)
   }
+}
+
 
   const loadSales = async () => {
-    const { count } = await supabase
+  try {
+    if (!userId) return
+
+    const { count, error } = await supabase
       .from("orders")
       .select("*", { count: "exact", head: true })
       .eq("seller_id", userId)
       .eq("status", "completed")
 
+    if (error) throw error
+
     setSoldCount(count ?? 0)
+  } catch (err) {
+    handleAppError(err, {
+      fallbackMessage: "Failed to load sales data.",
+    })
+    setSoldCount(0)
   }
+}
+
 
   const loadListings = async (reset = false) => {
+  try {
     if (!userId || (!hasMore && !reset)) return
 
     const nextPage = reset ? 0 : page
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("listings")
       .select(
         "id, title, price, category, image_urls, allow_offers"
@@ -257,6 +304,8 @@ export default function PublicProfileScreen() {
         nextPage * PAGE_SIZE + PAGE_SIZE - 1
       )
 
+    if (error) throw error
+
     const rows: Listing[] = data ?? []
 
     if (reset) {
@@ -268,7 +317,13 @@ export default function PublicProfileScreen() {
       setPage((p) => p + 1)
       setHasMore(rows.length === PAGE_SIZE)
     }
+  } catch (err) {
+    handleAppError(err, {
+      fallbackMessage: "Failed to load listings.",
+    })
   }
+}
+
 
   if (loading) {
     return <ActivityIndicator style={{ marginTop: 60 }} />

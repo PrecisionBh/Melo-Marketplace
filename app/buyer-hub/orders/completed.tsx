@@ -13,7 +13,9 @@ import {
 
 import AppHeader from "@/components/app-header"
 import { useAuth } from "@/context/AuthContext"
+import { handleAppError } from "@/lib/errors/appError"
 import { supabase } from "@/lib/supabase"
+
 
 /* ---------------- TYPES ---------------- */
 
@@ -67,12 +69,15 @@ export default function BuyerCompletedOrdersScreen() {
       .in("status", ["completed", "cancelled", "refunded"])
       .order("completed_at", { ascending: false })
 
-    if (!error && data) {
-      setOrders(data as Order[])
-    } else {
-      console.log("Buyer completed orders load error:", error)
-      setOrders([])
-    }
+    if (error) {
+  handleAppError(error, {
+    fallbackMessage: "Failed to load completed orders.",
+  })
+  setOrders([])
+} else {
+  setOrders((data as Order[]) ?? [])
+}
+
 
     setLoading(false)
   }

@@ -17,7 +17,9 @@ import {
 
 import AppHeader from "@/components/app-header"
 import { useAuth } from "@/context/AuthContext"
+import { handleAppError } from "@/lib/errors/appError"
 import { supabase } from "@/lib/supabase"
+
 
 /* ---------------- TYPES ---------------- */
 
@@ -92,10 +94,19 @@ export default function BuyerOrderDetailScreen() {
       .eq("id", id)
       .single()
 
-    if (error || !data || data.buyer_id !== session!.user.id) {
-      router.replace("/buyer-hub/orders")
-      return
-    }
+    if (error) {
+  handleAppError(error, {
+    fallbackMessage: "Failed to load order details.",
+  })
+  router.replace("/buyer-hub/orders")
+  return
+}
+
+if (!data || data.buyer_id !== session!.user.id) {
+  router.replace("/buyer-hub/orders")
+  return
+}
+
 
     setOrder(data)
     setLoading(false)
@@ -140,14 +151,14 @@ export default function BuyerOrderDetailScreen() {
     })
 
     if (error) {
-      Alert.alert(
-        "Payment Pending",
-        error.message ??
-          "Funds are not available yet. Please try again shortly."
-      )
-      setProcessing(false)
-      return
-    }
+  handleAppError(error, {
+    fallbackMessage:
+      "Funds are not available yet. Please try again shortly.",
+  })
+  setProcessing(false)
+  return
+}
+
 
     setConfirmVisible(false)
     setProcessing(false)
@@ -207,13 +218,13 @@ export default function BuyerOrderDetailScreen() {
               await loadOrder()
               setProcessing(false)
             } catch (err) {
-              console.error("Cancel order error:", err)
-              Alert.alert(
-                "Error",
-                "Something went wrong cancelling your order."
-              )
-              setProcessing(false)
-            }
+  handleAppError(err, {
+    fallbackMessage:
+      "Something went wrong cancelling your order.",
+  })
+  setProcessing(false)
+}
+
           },
         },
       ]

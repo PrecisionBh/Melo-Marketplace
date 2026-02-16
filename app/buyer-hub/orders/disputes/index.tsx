@@ -11,7 +11,9 @@ import {
 
 import AppHeader from "@/components/app-header"
 import { useAuth } from "@/context/AuthContext"
+import { handleAppError } from "@/lib/errors/appError"
 import { supabase } from "@/lib/supabase"
+
 
 export default function BuyerDisputesListScreen() {
   const router = useRouter()
@@ -41,16 +43,21 @@ export default function BuyerDisputesListScreen() {
         .order("created_at", { ascending: false })
 
       if (error) {
-        console.error("🔥 Error fetching disputes:", error)
-        return
-      }
+  handleAppError(error, {
+    fallbackMessage: "Failed to load disputes. Please try again.",
+  })
+  return
+}
 
-      setDisputes(data ?? [])
+
     } catch (err) {
-      console.error("🔥 Unexpected dispute fetch error:", err)
-    } finally {
-      setLoading(false)
-    }
+  handleAppError(err, {
+    fallbackMessage: "Something went wrong while loading disputes.",
+  })
+} finally {
+  setLoading(false)
+}
+
   }
 
   /* ---------------- RENDER ---------------- */

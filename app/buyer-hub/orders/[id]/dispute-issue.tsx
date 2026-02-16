@@ -15,7 +15,9 @@ import {
 
 import AppHeader from "@/components/app-header"
 import { useAuth } from "../../../../context/AuthContext"
+import { handleAppError } from "../../../../lib/errors/appError"
 import { supabase } from "../../../../lib/supabase"
+
 
 
 const REASONS = [
@@ -176,14 +178,14 @@ export default function DisputeIssuePage() {
       router.replace("/buyer-hub/orders")
 
     } catch (err) {
-      console.error("Dispute Error:", err)
-      Alert.alert(
-        "Error",
-        "Unable to submit dispute. Please try again."
-      )
-    } finally {
-      setSubmitting(false)
-    }
+  handleAppError(err, {
+    fallbackMessage:
+      "Unable to submit dispute. Please try again.",
+  })
+} finally {
+  setSubmitting(false)
+}
+
   }
 
   /* ---------------- RENDER ---------------- */

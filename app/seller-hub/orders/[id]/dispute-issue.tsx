@@ -15,8 +15,8 @@ import {
 
 import AppHeader from "@/components/app-header"
 import { useAuth } from "@/context/AuthContext"
+import { handleAppError } from "@/lib/errors/appError"
 import { supabase } from "@/lib/supabase"
-
 
 type Dispute = {
   id: string
@@ -43,13 +43,18 @@ export default function SellerDisputeIssue() {
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
-    if (id && user) {
+    if (id && user?.id) {
       loadDispute()
     }
-  }, [id, user])
+  }, [id, user?.id])
 
   const loadDispute = async () => {
     try {
+      if (!id || !user?.id) {
+        setDispute(null)
+        return
+      }
+
       setLoading(true)
 
       const { data, error } = await supabase
@@ -58,13 +63,15 @@ export default function SellerDisputeIssue() {
         .eq("order_id", id)
         .single()
 
-      if (error || !data) {
+      if (error) throw error
+
+      if (!data) {
         Alert.alert("Dispute not found")
         router.back()
         return
       }
 
-      if (data.seller_id !== user?.id) {
+      if (data.seller_id !== user.id) {
         Alert.alert("Access denied")
         router.back()
         return
@@ -72,7 +79,10 @@ export default function SellerDisputeIssue() {
 
       setDispute(data)
     } catch (err) {
-      console.error("Load dispute error:", err)
+      handleAppError(err, {
+        fallbackMessage: "Failed to load dispute.",
+      })
+      setDispute(null)
     } finally {
       setLoading(false)
     }
@@ -81,36 +91,53 @@ export default function SellerDisputeIssue() {
   /* ---------------- IMAGE PICKER ---------------- */
 
   const pickImage = async () => {
-    const res = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
-      quality: 0.8,
-    })
+    try {
+      const res = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        quality: 0.8,
+      })
 
-    if (!res.canceled && res.assets[0]?.uri) {
-      setImages((prev) => [...prev, res.assets[0].uri])
+      if (!res.canceled && res.assets?.[0]?.uri) {
+        setImages((prev) => [...prev, res.assets[0].uri])
+      }
+    } catch (err) {
+      handleAppError(err, {
+        fallbackMessage: "Failed to open image picker.",
+      })
     }
   }
 
   const uploadImages = async (): Promise<string[]> => {
+    if (!dispute) return []
+
     const uploaded: string[] = []
 
     for (const uri of images) {
-      const fileName = `${dispute!.id}/seller/${Date.now()}.jpg`
-      const file = await fetch(uri)
-      const blob = await file.blob()
+      try {
+        const fileName = `${dispute.id}/seller/${Date.now()}.jpg`
+        const file = await fetch(uri)
+        const blob = await file.blob()
 
-      const { error } = await supabase.storage
-        .from("dispute-images")
-        .upload(fileName, blob, {
-          contentType: "image/jpeg",
-        })
+        const { error } = await supabase.storage
+          .from("dispute-images")
+          .upload(fileName, blob, {
+            contentType: "image/jpeg",
+          })
 
-      if (!error) {
+        if (error) throw error
+
         const { data } = supabase.storage
           .from("dispute-images")
           .getPublicUrl(fileName)
 
-        uploaded.push(data.publicUrl)
+        if (data?.publicUrl) {
+          uploaded.push(data.publicUrl)
+        }
+      } catch (err) {
+        console.error("Image upload error:", err)
+        handleAppError(err, {
+          fallbackMessage: "One of the images failed to upload.",
+        })
       }
     }
 
@@ -125,22 +152,29 @@ export default function SellerDisputeIssue() {
       return
     }
 
+    if (!dispute) {
+      Alert.alert("Error", "Dispute not found.")
+      return
+    }
+
     try {
       setSubmitting(true)
 
       const uploadedUrls = await uploadImages()
 
-      await supabase
+      const { error } = await supabase
         .from("disputes")
         .update({
           seller_responded_at: new Date().toISOString(),
           status: "seller_responded", // ← correct lifecycle status
           evidence_urls: [
-            ...(dispute?.evidence_urls ?? []),
+            ...(dispute.evidence_urls ?? []),
             ...uploadedUrls,
           ],
         })
-        .eq("order_id", dispute!.order_id)
+        .eq("order_id", dispute.order_id)
+
+      if (error) throw error
 
       Alert.alert(
         "Response submitted",
@@ -149,8 +183,9 @@ export default function SellerDisputeIssue() {
 
       router.back()
     } catch (err) {
-      console.error(err)
-      Alert.alert("Error", "Unable to submit response.")
+      handleAppError(err, {
+        fallbackMessage: "Unable to submit response.",
+      })
     } finally {
       setSubmitting(false)
     }
@@ -171,10 +206,7 @@ export default function SellerDisputeIssue() {
   return (
     <View style={styles.screen}>
       {/* HEADER */}
-      <AppHeader
-  title="Dispute Response"
-/>
-
+      <AppHeader title="Dispute Response" />
 
       <ScrollView contentContainerStyle={styles.content}>
         {/* BUYER ISSUE */}
@@ -235,7 +267,7 @@ export default function SellerDisputeIssue() {
             onPress={submitResponse}
           >
             <Text style={styles.submitText}>
-              Submit Response
+              {submitting ? "Submitting..." : "Submit Response"}
             </Text>
           </TouchableOpacity>
         </View>

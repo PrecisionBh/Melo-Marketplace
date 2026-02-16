@@ -3,19 +3,21 @@ import * as ImagePicker from "expo-image-picker"
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { useEffect, useState } from "react"
 import {
-    Alert,
-    Image,
-    ScrollView,
-    StyleSheet,
-    Switch,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native"
 
 import { useAuth } from "../../context/AuthContext"
+import { handleAppError } from "../../lib/errors/appError"
 import { supabase } from "../../lib/supabase"
+
 
 /* ---------------- CONSTANTS ---------------- */
 
@@ -70,6 +72,7 @@ export default function EditListing() {
   }, [id])
 
   const loadListing = async () => {
+  try {
     const { data, error } = await supabase
       .from("listings")
       .select("*")
@@ -77,28 +80,34 @@ export default function EditListing() {
       .single()
 
     if (error || !data) {
-      Alert.alert("Error", "Listing not found")
-      router.back()
-      return
+      throw new Error("Listing not found")
     }
 
-    setTitle(data.title)
+    setTitle(data.title ?? "")
     setDescription(data.description ?? "")
     setBrand(data.brand ?? "")
-    setCategory(data.category)
-    setCondition(data.condition)
-    setPrice(String(data.price))
-    setAllowOffers(data.allow_offers)
+    setCategory(data.category ?? null)
+    setCondition(data.condition ?? null)
+    setPrice(data.price ? String(data.price) : "")
+    setAllowOffers(!!data.allow_offers)
     setMinOffer(data.min_offer ? String(data.min_offer) : "")
-    setShippingType(data.shipping_type)
+    setShippingType(data.shipping_type ?? null)
     setImages(data.image_urls ?? [])
-
+  } catch (err) {
+    handleAppError(err, {
+      fallbackMessage: "Failed to load listing details.",
+    })
+    router.back()
+  } finally {
     setLoading(false)
   }
+}
+
 
   /* ---------------- IMAGE PICKER ---------------- */
 
   const pickImage = async () => {
+  try {
     if (images.length >= 5) {
       Alert.alert("Limit reached", "Max 5 images allowed")
       return
@@ -109,10 +118,16 @@ export default function EditListing() {
       quality: 0.9,
     })
 
-    if (!result.canceled) {
+    if (!result.canceled && result.assets?.[0]?.uri) {
       setImages((prev) => [...prev, result.assets[0].uri])
     }
+  } catch (err) {
+    handleAppError(err, {
+      fallbackMessage: "Failed to open image picker.",
+    })
   }
+}
+
 
   const removeImage = (uri: string) => {
     setImages((prev) => prev.filter((i) => i !== uri))
@@ -121,11 +136,12 @@ export default function EditListing() {
   /* ---------------- IMAGE UPLOAD ---------------- */
 
   const uploadImage = async (
-    uri: string,
-    userId: string,
-    listingId: string,
-    index: number
-  ) => {
+  uri: string,
+  userId: string,
+  listingId: string,
+  index: number
+) => {
+  try {
     if (uri.startsWith("http")) return uri
 
     const ext = uri.split(".").pop() || "jpg"
@@ -149,12 +165,25 @@ export default function EditListing() {
       .getPublicUrl(path)
 
     return data.publicUrl
+  } catch (err) {
+    handleAppError(err, {
+      fallbackMessage: "Image upload failed. Please try again.",
+    })
+    throw err
   }
+}
+
 
   /* ---------------- SUBMIT ---------------- */
 
   const submit = async () => {
-    if (!session?.user || !id) return
+    if (!session?.user || !id) {
+  handleAppError(new Error("Missing session or listing ID"), {
+    fallbackMessage: "Session expired. Please try again.",
+  })
+  return
+}
+
 
     if (!title || !category || !condition || !price || images.length === 0) {
       Alert.alert("Missing info", "Please complete all required fields.")
@@ -207,8 +236,11 @@ export default function EditListing() {
       Alert.alert("Saved", "Listing updated")
       router.back()
     } catch (err: any) {
-      Alert.alert("Error", err?.message ?? "Update failed")
-    } finally {
+  handleAppError(err, {
+    fallbackMessage: err?.message ?? "Failed to update listing.",
+  })
+} finally {
+
       setSubmitting(false)
     }
   }

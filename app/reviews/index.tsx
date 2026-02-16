@@ -13,7 +13,9 @@ import {
 } from "react-native"
 
 import AppHeader from "@/components/app-header"
+import { handleAppError } from "@/lib/errors/appError"
 import { supabase } from "@/lib/supabase"
+
 
 
 /* ---------------- QUICK TAG OPTIONS ---------------- */
@@ -116,10 +118,11 @@ export default function LeaveReviewScreen() {
           setAlreadyReviewed(true)
         }
       } catch (err) {
-        console.log("Review init error:", err)
-        Alert.alert("Error", "Failed to load review page.")
-        router.back()
-      } finally {
+  handleAppError(err, {
+    fallbackMessage: "Failed to load review page.",
+  })
+  router.back()
+} finally {
         setLoading(false)
       }
     }
@@ -160,9 +163,11 @@ export default function LeaveReviewScreen() {
         if (!error) setIsFollowing(true)
       }
     } catch (err) {
-      console.log("Follow toggle error:", err)
-      Alert.alert("Error", "Failed to update follow status.")
-    } finally {
+  handleAppError(err, {
+    fallbackMessage: "Failed to update follow status.",
+  })
+}
+finally {
       setFollowLoading(false)
     }
   }
@@ -188,17 +193,21 @@ export default function LeaveReviewScreen() {
       })
 
       if (error) {
-        console.log("Insert review error:", error)
-        Alert.alert("Error", "Failed to submit review.")
-        return
-      }
+  handleAppError(error, {
+    fallbackMessage: "Failed to submit review.",
+  })
+  return
+}
+
 
       Alert.alert("Thank You!", "Your review has been submitted.")
       router.back()
     } catch (err) {
-      console.log(err)
-      Alert.alert("Error", "Something went wrong.")
-    } finally {
+  handleAppError(err, {
+    fallbackMessage: "Something went wrong while submitting your review.",
+  })
+}
+ finally {
       setSubmitting(false)
     }
   }

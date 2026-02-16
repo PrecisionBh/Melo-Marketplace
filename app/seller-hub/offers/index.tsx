@@ -13,7 +13,9 @@ import {
 
 import AppHeader from "@/components/app-header"
 import { useAuth } from "@/context/AuthContext"
+import { handleAppError } from "@/lib/errors/appError"
 import { supabase } from "@/lib/supabase"
+
 
 /* ---------------- TYPES ---------------- */
 
@@ -54,7 +56,11 @@ export default function SellerOffersScreen() {
   )
 
   const loadOffers = async () => {
-    if (!session?.user) return
+  try {
+    if (!session?.user) {
+      setOffers([])
+      return
+    }
 
     setLoading(true)
 
@@ -75,9 +81,19 @@ export default function SellerOffersScreen() {
       .order("created_at", { ascending: false })
       .returns<Offer[]>()
 
+    if (error) throw error
+
     setOffers(data ?? [])
+  } catch (err) {
+    handleAppError(err, {
+      fallbackMessage: "Failed to load offers.",
+    })
+    setOffers([])
+  } finally {
     setLoading(false)
   }
+}
+
 
   /* ---------------- FILTERED DATA ---------------- */
 

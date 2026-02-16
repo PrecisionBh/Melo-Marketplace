@@ -5,6 +5,7 @@ import { StyleSheet, Text, TouchableOpacity, View } from "react-native"
 
 import AppHeader from "@/components/app-header"
 import { useAuth } from "@/context/AuthContext"
+import { handleAppError } from "@/lib/errors/appError"
 import { supabase } from "@/lib/supabase"
 
 export default function SellerOrdersHubScreen() {
@@ -30,52 +31,88 @@ export default function SellerOrdersHubScreen() {
   )
 
   const loadOrdersToShipCount = async () => {
-    if (!sellerId) return
+    try {
+      if (!sellerId) return
 
-    const { count } = await supabase
-      .from("orders")
-      .select("id", { count: "exact", head: true })
-      .eq("status", "paid")
-      .eq("seller_id", sellerId)
+      const { count, error } = await supabase
+        .from("orders")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "paid")
+        .eq("seller_id", sellerId)
 
-    setOrdersToShipCount(count ?? 0)
+      if (error) throw error
+
+      setOrdersToShipCount(count ?? 0)
+    } catch (err) {
+      handleAppError(err, {
+        fallbackMessage: "Failed to load orders to ship count.",
+      })
+      setOrdersToShipCount(0)
+    }
   }
 
   const loadInProgressCount = async () => {
-    if (!sellerId) return
+    try {
+      if (!sellerId) return
 
-    const { count } = await supabase
-      .from("orders")
-      .select("id", { count: "exact", head: true })
-      .eq("seller_id", sellerId)
-      .in("status", ["shipped", "delivered"])
+      const { count, error } = await supabase
+        .from("orders")
+        .select("id", { count: "exact", head: true })
+        .eq("seller_id", sellerId)
+        .in("status", ["shipped", "delivered"])
 
-    setInProgressCount(count ?? 0)
+      if (error) throw error
+
+      setInProgressCount(count ?? 0)
+    } catch (err) {
+      handleAppError(err, {
+        fallbackMessage: "Failed to load in-progress orders count.",
+      })
+      setInProgressCount(0)
+    }
   }
 
   const loadOpenDisputesCount = async () => {
-    if (!sellerId) return
+    try {
+      if (!sellerId) return
 
-    const { count } = await supabase
-      .from("disputes")
-      .select("id", { count: "exact", head: true })
-      .eq("status", "open")
-      .eq("seller_id", sellerId)
+      const { count, error } = await supabase
+        .from("disputes")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "open")
+        .eq("seller_id", sellerId)
 
-    setOpenDisputesCount(count ?? 0)
+      if (error) throw error
+
+      setOpenDisputesCount(count ?? 0)
+    } catch (err) {
+      handleAppError(err, {
+        fallbackMessage: "Failed to load disputes count.",
+      })
+      setOpenDisputesCount(0)
+    }
   }
 
   const loadOffersCount = async () => {
-    if (!sellerId) return
+    try {
+      if (!sellerId) return
 
-    const { count } = await supabase
-      .from("offers")
-      .select("id", { count: "exact", head: true })
-      .eq("seller_id", sellerId)
-      .in("status", ["pending", "countered"])
-      .neq("last_actor", "seller")
+      const { count, error } = await supabase
+        .from("offers")
+        .select("id", { count: "exact", head: true })
+        .eq("seller_id", sellerId)
+        .in("status", ["pending", "countered"])
+        .neq("last_actor", "seller")
 
-    setOffersCount(count ?? 0)
+      if (error) throw error
+
+      setOffersCount(count ?? 0)
+    } catch (err) {
+      handleAppError(err, {
+        fallbackMessage: "Failed to load offers count.",
+      })
+      setOffersCount(0)
+    }
   }
 
   return (

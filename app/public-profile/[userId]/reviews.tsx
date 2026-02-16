@@ -11,7 +11,9 @@ import {
 } from "react-native"
 
 import AppHeader from "@/components/app-header"
+import { handleAppError } from "@/lib/errors/appError"
 import { supabase } from "@/lib/supabase"
+
 
 /* ---------------- TYPES ---------------- */
 
@@ -44,29 +46,45 @@ export default function ReviewsScreen() {
     if (!userId) return
 
     const loadData = async () => {
-      setLoading(true)
+  try {
+    if (!userId) return
 
-      // Load profile
-      const { data: profileData } = await supabase
-        .from("profiles")
-        .select("id, display_name, avatar_url")
-        .eq("id", userId)
-        .single()
+    setLoading(true)
 
-      setProfile(profileData ?? null)
+    // Load profile
+    const { data: profileData, error: profileError } = await supabase
+      .from("profiles")
+      .select("id, display_name, avatar_url")
+      .eq("id", userId)
+      .single()
 
-      // Load reviews WITH tags
-      const { data: reviewData } = await supabase
-        .from("ratings")
-        .select(
-          "id, rating, comment, created_at, from_user_id, review_tags"
-        )
-        .eq("to_user_id", userId)
-        .order("created_at", { ascending: false })
+    if (profileError) throw profileError
 
-      setReviews(reviewData ?? [])
-      setLoading(false)
-    }
+    setProfile(profileData ?? null)
+
+    // Load reviews WITH tags
+    const { data: reviewData, error: reviewError } = await supabase
+      .from("ratings")
+      .select(
+        "id, rating, comment, created_at, from_user_id, review_tags"
+      )
+      .eq("to_user_id", userId)
+      .order("created_at", { ascending: false })
+
+    if (reviewError) throw reviewError
+
+    setReviews(reviewData ?? [])
+  } catch (err) {
+    handleAppError(err, {
+      fallbackMessage: "Failed to load reviews.",
+    })
+    setProfile(null)
+    setReviews([])
+  } finally {
+    setLoading(false)
+  }
+}
+
 
     loadData()
   }, [userId])
@@ -204,8 +222,11 @@ export default function ReviewsScreen() {
 
               {/* DATE */}
               <Text style={styles.date}>
-                {new Date(item.created_at).toLocaleDateString()}
-              </Text>
+  {item.created_at
+    ? new Date(item.created_at).toLocaleDateString()
+    : ""}
+</Text>
+
             </View>
           )}
         />

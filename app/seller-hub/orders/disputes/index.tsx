@@ -11,6 +11,7 @@ import {
 
 import AppHeader from "@/components/app-header"
 import { useAuth } from "@/context/AuthContext"
+import { handleAppError } from "@/lib/errors/appError"
 import { supabase } from "@/lib/supabase"
 
 type Dispute = {
@@ -33,12 +34,21 @@ export default function SellerDisputesPage() {
     useCallback(() => {
       if (sellerId) {
         fetchDisputes()
+      } else {
+        setDisputes([])
+        setLoading(false)
       }
     }, [sellerId])
   )
 
   const fetchDisputes = async () => {
     try {
+      if (!sellerId) {
+        setDisputes([])
+        setLoading(false)
+        return
+      }
+
       setLoading(true)
 
       const { data, error } = await supabase
@@ -47,11 +57,14 @@ export default function SellerDisputesPage() {
         .eq("seller_id", sellerId)
         .order("created_at", { ascending: false })
 
-      if (!error && data) {
-        setDisputes(data)
-      }
+      if (error) throw error
+
+      setDisputes(data ?? [])
     } catch (err) {
-      console.error("Seller disputes fetch error:", err)
+      handleAppError(err, {
+        fallbackMessage: "Failed to load disputes.",
+      })
+      setDisputes([])
     } finally {
       setLoading(false)
     }
@@ -82,7 +95,7 @@ export default function SellerDisputesPage() {
     >
       <View style={styles.row}>
         <Text style={styles.orderText}>
-          Order #{item.order_id.slice(0, 8)}
+          Order #{item.order_id?.slice(0, 8) ?? "N/A"}
         </Text>
 
         <View
@@ -92,15 +105,19 @@ export default function SellerDisputesPage() {
           ]}
         >
           <Text style={styles.statusText}>
-            {item.status.replace("_", " ")}
+            {item.status?.replace("_", " ") ?? "unknown"}
           </Text>
         </View>
       </View>
 
-      <Text style={styles.reason}>{item.reason}</Text>
+      <Text style={styles.reason}>
+        {item.reason ?? "No reason provided"}
+      </Text>
 
       <Text style={styles.date}>
-        {new Date(item.created_at).toLocaleDateString()}
+        {item.created_at
+          ? new Date(item.created_at).toLocaleDateString()
+          : ""}
       </Text>
     </TouchableOpacity>
   )

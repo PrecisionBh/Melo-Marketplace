@@ -15,7 +15,9 @@ import {
 
 import AppHeader from "@/components/app-header"
 import { useAuth } from "@/context/AuthContext"
+import { handleAppError } from "@/lib/errors/appError"
 import { supabase } from "@/lib/supabase"
+
 
 /* ---------------- TYPES ---------------- */
 
@@ -90,11 +92,21 @@ export default function BuyerOfferDetailScreen() {
       .eq("id", id)
       .single<Offer>()
 
-    if (error || !data) {
-      setOffer(null)
-      setLoading(false)
-      return
-    }
+    if (error) {
+  handleAppError(error, {
+    fallbackMessage: "Failed to load offer details.",
+  })
+  setOffer(null)
+  setLoading(false)
+  return
+}
+
+if (!data) {
+  setOffer(null)
+  setLoading(false)
+  return
+}
+
 
     // 🔒 Buyer ownership check
     if (data.buyer_id !== session!.user!.id) {
@@ -236,9 +248,12 @@ export default function BuyerOfferDetailScreen() {
     setSaving(false)
 
     if (error) {
-      Alert.alert("Failed to accept offer", error.message)
-      return
-    }
+  handleAppError(error, {
+    fallbackMessage: "Failed to accept offer. Please try again.",
+  })
+  return
+}
+
 
     await notify({
       userId: offer.seller_id,
@@ -258,17 +273,23 @@ export default function BuyerOfferDetailScreen() {
     if (saving) return
     setSaving(true)
 
-    await supabase
-      .from("offers")
-      .update({
-        status: "declined",
-        last_actor: "buyer",
-        last_action: "declined",
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", offer.id)
+    const { error } = await supabase
+  .from("offers")
+  .update({
+    status: "declined",
+    last_actor: "buyer",
+    last_action: "declined",
+    updated_at: new Date().toISOString(),
+  })
+  .eq("id", offer.id)
 
-    setSaving(false)
+if (error) {
+  handleAppError(error, {
+    fallbackMessage: "Failed to decline offer. Please try again.",
+  })
+  setSaving(false)
+  return
+}
 
     await notify({
       userId: offer.seller_id,
@@ -311,9 +332,12 @@ export default function BuyerOfferDetailScreen() {
     setSaving(false)
 
     if (error) {
-      Alert.alert("Failed to counter offer", error.message)
-      return
-    }
+  handleAppError(error, {
+    fallbackMessage: "Failed to send counter offer. Please try again.",
+  })
+  return
+}
+
 
     setShowCounter(false)
     setCounterAmount("")

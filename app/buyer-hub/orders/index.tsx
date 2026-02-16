@@ -5,7 +5,9 @@ import { StyleSheet, Text, TouchableOpacity, View } from "react-native"
 
 import AppHeader from "@/components/app-header"
 import { useAuth } from "@/context/AuthContext"
+import { handleAppError } from "@/lib/errors/appError"
 import { supabase } from "@/lib/supabase"
+
 
 export default function BuyerOrdersHubScreen() {
   const router = useRouter()
@@ -28,25 +30,43 @@ export default function BuyerOrdersHubScreen() {
   const loadInProgressCount = async () => {
     if (!buyerId) return
 
-    const { count } = await supabase
-      .from("orders")
-      .select("id", { count: "exact", head: true })
-      .eq("buyer_id", buyerId)
-      .in("status", ["paid", "shipped", "delivered"])
+    const { count, error } = await supabase
+  .from("orders")
+  .select("id", { count: "exact", head: true })
+  .eq("buyer_id", buyerId)
+  .in("status", ["paid", "shipped", "delivered"])
 
-    setInProgressCount(count ?? 0)
+if (error) {
+  handleAppError(error, {
+    fallbackMessage: "Failed to load order counts.",
+  })
+  setInProgressCount(0)
+  return
+}
+
+setInProgressCount(count ?? 0)
+
   }
 
   const loadOpenDisputesCount = async () => {
     if (!buyerId) return
 
-    const { count } = await supabase
-      .from("disputes")
-      .select("id", { count: "exact", head: true })
-      .eq("buyer_id", buyerId)
-      .eq("status", "open")
+    const { count, error } = await supabase
+  .from("disputes")
+  .select("id", { count: "exact", head: true })
+  .eq("buyer_id", buyerId)
+  .eq("status", "open")
 
-    setOpenDisputesCount(count ?? 0)
+if (error) {
+  handleAppError(error, {
+    fallbackMessage: "Failed to load dispute counts.",
+  })
+  setOpenDisputesCount(0)
+  return
+}
+
+setOpenDisputesCount(count ?? 0)
+
   }
 
   return (

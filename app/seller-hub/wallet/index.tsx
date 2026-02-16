@@ -15,6 +15,7 @@ import {
 
 import AppHeader from "@/components/app-header"
 import { useAuth } from "@/context/AuthContext"
+import { handleAppError } from "@/lib/errors/appError"
 import { supabase } from "@/lib/supabase"
 
 /* ---------------- TYPES ---------------- */
@@ -46,30 +47,48 @@ export default function SellerWalletScreen() {
   /* ---------------- LOAD DATA ---------------- */
 
   const loadData = async () => {
-    setLoading(true)
+    try {
+      if (!session?.user?.id) {
+        setWallet(null)
+        setProfile(null)
+        return
+      }
 
-    const [
-      { data: walletData },
-      { data: profileData },
-    ] = await Promise.all([
-      supabase
-        .from("wallets")
-        .select(
-          "id, available_balance_cents, pending_balance_cents, lifetime_earnings_cents, currency"
-        )
-        .eq("user_id", session!.user.id)
-        .single(),
+      setLoading(true)
 
-      supabase
-        .from("profiles")
-        .select("stripe_account_id, stripe_onboarding_complete")
-        .eq("id", session!.user.id)
-        .single(),
-    ])
+      const [
+        { data: walletData, error: walletError },
+        { data: profileData, error: profileError },
+      ] = await Promise.all([
+        supabase
+          .from("wallets")
+          .select(
+            "id, available_balance_cents, pending_balance_cents, lifetime_earnings_cents, currency"
+          )
+          .eq("user_id", session.user.id)
+          .single(),
 
-    setWallet(walletData ?? null)
-    setProfile(profileData ?? null)
-    setLoading(false)
+        supabase
+          .from("profiles")
+          .select("stripe_account_id, stripe_onboarding_complete")
+          .eq("id", session.user.id)
+          .single(),
+      ])
+
+      if (walletError) throw walletError
+      if (profileError) throw profileError
+
+      setWallet(walletData ?? null)
+      setProfile(profileData ?? null)
+    } catch (err) {
+      handleAppError(err, {
+        fallbackMessage: "Failed to load wallet data.",
+      })
+      setWallet(null)
+      setProfile(null)
+    } finally {
+      setLoading(false)
+    }
   }
 
   /* ✅ KEY FIX: REFRESH ON SCREEN FOCUS */
@@ -82,18 +101,25 @@ export default function SellerWalletScreen() {
   )
 
   const onRefresh = useCallback(async () => {
-    setRefreshing(true)
-    await loadData()
-    setRefreshing(false)
-  }, [])
+    try {
+      setRefreshing(true)
+      await loadData()
+    } catch (err) {
+      handleAppError(err, {
+        fallbackMessage: "Failed to refresh wallet.",
+      })
+    } finally {
+      setRefreshing(false)
+    }
+  }, [session?.user?.id])
 
   if (loading || !wallet) {
     return <ActivityIndicator style={{ marginTop: 60 }} />
   }
 
-  const available = wallet.available_balance_cents / 100
-  const pending = wallet.pending_balance_cents / 100
-  const lifetime = wallet.lifetime_earnings_cents / 100
+  const available = (wallet.available_balance_cents ?? 0) / 100
+  const pending = (wallet.pending_balance_cents ?? 0) / 100
+  const lifetime = (wallet.lifetime_earnings_cents ?? 0) / 100
 
   const hasStripe = !!profile?.stripe_account_id
 
@@ -101,7 +127,7 @@ export default function SellerWalletScreen() {
 
   const handlePayoutSetup = async () => {
     try {
-      const { data } = await supabase.functions.invoke(
+      const { data, error } = await supabase.functions.invoke(
         "create-connect-account-link",
         {
           body: {
@@ -110,6 +136,8 @@ export default function SellerWalletScreen() {
           },
         }
       )
+
+      if (error) throw error
 
       const onboardingUrl = data?.url ?? data?.data?.url
       const stripeAccountId =
@@ -120,16 +148,20 @@ export default function SellerWalletScreen() {
         return
       }
 
-      if (!profile?.stripe_account_id && stripeAccountId) {
-        await supabase
+      if (!profile?.stripe_account_id && stripeAccountId && session?.user?.id) {
+        const { error: updateError } = await supabase
           .from("profiles")
           .update({ stripe_account_id: stripeAccountId })
-          .eq("id", session!.user.id)
+          .eq("id", session.user.id)
+
+        if (updateError) throw updateError
       }
 
       await Linking.openURL(onboardingUrl)
-    } catch {
-      Alert.alert("Error", "Unexpected error opening Stripe onboarding")
+    } catch (err) {
+      handleAppError(err, {
+        fallbackMessage: "Unexpected error opening Stripe onboarding.",
+      })
     }
   }
 

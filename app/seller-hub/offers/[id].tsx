@@ -15,7 +15,9 @@ import {
 
 import AppHeader from "@/components/app-header"
 import { useAuth } from "@/context/AuthContext"
+import { handleAppError } from "@/lib/errors/appError"
 import { supabase } from "@/lib/supabase"
+
 
 /* ---------------- TYPES ---------------- */
 
@@ -62,6 +64,7 @@ export default function SellerOfferDetailScreen() {
   /* ---------------- LOAD OFFER ---------------- */
 
   const loadOffer = async () => {
+  try {
     setLoading(true)
 
     const { data, error } = await supabase
@@ -85,11 +88,8 @@ export default function SellerOfferDetailScreen() {
       .eq("id", id)
       .single<Offer>()
 
-    if (error || !data) {
-      setOffer(null)
-      setLoading(false)
-      return
-    }
+    if (error) throw error
+    if (!data) throw new Error("Offer not found")
 
     if (data.seller_id !== session!.user!.id) {
       Alert.alert("Access denied")
@@ -98,8 +98,15 @@ export default function SellerOfferDetailScreen() {
     }
 
     setOffer(data)
+  } catch (err) {
+    handleAppError(err, {
+      fallbackMessage: "Failed to load offer details.",
+    })
+    setOffer(null)
+  } finally {
     setLoading(false)
   }
+}
 
   /* ---------------- EXPIRATION ---------------- */
 
@@ -180,6 +187,7 @@ export default function SellerOfferDetailScreen() {
   /* ---------------- ACTIONS ---------------- */
 
   const acceptOffer = async () => {
+  try {
     if (saving || isExpired) return
     setSaving(true)
 
@@ -201,12 +209,7 @@ export default function SellerOfferDetailScreen() {
       })
       .eq("id", offer.id)
 
-    setSaving(false)
-
-    if (error) {
-      Alert.alert("Failed to accept offer", error.message)
-      return
-    }
+    if (error) throw error
 
     await notify({
       userId: offer.buyer_id,
@@ -219,14 +222,23 @@ export default function SellerOfferDetailScreen() {
       },
     })
 
-    loadOffer()
+    await loadOffer()
+  } catch (err) {
+    handleAppError(err, {
+      fallbackMessage: "Failed to accept offer.",
+    })
+  } finally {
+    setSaving(false)
   }
+}
+
 
   const declineOffer = async () => {
+  try {
     if (saving) return
     setSaving(true)
 
-    await supabase
+    const { error } = await supabase
       .from("offers")
       .update({
         status: "declined",
@@ -236,7 +248,7 @@ export default function SellerOfferDetailScreen() {
       })
       .eq("id", offer.id)
 
-    setSaving(false)
+    if (error) throw error
 
     await notify({
       userId: offer.buyer_id,
@@ -248,8 +260,16 @@ export default function SellerOfferDetailScreen() {
       },
     })
 
-    loadOffer()
+    await loadOffer()
+  } catch (err) {
+    handleAppError(err, {
+      fallbackMessage: "Failed to decline offer.",
+    })
+  } finally {
+    setSaving(false)
   }
+}
+
 
   const submitCounter = async () => {
     if (!offer || saving) return
@@ -278,9 +298,12 @@ export default function SellerOfferDetailScreen() {
     setSaving(false)
 
     if (error) {
-      Alert.alert("Failed to counter offer", error.message)
-      return
-    }
+  handleAppError(error, {
+    fallbackMessage: "Failed to send counter offer.",
+  })
+  return
+}
+
 
     setShowCounter(false)
     setCounterAmount("")

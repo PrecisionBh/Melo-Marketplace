@@ -15,7 +15,9 @@ import {
 
 import AppHeader from "@/components/app-header"
 import { useAuth } from "@/context/AuthContext"
+import { handleAppError } from "@/lib/errors/appError"
 import { supabase } from "@/lib/supabase"
+
 
 /* ---------------- TYPES ---------------- */
 
@@ -86,16 +88,31 @@ export default function SellerOrderDetailScreen() {
     }
   }, [id, session?.user?.id])
 
-  const loadOrder = async () => {
+ const loadOrder = async () => {
+  try {
+    if (!id || !session?.user?.id) {
+      setLoading(false)
+      return
+    }
+
     setLoading(true)
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("orders")
       .select("*")
       .eq("id", id)
       .single()
 
-    if (!data || data.seller_id !== session?.user?.id) {
+    if (error) throw error
+
+    if (!data) {
+      Alert.alert("Order not found")
+      router.back()
+      return
+    }
+
+    if (data.seller_id !== session.user.id) {
+      Alert.alert("Access denied")
       router.back()
       return
     }
@@ -103,14 +120,31 @@ export default function SellerOrderDetailScreen() {
     setOrder(data)
     setCarrier(data.carrier ?? "")
     setTracking(data.tracking_number ?? "")
+  } catch (err) {
+    handleAppError(err, {
+      fallbackMessage: "Failed to load order details.",
+    })
+    router.back()
+  } finally {
     setLoading(false)
   }
+}
+
 
   /* ---------------- ACTIONS ---------------- */
 
   const submitTracking = async () => {
-    if (!carrier || !tracking || !order) return
+  if (!order) {
+    Alert.alert("Error", "Order data is missing. Please reload.")
+    return
+  }
 
+  if (!carrier || !tracking) {
+    Alert.alert("Missing info", "Please select a carrier and enter tracking.")
+    return
+  }
+
+  try {
     setSaving(true)
 
     const trackingUrl = buildTrackingUrl(carrier, tracking)
@@ -127,23 +161,25 @@ export default function SellerOrderDetailScreen() {
       })
       .eq("id", order.id)
 
-    setSaving(false)
+    if (error) throw error
 
-    if (error) {
-      Alert.alert("Error", "Failed to mark order as shipped.")
-      return
+    try {
+      await notify({
+        userId: order.buyer_id,
+        type: "order",
+        title: "Order shipped",
+        body: "Your order has been shipped. Tracking information is now available.",
+        data: {
+          route: "/buyer-hub/orders/[id]",
+          params: { id: order.id },
+        },
+      })
+    } catch (notifyErr) {
+      // Do NOT block shipment if notification fails
+      handleAppError(notifyErr, {
+        fallbackMessage: "Order shipped, but notification failed.",
+      })
     }
-
-    await notify({
-      userId: order.buyer_id,
-      type: "order",
-      title: "Order shipped",
-      body: "Your order has been shipped. Tracking information is now available.",
-      data: {
-        route: "/buyer-hub/orders/[id]",
-        params: { id: order.id },
-      },
-    })
 
     Alert.alert(
       "Order Shipped",
@@ -156,7 +192,15 @@ export default function SellerOrderDetailScreen() {
         },
       ]
     )
+  } catch (err) {
+    handleAppError(err, {
+      fallbackMessage: "Failed to update tracking. Please try again.",
+    })
+  } finally {
+    setSaving(false)
   }
+}
+
 
   if (loading) {
     return <ActivityIndicator style={{ marginTop: 80 }} />
@@ -199,7 +243,7 @@ export default function SellerOrderDetailScreen() {
 
           <View style={styles.titleRow}>
             <Text style={styles.title}>
-              Order #{order.id.slice(0, 8)}
+              Order #{order.id?.slice(0, 8) ?? "Unknown"}
             </Text>
 
             <View style={styles.badge}>
