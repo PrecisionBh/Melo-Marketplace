@@ -4,6 +4,8 @@ import { useRouter } from "expo-router"
 import { useEffect, useState } from "react"
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native"
 
+import AppHeader from "@/components/app-header"
+
 export default function NotificationsSettingsScreen() {
   const router = useRouter()
 
@@ -62,33 +64,29 @@ export default function NotificationsSettingsScreen() {
     } catch (e) {
       console.error("Notification toggle error:", e)
       setLoading(false)
-      Alert.alert("Error", "Something went wrong while updating notification settings.")
+      Alert.alert(
+        "Error",
+        "Something went wrong while updating notification settings."
+      )
     }
   }
 
   return (
     <View style={styles.screen}>
-      {/* 🌿 HEADER */}
-      <View style={styles.headerWrap}>
-        <View style={styles.headerRow}>
-          <TouchableOpacity
-            style={styles.headerBtn}
-            onPress={() => router.push("/settings")}
-          >
-            <Ionicons name="arrow-back" size={22} color="#0F1E17" />
-            <Text style={styles.headerSub}>Settings</Text>
-          </TouchableOpacity>
-
-          <Text style={styles.headerTitle}>Notifications</Text>
-
-          <View style={{ width: 60 }} />
-        </View>
-      </View>
+      <AppHeader
+        title="Notifications"
+        backLabel="Settings"
+        backRoute="/settings"
+      />
 
       {/* MAIN CARD */}
       <View style={styles.card}>
         <Ionicons
-          name={notificationsEnabled ? "notifications" : "notifications-outline"}
+          name={
+            notificationsEnabled
+              ? "notifications"
+              : "notifications-outline"
+          }
           size={42}
           color="#7FAF9B"
         />
@@ -133,7 +131,9 @@ export default function NotificationsSettingsScreen() {
         >
           <Ionicons
             name={
-              notificationsEnabled ? "notifications-off" : "notifications"
+              notificationsEnabled
+                ? "notifications-off"
+                : "notifications"
             }
             size={18}
             color="#FFFFFF"
@@ -163,7 +163,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#EAF4EF",
   },
 
-  /* 🌿 SAGE HEADER */
+  /* (Old header styles kept temporarily for safety during refactor) */
   headerWrap: {
     backgroundColor: "#7FAF9B",
     paddingTop: 60,

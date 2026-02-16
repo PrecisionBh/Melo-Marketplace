@@ -10,6 +10,7 @@ import {
   View,
 } from "react-native"
 
+import AppHeader from "@/components/app-header"
 import { useAuth } from "@/context/AuthContext"
 import { supabase } from "@/lib/supabase"
 
@@ -63,16 +64,11 @@ export default function NotificationsScreen() {
 
   return (
     <View style={styles.screen}>
-      {/* HEADER */}
-      <View style={styles.topBar}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
-        </TouchableOpacity>
-
-        <Text style={styles.title}>Notifications</Text>
-
-        <View style={{ width: 22 }} />
-      </View>
+      <AppHeader
+        title="Notifications"
+        backLabel="Back"
+        backRoute={undefined} // uses router.back() internally
+      />
 
       {/* CLEAR ALL */}
       {notifications.length > 0 && (
@@ -134,21 +130,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#EAF4EF",
   },
 
-  topBar: {
-    paddingTop: 50,
-    paddingHorizontal: 14,
-    paddingBottom: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: "#7FAF9B",
-  },
-
-  title: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#FFFFFF",
-  },
+  /* (Old header styles kept for safety during polish phase) */
+  
 
   clearRow: {
     alignItems: "flex-end",

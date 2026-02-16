@@ -8,6 +8,7 @@ import {
   View,
 } from "react-native"
 
+import AppHeader from "@/components/app-header"
 import { supabase } from "../lib/supabase"
 
 export default function SettingsScreen() {
@@ -33,18 +34,11 @@ export default function SettingsScreen() {
 
   return (
     <View style={styles.screen}>
-      {/* 🌿 HEADER */}
-      <View style={styles.headerWrap}>
-        <TouchableOpacity
-          style={styles.backBtn}
-          onPress={() => router.push("/profile")}
-        >
-          <Ionicons name="arrow-back" size={20} color="#0F1E17" />
-          <Text style={styles.backText}>Profile</Text>
-        </TouchableOpacity>
-
-        <Text style={styles.headerTitle}>Settings</Text>
-      </View>
+      <AppHeader
+        title="Settings"
+        backLabel="Profile"
+        backRoute="/profile"
+      />
 
       {/* ACCOUNT */}
       <View style={styles.section}>
@@ -129,34 +123,6 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: "#EAF4EF",
-  },
-
-  headerWrap: {
-    backgroundColor: "#7FAF9B",
-    paddingTop: 60,
-    paddingBottom: 14,
-    alignItems: "center",
-  },
-
-  backBtn: {
-    position: "absolute",
-    left: 14,
-    bottom: 14,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-
-  backText: {
-    marginLeft: 6,
-    color: "#0F1E17",
-    fontWeight: "600",
-    fontSize: 13,
-  },
-
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#ffffff",
   },
 
   section: {

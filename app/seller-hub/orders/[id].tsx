@@ -1,5 +1,4 @@
 import { notify } from "@/lib/notifications/notify"
-import { Ionicons } from "@expo/vector-icons"
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { useEffect, useState } from "react"
 import {
@@ -14,6 +13,7 @@ import {
   View,
 } from "react-native"
 
+import AppHeader from "@/components/app-header"
 import { useAuth } from "@/context/AuthContext"
 import { supabase } from "@/lib/supabase"
 
@@ -181,13 +181,11 @@ export default function SellerOrderDetailScreen() {
   return (
     <View style={styles.screen}>
       {/* HEADER */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={22} color="#0F1E17" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Order</Text>
-        <View style={{ width: 22 }} />
-      </View>
+      <AppHeader
+  title="Order"
+  backRoute="/seller-hub/orders/orders-to-ship"
+/>
+
 
       <ScrollView contentContainerStyle={styles.content}>
         {/* PRODUCT */}
@@ -343,29 +341,10 @@ function Row({
 
 /* ---------------- STYLES ---------------- */
 
-/* ---------------- STYLES ---------------- */
-
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: "#EAF4EF", // Melo soft background
-  },
-
-  /* ---------- HEADER ---------- */
-  header: {
-    paddingTop: 50,
-    paddingBottom: 14,
-    paddingHorizontal: 16,
-    backgroundColor: "#7FAF9B", // Melo brand color
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "900",
-    color: "#0F1E17",
-    letterSpacing: 0.3,
   },
 
   /* ---------- LAYOUT ---------- */

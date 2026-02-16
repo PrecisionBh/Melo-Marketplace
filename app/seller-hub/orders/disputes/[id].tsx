@@ -1,20 +1,20 @@
-import { Ionicons } from "@expo/vector-icons"
 import {
-    useFocusEffect,
-    useLocalSearchParams,
-    useRouter,
+  useFocusEffect,
+  useLocalSearchParams,
+  useRouter,
 } from "expo-router"
 import { useCallback, useState } from "react"
 import {
-    ActivityIndicator,
-    Image,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native"
 
+import AppHeader from "@/components/app-header"
 import { useAuth } from "@/context/AuthContext"
 import { supabase } from "@/lib/supabase"
 
@@ -114,16 +114,10 @@ export default function SellerDisputeDetailPage() {
 
   return (
     <View style={styles.screen}>
-      {/* HEADER */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={20} color="#FFFFFF" />
-        </TouchableOpacity>
-
-        <Text style={styles.headerTitle}>Dispute Details</Text>
-
-        <View style={{ width: 24 }} />
-      </View>
+      <AppHeader
+        title="Dispute Details"
+        backRoute="/seller-hub/orders"
+      />
 
       <ScrollView contentContainerStyle={styles.container}>
         <Text style={styles.orderText}>
@@ -245,21 +239,6 @@ export default function SellerDisputeDetailPage() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#F6F7F8" },
-
-  header: {
-    height: 60,
-    backgroundColor: "#7FAF9B",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-  },
-
-  headerTitle: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: "#FFFFFF",
-  },
 
   container: {
     padding: 16,

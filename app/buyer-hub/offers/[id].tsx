@@ -1,5 +1,4 @@
 import { notify } from "@/lib/notifications/notify"
-import { Ionicons } from "@expo/vector-icons"
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { useEffect, useMemo, useState } from "react"
 import {
@@ -14,6 +13,7 @@ import {
   View,
 } from "react-native"
 
+import AppHeader from "@/components/app-header"
 import { useAuth } from "@/context/AuthContext"
 import { supabase } from "@/lib/supabase"
 
@@ -338,13 +338,11 @@ export default function BuyerOfferDetailScreen() {
 
   return (
     <View style={styles.screen}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={22} color="#fff" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Offer</Text>
-        <View style={{ width: 22 }} />
-      </View>
+      <AppHeader
+  title="Offer"
+  backRoute="/buyer-hub/offers"
+/>
+
 
       <View style={styles.content}>
         <View style={styles.card}>
@@ -523,23 +521,6 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: "#F6F7F8",
-  },
-
-  header: {
-    height: 90,
-    backgroundColor: "#7FAF9B", // Melo brand header (locked)
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 14,
-    paddingTop: 20,
-  },
-
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: "900",
-    color: "#ffffff",
-    letterSpacing: 0.3,
   },
 
   content: {

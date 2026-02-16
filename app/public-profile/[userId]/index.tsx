@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons"
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { useEffect, useState } from "react"
 import {
@@ -11,6 +10,7 @@ import {
   View,
 } from "react-native"
 
+import AppHeader from "@/components/app-header"
 import ListingCard from "@/components/home/ListingCard"
 import { useAuth } from "@/context/AuthContext"
 import { supabase } from "@/lib/supabase"
@@ -61,7 +61,7 @@ export default function PublicProfileScreen() {
   const [ratingCount, setRatingCount] = useState(0)
   const [soldCount, setSoldCount] = useState(0)
 
-  // FOLLOW STATES (ADDED)
+  // FOLLOW STATES
   const [isFollowing, setIsFollowing] = useState(false)
   const [followLoading, setFollowLoading] = useState(false)
 
@@ -73,7 +73,7 @@ export default function PublicProfileScreen() {
     loadListings(true)
   }, [userId])
 
-  // CHECK FOLLOW STATUS (ADDED)
+  // CHECK FOLLOW STATUS
   useEffect(() => {
     if (!userId || !currentUser) return
 
@@ -95,6 +95,71 @@ export default function PublicProfileScreen() {
     checkFollowStatus()
   }, [userId, currentUser])
 
+  /* ---------------- 🟢 MESSAGE SELLER (NEW) ---------------- */
+
+  const handleMessageSeller = async () => {
+    if (!session?.user || !userId) return
+
+    const buyerId = session.user.id
+    const sellerId = userId
+
+    // Prevent messaging yourself
+    if (buyerId === sellerId) return
+
+    let conversationId: string | null = null
+
+    // Check direct conversation
+    const { data: direct } = await supabase
+      .from("conversations")
+      .select("id")
+      .eq("user_one", buyerId)
+      .eq("user_two", sellerId)
+      .order("created_at", { ascending: true })
+      .limit(1)
+
+    if (direct && direct.length > 0) {
+      conversationId = direct[0].id
+    } else {
+      // Check reverse conversation
+      const { data: reverse } = await supabase
+        .from("conversations")
+        .select("id")
+        .eq("user_one", sellerId)
+        .eq("user_two", buyerId)
+        .order("created_at", { ascending: true })
+        .limit(1)
+
+      if (reverse && reverse.length > 0) {
+        conversationId = reverse[0].id
+      }
+    }
+
+    // Create conversation if none exists
+    if (!conversationId) {
+      const { data: created, error } = await supabase
+        .from("conversations")
+        .insert({
+          user_one: buyerId,
+          user_two: sellerId,
+        })
+        .select("id")
+        .single()
+
+      if (error || !created) {
+        console.error("conversation create error:", error)
+        return
+      }
+
+      conversationId = created.id
+    }
+
+    // Open chat (no listingId since this is profile)
+    router.push({
+      pathname: "/messages/[id]",
+      params: { id: conversationId! },
+    })
+  }
+
   const handleOpenReviews = () => {
     if (!userId || ratingCount === 0) return
 
@@ -104,7 +169,7 @@ export default function PublicProfileScreen() {
     })
   }
 
-  // FOLLOW TOGGLE FUNCTION (ADDED)
+  // FOLLOW TOGGLE FUNCTION
   const handleFollowToggle = async () => {
     if (!currentUser || !userId) return
     if (currentUser.id === userId) return
@@ -223,13 +288,11 @@ export default function PublicProfileScreen() {
   return (
     <View style={styles.screen}>
       {/* HEADER */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={22} color="#0F1E17" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Profile</Text>
-        <View style={{ width: 22 }} />
-      </View>
+      <AppHeader
+  title="Profile"
+  backLabel="Back"
+ />
+
 
       <FlatList
         data={listings}
@@ -262,24 +325,36 @@ export default function PublicProfileScreen() {
                 {profile.display_name ?? "User"}
               </Text>
 
-              {/* FOLLOW BUTTON (ADDED) */}
+              {/* 🟢 FOLLOW + MESSAGE (TWO COLUMN PILL ROW) */}
               {!isOwnProfile && (
-                <TouchableOpacity
-                  onPress={handleFollowToggle}
-                  disabled={followLoading}
-                  style={[
-                    styles.followButton,
-                    isFollowing && styles.followingButton,
-                  ]}
-                >
-                  <Text style={styles.followButtonText}>
-                    {followLoading
-                      ? "Loading..."
-                      : isFollowing
-                      ? "Unfollow"
-                      : "Follow Seller"}
-                  </Text>
-                </TouchableOpacity>
+                <View style={styles.actionRow}>
+                  <TouchableOpacity
+                    onPress={handleFollowToggle}
+                    disabled={followLoading}
+                    style={[
+                      styles.followButton,
+                      isFollowing && styles.followingButton,
+                    ]}
+                  >
+                    <Text style={styles.followButtonText}>
+                      {followLoading
+                        ? "Loading..."
+                        : isFollowing
+                        ? "Unfollow"
+                        : "Follow Seller"}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={handleMessageSeller}
+                    style={styles.messageSellerButton}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.messageSellerText}>
+                      Message Seller
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               )}
 
               <View style={styles.statsRow}>
@@ -361,6 +436,16 @@ function Stat({
       >
         {value}
       </Text>
+
+      <Text
+        style={[
+          styles.statSub,
+          muted && { color: "#9FB8AC" },
+        ]}
+      >
+        {label}
+      </Text>
+
       {sub && (
         <Text
           style={[
@@ -381,22 +466,6 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#EAF4EF" },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
 
-  header: {
-    paddingTop: 60,
-    paddingBottom: 12,
-    paddingHorizontal: 14,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    backgroundColor: "#7FAF9B",
-  },
-
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#0F1E17",
-  },
-
   identity: {
     alignItems: "center",
     paddingVertical: 20,
@@ -415,12 +484,24 @@ const styles = StyleSheet.create({
     color: "#0F1E17",
   },
 
+  /* 🟢 NEW: Row that holds Follow + Message buttons */
+  actionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    marginTop: 12,
+  },
+
+  /* Follow button (left pill) */
   followButton: {
-    marginTop: 10,
+    flex: 1,
     paddingVertical: 10,
     paddingHorizontal: 18,
-    borderRadius: 14,
+    borderRadius: 18,
     backgroundColor: "#7FAF9B",
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   followingButton: {
@@ -428,6 +509,23 @@ const styles = StyleSheet.create({
   },
 
   followButtonText: {
+    color: "#FFFFFF",
+    fontWeight: "800",
+    fontSize: 14,
+  },
+
+  /* 🟢 NEW: Message Seller button (right pill) */
+  messageSellerButton: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 18,
+    backgroundColor: "#0F1E17",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  messageSellerText: {
     color: "#FFFFFF",
     fontWeight: "800",
     fontSize: 14,

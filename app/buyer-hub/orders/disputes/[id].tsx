@@ -1,16 +1,16 @@
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { useEffect, useState } from "react"
 import {
-    ActivityIndicator,
-    Image,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View
 } from "react-native"
 
-import { Ionicons } from "@expo/vector-icons"
+
+import AppHeader from "@/components/app-header"
 import { supabase } from "../../../../lib/supabase"
 
 export default function DisputeDetailPage() {
@@ -75,15 +75,11 @@ export default function DisputeDetailPage() {
   return (
     <View style={{ flex: 1 }}>
       {/* HEADER */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={22} color="#fff" />
-        </TouchableOpacity>
+      <AppHeader
+  title="Dispute Details"
+  backRoute="/buyer-hub/orders"
+/>
 
-        <Text style={styles.headerTitle}>Dispute Details</Text>
-
-        <View style={{ width: 22 }} />
-      </View>
 
       <ScrollView style={styles.container}>
         <Text style={styles.orderRef}>

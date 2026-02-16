@@ -15,6 +15,7 @@ import {
   View,
 } from "react-native"
 
+import AppHeader from "@/components/app-header"
 import { useAuth } from "@/context/AuthContext"
 import { supabase } from "@/lib/supabase"
 
@@ -246,13 +247,11 @@ const totalPaid = (order.amount_cents ?? 0) / 100
 
   return (
     <View style={styles.screen}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={22} color="#0F1E17" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Order</Text>
-        <View style={{ width: 22 }} />
-      </View>
+      <AppHeader
+  title="Order"
+  backRoute="/buyer-hub/orders"
+/>
+
 
       <ScrollView contentContainerStyle={{ paddingBottom: 140 }}>
         <Image
@@ -454,23 +453,6 @@ function ReceiptRow({
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#EAF4EF" },
-
-  header: {
-  paddingTop: 60,
-  paddingBottom: 14,
-  paddingHorizontal: 14,
-  flexDirection: "row",
-  justifyContent: "space-between",
-  alignItems: "center",
-  backgroundColor: "#7FAF9B", // ✅ THIS is what you want
-},
-
-
-  headerTitle: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: "#ffffff",
-  }, 
 
   image: {
     width: "100%",

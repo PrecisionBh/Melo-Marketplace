@@ -11,6 +11,7 @@ import {
   View,
 } from "react-native"
 
+import AppHeader from "@/components/app-header"
 import { useAuth } from "@/context/AuthContext"
 import { supabase } from "@/lib/supabase"
 
@@ -106,23 +107,15 @@ export default function SellerOffersScreen() {
 
   return (
     <View style={styles.screen}>
-      {/* HEADER */}
+      {/* STANDARDIZED MELO HEADER */}
+      <AppHeader
+        title="Offers"
+        backLabel="Orders"
+        backRoute="/seller-hub/orders"
+      />
+
+      {/* FILTER PILLS (UNCHANGED) */}
       <View style={styles.headerWrap}>
-        <View style={styles.headerRow}>
-          <TouchableOpacity
-            style={styles.headerBtn}
-            onPress={() => router.back()}
-          >
-            <Ionicons name="arrow-back" size={22} color="#0F1E17" />
-            <Text style={styles.headerSub}>Seller Hub</Text>
-          </TouchableOpacity>
-
-          <Text style={styles.headerTitle}>Offers</Text>
-
-          <View style={{ width: 60 }} />
-        </View>
-
-        {/* FILTER PILLS */}
         <View style={styles.filterContainer}>
           <View style={styles.filterRow}>
             <FilterPill
@@ -252,36 +245,10 @@ const styles = StyleSheet.create({
 
   headerWrap: {
     backgroundColor: "#7FAF9B",
-    paddingTop: 50,
     paddingBottom: 14,
     paddingHorizontal: 14,
   },
 
-  headerRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#ffffff",
-  },
-
-  headerBtn: {
-    alignItems: "center",
-    minWidth: 60,
-  },
-
-  headerSub: {
-    marginTop: 2,
-    fontSize: 11,
-    fontWeight: "600",
-    color: "#0F1E17",
-  },
-
-  /* FILTERS */
   filterContainer: {
     marginTop: 14,
     gap: 10,
@@ -321,7 +288,6 @@ const styles = StyleSheet.create({
     color: "#ffffff",
   },
 
-  /* EMPTY */
   empty: {
     flex: 1,
     alignItems: "center",
@@ -343,7 +309,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 
-  /* CARD */
   card: {
     flexDirection: "row",
     gap: 12,

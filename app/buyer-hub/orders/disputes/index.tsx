@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons"
 import { useFocusEffect, useRouter } from "expo-router"
 import { useCallback, useState } from "react"
 import {
@@ -10,6 +9,7 @@ import {
   View,
 } from "react-native"
 
+import AppHeader from "@/components/app-header"
 import { useAuth } from "@/context/AuthContext"
 import { supabase } from "@/lib/supabase"
 
@@ -57,19 +57,12 @@ export default function BuyerDisputesListScreen() {
 
   return (
     <View style={styles.screen}>
-      {/* HEADER */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backBtn}
-          onPress={() => router.back()}
-        >
-          <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
-        </TouchableOpacity>
-
-        <Text style={styles.headerTitle}>Disputes</Text>
-
-        <View style={{ width: 32 }} />
-      </View>
+      {/* STANDARDIZED MELO HEADER */}
+      <AppHeader
+        title="Disputes"
+        backLabel="Orders"
+        backRoute="/buyer-hub/orders"
+      />
 
       {/* BODY */}
       {loading ? (
@@ -120,27 +113,7 @@ export default function BuyerDisputesListScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#F6F7F8",
-  },
-
-  header: {
-    paddingTop: 60,
-    paddingBottom: 16,
-    backgroundColor: "#7FAF9B",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  backBtn: {
-    position: "absolute",
-    left: 16,
-    bottom: 16,
-  },
-
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#FFFFFF",
+    backgroundColor: "#EAF4EF", // 🔥 Unified Melo background
   },
 
   list: {

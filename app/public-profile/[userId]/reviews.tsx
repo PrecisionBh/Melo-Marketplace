@@ -7,10 +7,10 @@ import {
   Image,
   StyleSheet,
   Text,
-  TouchableOpacity,
-  View,
+  View
 } from "react-native"
 
+import AppHeader from "@/components/app-header"
 import { supabase } from "@/lib/supabase"
 
 /* ---------------- TYPES ---------------- */
@@ -97,16 +97,12 @@ export default function ReviewsScreen() {
 
   return (
     <View style={styles.screen}>
-      {/* HEADER */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={22} color="#0F1E17" />
-        </TouchableOpacity>
+      {/* STANDARDIZED HEADER */}
+      <AppHeader
+  title="Reviews"
+  backRoute={userId ? `/public-profile/${userId}` : "/profile"}
+/>
 
-        <Text style={styles.headerTitle}>Reviews</Text>
-
-        <View style={{ width: 22 }} />
-      </View>
 
       {loading ? (
         <ActivityIndicator style={{ marginTop: 60 }} />
@@ -218,26 +214,10 @@ export default function ReviewsScreen() {
   )
 }
 
-/* ---------------- STYLES ---------------- */
+/* ---------------- STYLES (UNCHANGED) ---------------- */
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#EAF4EF" },
-
-  header: {
-    paddingTop: 60,
-    paddingBottom: 12,
-    paddingHorizontal: 14,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    backgroundColor: "#7FAF9B",
-  },
-
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#0F1E17",
-  },
 
   profileHeader: {
     alignItems: "center",
@@ -287,7 +267,6 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
 
-  // SMART WRAPPING GRID (2 per row unless too long)
   badgeWrap: {
     flexDirection: "row",
     flexWrap: "wrap",

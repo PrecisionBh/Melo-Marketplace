@@ -11,6 +11,7 @@ import {
   View,
 } from "react-native"
 
+import AppHeader from "@/components/app-header"
 import { useAuth } from "@/context/AuthContext"
 import { supabase } from "@/lib/supabase"
 
@@ -77,7 +78,6 @@ export default function BuyerInProgressOrdersScreen() {
     } else {
       setOrders([])
     }
-
     setLoading(false)
   }
 
@@ -87,21 +87,10 @@ export default function BuyerInProgressOrdersScreen() {
 
   return (
     <View style={styles.screen}>
-      {/* HEADER */}
-      <View style={styles.headerWrap}>
-        <View style={styles.headerRow}>
-          <TouchableOpacity
-            style={styles.headerBtn}
-            onPress={() => router.replace("/buyer-hub/orders")}
-          >
-            <Ionicons name="arrow-back" size={22} color="#ffffff" />
-          </TouchableOpacity>
-
-          <Text style={styles.headerTitle}>In-Progress</Text>
-
-          <View style={{ width: 60 }} />
-        </View>
-      </View>
+      <AppHeader
+        title="In-Progress"
+        backRoute="/buyer-hub/orders"
+      />
 
       {/* CONTENT */}
       {orders.length === 0 ? (

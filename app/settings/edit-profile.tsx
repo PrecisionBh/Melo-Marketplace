@@ -13,6 +13,7 @@ import {
   View,
 } from "react-native"
 
+import AppHeader from "@/components/app-header"
 import { useAuth } from "../../context/AuthContext"
 import { supabase } from "../../lib/supabase"
 
@@ -126,63 +127,53 @@ export default function EditProfileScreen() {
   /* ---------------- UI ---------------- */
 
   return (
-    <ScrollView
-      style={styles.screen}
-      contentContainerStyle={{ paddingBottom: 40 }}
-      showsVerticalScrollIndicator={false}
-    >
-      {/* 🌿 HEADER */}
-      <View style={styles.headerWrap}>
-        <View style={styles.headerRow}>
-          <TouchableOpacity
-            style={styles.headerBtn}
-            onPress={() => router.push("/settings")}
-          >
-            <Ionicons name="arrow-back" size={22} color="#0F1E17" />
-            <Text style={styles.headerSub}>Settings</Text>
+    <View style={styles.screen}>
+      <AppHeader
+        title="Edit Profile"
+        backLabel="Settings"
+        backRoute="/settings"
+      />
+
+      <ScrollView
+        contentContainerStyle={{ paddingBottom: 40 }}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.avatarSection}>
+          <TouchableOpacity onPress={pickImage} disabled={uploading}>
+            <View style={styles.avatarWrap}>
+              {avatarUrl ? (
+                <Image source={{ uri: avatarUrl }} style={styles.avatar} />
+              ) : (
+                <Ionicons name="person" size={48} color="#7FAF9B" />
+              )}
+            </View>
           </TouchableOpacity>
-
-          <Text style={styles.headerTitle}>Edit Profile</Text>
-
-          <View style={{ width: 60 }} />
+          <Text style={styles.changePhoto}>Change Profile Photo</Text>
         </View>
-      </View>
 
-      <View style={styles.avatarSection}>
-        <TouchableOpacity onPress={pickImage} disabled={uploading}>
-          <View style={styles.avatarWrap}>
-            {avatarUrl ? (
-              <Image source={{ uri: avatarUrl }} style={styles.avatar} />
-            ) : (
-              <Ionicons name="person" size={48} color="#7FAF9B" />
-            )}
-          </View>
+        <View style={styles.form}>
+          <Text style={styles.label}>Display Name</Text>
+          <TextInput
+            value={displayName}
+            onChangeText={setDisplayName}
+            style={styles.input}
+          />
+
+          <Text style={styles.label}>Bio</Text>
+          <TextInput
+            value={bio}
+            onChangeText={setBio}
+            style={[styles.input, styles.bio]}
+            multiline
+            maxLength={200}
+          />
+        </View>
+
+        <TouchableOpacity style={styles.saveBtn} onPress={saveProfile}>
+          <Text style={styles.saveText}>Save Changes</Text>
         </TouchableOpacity>
-        <Text style={styles.changePhoto}>Change Profile Photo</Text>
-      </View>
-
-      <View style={styles.form}>
-        <Text style={styles.label}>Display Name</Text>
-        <TextInput
-          value={displayName}
-          onChangeText={setDisplayName}
-          style={styles.input}
-        />
-
-        <Text style={styles.label}>Bio</Text>
-        <TextInput
-          value={bio}
-          onChangeText={setBio}
-          style={[styles.input, styles.bio]}
-          multiline
-          maxLength={200}
-        />
-      </View>
-
-      <TouchableOpacity style={styles.saveBtn} onPress={saveProfile}>
-        <Text style={styles.saveText}>Save Changes</Text>
-      </TouchableOpacity>
-    </ScrollView>
+      </ScrollView>
+    </View>
   )
 }
 
@@ -194,7 +185,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#EAF4EF",
   },
 
-  /* 🌿 HEADER */
+  /* (Old header styles kept but unused during polish phase) */
   headerWrap: {
     backgroundColor: "#7FAF9B",
     paddingTop: 60,

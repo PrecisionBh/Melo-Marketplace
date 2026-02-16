@@ -15,8 +15,10 @@ import {
   View,
 } from "react-native"
 
+import AppHeader from "@/components/app-header"
 import { useAuth } from "@/context/AuthContext"
 import { supabase } from "@/lib/supabase"
+
 
 /* ---------------- CONSTANTS ---------------- */
 
@@ -206,13 +208,11 @@ export default function CreateListing() {
 
   return (
     <View style={styles.screen}>
-      <View style={styles.topBar}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={22} color="#0F1E17" />
-        </TouchableOpacity>
-        <Text style={styles.title}>Create Listing</Text>
-        <View style={{ width: 22 }} />
-      </View>
+      <AppHeader
+  title="Create Listing"
+  backRoute="/seller-hub"
+/>
+
 
       <ScrollView contentContainerStyle={styles.content}>
         {/* IMAGES */}
@@ -389,15 +389,6 @@ function Field({
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#fff" },
-  topBar: {
-    paddingTop: 50,
-    paddingHorizontal: 14,
-    paddingBottom: 10,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  title: { fontSize: 18, fontWeight: "800", color: "#0F1E17" },
   content: { padding: 16, paddingBottom: 140 },
   label: { fontWeight: "700", marginBottom: 6, color: "#2E5F4F" },
   input: {

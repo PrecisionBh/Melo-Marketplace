@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons"
 import * as ImagePicker from "expo-image-picker"
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { useEffect, useState } from "react"
@@ -14,8 +13,10 @@ import {
   View,
 } from "react-native"
 
+import AppHeader from "@/components/app-header"
 import { useAuth } from "@/context/AuthContext"
 import { supabase } from "@/lib/supabase"
+
 
 type Dispute = {
   id: string
@@ -170,15 +171,10 @@ export default function SellerDisputeIssue() {
   return (
     <View style={styles.screen}>
       {/* HEADER */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={20} color="#FFFFFF" />
-        </TouchableOpacity>
+      <AppHeader
+  title="Dispute Response"
+/>
 
-        <Text style={styles.headerTitle}>Dispute Response</Text>
-
-        <View style={{ width: 24 }} />
-      </View>
 
       <ScrollView contentContainerStyle={styles.content}>
         {/* BUYER ISSUE */}
@@ -252,21 +248,6 @@ export default function SellerDisputeIssue() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#F6F7F8" },
-
-  header: {
-    height: 60,
-    backgroundColor: "#7FAF9B",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-  },
-
-  headerTitle: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: "#FFFFFF",
-  },
 
   content: { padding: 16, paddingBottom: 120 },
 

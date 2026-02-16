@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons"
 import { useFocusEffect, useRouter } from "expo-router"
 import { useCallback, useState } from "react"
 import {
@@ -10,6 +9,7 @@ import {
   View,
 } from "react-native"
 
+import AppHeader from "@/components/app-header"
 import { useAuth } from "@/context/AuthContext"
 import { supabase } from "@/lib/supabase"
 
@@ -115,27 +115,23 @@ export default function SellerDisputesPage() {
 
   return (
     <View style={styles.screen}>
-      {/* HEADER */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={20} color="#FFFFFF" />
-        </TouchableOpacity>
-
-        <Text style={styles.headerTitle}>Disputes</Text>
-
-        <View style={{ width: 24 }} />
-      </View>
+      {/* STANDARD MELO HEADER */}
+      <AppHeader
+        title="Disputes"
+        backLabel="Orders"
+        backRoute="/seller-hub/orders"
+      />
 
       {disputes.length === 0 ? (
         <View style={styles.center}>
-          <Text>No disputes found.</Text>
+          <Text style={styles.emptyText}>No disputes found.</Text>
         </View>
       ) : (
         <FlatList
           data={disputes}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
-          contentContainerStyle={{ padding: 16 }}
+          contentContainerStyle={{ padding: 16, paddingBottom: 120 }}
         />
       )}
     </View>
@@ -145,25 +141,13 @@ export default function SellerDisputesPage() {
 /* ---------------- STYLES ---------------- */
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#F6F7F8" },
-
-  header: {
-    height: 60,
-    backgroundColor: "#7FAF9B",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-  },
-
-  headerTitle: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: "#FFFFFF",
+  screen: {
+    flex: 1,
+    backgroundColor: "#EAF4EF", // 🌿 Melo global background
   },
 
   card: {
-    backgroundColor: "#fff",
+    backgroundColor: "#FFFFFF",
     borderRadius: 14,
     padding: 16,
     marginBottom: 14,
@@ -178,6 +162,7 @@ const styles = StyleSheet.create({
   orderText: {
     fontWeight: "800",
     fontSize: 14,
+    color: "#0F1E17",
   },
 
   statusBadge: {
@@ -196,12 +181,19 @@ const styles = StyleSheet.create({
   reason: {
     marginTop: 8,
     fontWeight: "600",
+    color: "#0F1E17",
   },
 
   date: {
     marginTop: 6,
     fontSize: 12,
-    color: "#666",
+    color: "#6B8F7D",
+  },
+
+  emptyText: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#6B8F7D",
   },
 
   center: {

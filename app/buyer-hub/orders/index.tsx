@@ -3,6 +3,7 @@ import { useFocusEffect, useRouter } from "expo-router"
 import { useCallback, useState } from "react"
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native"
 
+import AppHeader from "@/components/app-header"
 import { useAuth } from "@/context/AuthContext"
 import { supabase } from "@/lib/supabase"
 
@@ -50,18 +51,11 @@ export default function BuyerOrdersHubScreen() {
 
   return (
     <View style={styles.screen}>
-      {/* HEADER */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backBtn}
-          onPress={() => router.push("/profile")}
-        >
-          <Ionicons name="arrow-back" size={20} color="#E8F5EE" />
-          <Text style={styles.backText}>Profile</Text>
-        </TouchableOpacity>
-
-        <Text style={styles.headerTitle}>My Orders</Text>
-      </View>
+      <AppHeader
+        title="My Orders"
+        backLabel="Buyer Hub"
+        backRoute="/buyer-hub"
+      />
 
       {/* MENU */}
       <View style={styles.menu}>
@@ -139,34 +133,6 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: "#EAF4EF",
-  },
-
-  header: {
-    paddingTop: 60,
-    paddingBottom: 14,
-    alignItems: "center",
-    backgroundColor: "#7FAF9B",
-  },
-
-  backBtn: {
-    position: "absolute",
-    left: 14,
-    bottom: 14,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-
-  backText: {
-    marginLeft: 6,
-    color: "#E8F5EE",
-    fontWeight: "600",
-    fontSize: 13,
-  },
-
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#E8F5EE",
   },
 
   menu: {

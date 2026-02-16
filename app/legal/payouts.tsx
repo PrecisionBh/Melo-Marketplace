@@ -1,30 +1,24 @@
-import { Ionicons } from "@expo/vector-icons"
 import { useRouter } from "expo-router"
 import {
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from "react-native"
+
+import AppHeader from "@/components/app-header"
 
 export default function SellerPayoutPolicyScreen() {
   const router = useRouter()
 
   return (
     <View style={styles.screen}>
-      {/* HEADER */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backBtn}
-          onPress={() => router.back()}
-        >
-          <Ionicons name="arrow-back" size={20} color="#E8F5EE" />
-          <Text style={styles.backText}>Legal</Text>
-        </TouchableOpacity>
-
-        <Text style={styles.headerTitle}>Seller Payout Policy</Text>
-      </View>
+      {/* STANDARDIZED HEADER */}
+      <AppHeader
+        title="Seller Payout Policy"
+        backLabel="Legal"
+        backRoute="/legal"
+      />
 
       {/* CONTENT */}
       <ScrollView contentContainerStyle={styles.content}>
@@ -170,34 +164,6 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: "#EAF4EF",
-  },
-
-  header: {
-    paddingTop: 60,
-    paddingBottom: 14,
-    alignItems: "center",
-    backgroundColor: "#7FAF9B",
-  },
-
-  backBtn: {
-    position: "absolute",
-    left: 14,
-    bottom: 14,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-
-  backText: {
-    marginLeft: 6,
-    color: "#E8F5EE",
-    fontWeight: "600",
-    fontSize: 13,
-  },
-
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#E8F5EE",
   },
 
   content: {

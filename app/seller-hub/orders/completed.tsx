@@ -11,6 +11,7 @@ import {
   View,
 } from "react-native"
 
+import AppHeader from "@/components/app-header"
 import { useAuth } from "@/context/AuthContext"
 import { supabase } from "@/lib/supabase"
 
@@ -59,7 +60,7 @@ export default function SellerCompletedOrdersScreen() {
         listing_snapshot
       `)
       .eq("seller_id", session!.user.id)
-      .in("status", ["completed", "paid"]) // catch both cases safely
+      .in("status", ["completed", "paid"])
       .order("completed_at", { ascending: false })
 
     if (!error && data) {
@@ -78,17 +79,12 @@ export default function SellerCompletedOrdersScreen() {
 
   return (
     <View style={styles.screen}>
-      {/* HEADER */}
-      <View style={styles.headerWrap}>
-        <View style={styles.headerRow}>
-          <TouchableOpacity onPress={() => router.back()}>
-            <Ionicons name="arrow-back" size={22} color="#0F1E17" />
-          </TouchableOpacity>
-
-          <Text style={styles.headerTitle}>Completed Sales</Text>
-          <View style={{ width: 22 }} />
-        </View>
-      </View>
+      {/* STANDARDIZED MELO HEADER */}
+      <AppHeader
+        title="Completed Sales"
+        backLabel="Orders"
+        backRoute="/seller-hub/orders"
+      />
 
       {orders.length === 0 ? (
         <View style={styles.emptyWrap}>
@@ -166,25 +162,6 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: "#EAF4EF",
-  },
-
-  headerWrap: {
-    backgroundColor: "#7FAF9B",
-    paddingTop: 50,
-    paddingBottom: 14,
-    paddingHorizontal: 14,
-  },
-
-  headerRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#ffffff",
   },
 
   emptyWrap: {

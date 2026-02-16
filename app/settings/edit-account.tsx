@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons"
 import { useRouter } from "expo-router"
 import { useState } from "react"
 import {
@@ -13,6 +12,7 @@ import {
   View,
 } from "react-native"
 
+import AppHeader from "@/components/app-header"
 import { useAuth } from "../../context/AuthContext"
 import { supabase } from "../../lib/supabase"
 
@@ -143,22 +143,11 @@ export default function EditAccountScreen() {
 
   return (
     <View style={styles.screen}>
-      {/* 🌿 SAGE HEADER */}
-      <View style={styles.headerWrap}>
-        <View style={styles.headerRow}>
-          <TouchableOpacity
-            style={styles.headerBtn}
-            onPress={() => router.push("/settings")}
-          >
-            <Ionicons name="arrow-back" size={22} color="#0F1E17" />
-            <Text style={styles.headerSub}>Settings</Text>
-          </TouchableOpacity>
-
-          <Text style={styles.headerTitle}>Edit Account</Text>
-
-          <View style={{ width: 60 }} />
-        </View>
-      </View>
+      <AppHeader
+        title="Edit Account"
+        backLabel="Settings"
+        backRoute="/settings"
+      />
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
@@ -255,7 +244,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#EAF4EF",
   },
 
-  /* 🌿 HEADER */
+  /* (Old header styles safely kept but unused during polish phase) */
   headerWrap: {
     backgroundColor: "#7FAF9B",
     paddingTop: 60,

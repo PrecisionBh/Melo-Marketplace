@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons"
 import { useFocusEffect } from "@react-navigation/native"
 import * as Linking from "expo-linking"
 import { useRouter } from "expo-router"
@@ -14,6 +13,7 @@ import {
   View,
 } from "react-native"
 
+import AppHeader from "@/components/app-header"
 import { useAuth } from "@/context/AuthContext"
 import { supabase } from "@/lib/supabase"
 
@@ -144,13 +144,11 @@ export default function SellerWalletScreen() {
 
   return (
     <View style={styles.screen}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={22} color="#0F1E17" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Wallet</Text>
-        <View style={{ width: 22 }} />
-      </View>
+      <AppHeader
+        title="Wallet"
+        backLabel="Seller Hub"
+        backRoute="/seller-hub"
+      />
 
       <ScrollView
         contentContainerStyle={styles.content}
@@ -207,15 +205,7 @@ export default function SellerWalletScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#EAF4EF" },
-  header: {
-    height: 85,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 14,
-    backgroundColor: "#7FAF9B",
-  },
-  headerTitle: { fontSize: 18, fontWeight: "900", color: "#ffffff" },
+
   content: { padding: 16, gap: 16 },
 
   lifetimeBlock: {

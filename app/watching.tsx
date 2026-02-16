@@ -11,6 +11,7 @@ import {
   View,
 } from "react-native"
 
+import AppHeader from "@/components/app-header"
 import { useAuth } from "../context/AuthContext"
 import { supabase } from "../lib/supabase"
 
@@ -76,24 +77,11 @@ export default function WatchingScreen() {
 
   return (
     <View style={styles.screen}>
-      {/* HEADER */}
-      <View style={styles.headerWrap}>
-        <View style={styles.headerRow}>
-          {/* BACK TO PROFILE */}
-          <TouchableOpacity
-            style={styles.headerBtn}
-            onPress={() => router.replace("/profile")}
-          >
-            <Ionicons name="arrow-back" size={22} color="#0F1E17" />
-            <Text style={styles.headerSub}>Profile</Text>
-          </TouchableOpacity>
-
-          <Text style={styles.headerTitle}>Watching</Text>
-
-          {/* RIGHT SPACER (keeps title centered) */}
-          <View style={{ width: 60 }} />
-        </View>
-      </View>
+      <AppHeader
+        title="Watching"
+        backLabel="Profile"
+        backRoute="/profile"
+      />
 
       {/* CONTENT */}
       {loading ? (
@@ -156,7 +144,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#EAF4EF",
   },
 
-  /* 🌿 PREMIUM SAGE HEADER */
+  /* (Old header styles kept but unused — safe to keep during polish phase) */
   headerWrap: {
     backgroundColor: "#7FAF9B",
     paddingTop: 50,

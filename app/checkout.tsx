@@ -12,8 +12,10 @@ import {
   View,
 } from "react-native"
 
+import AppHeader from "@/components/app-header"
 import { useAuth } from "../context/AuthContext"
 import { supabase } from "../lib/supabase"
+
 
 /* ---------------- TYPES ---------------- */
 
@@ -176,13 +178,11 @@ export default function CheckoutScreen() {
 
   return (
     <View style={styles.screen}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={22} color="#0F1E17" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Checkout</Text>
-        <View style={{ width: 22 }} />
-      </View>
+      <AppHeader
+  title="Checkout"
+  backRoute={offerId ? "/buyer-hub/offers" : "/"}
+/>
+
 
       <ScrollView
         contentContainerStyle={styles.content}
@@ -278,22 +278,6 @@ function Row({
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#EAF4EF" },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
-
-  header: {
-    paddingTop: 50,
-    paddingBottom: 12,
-    paddingHorizontal: 14,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    backgroundColor: "#7FAF9B",
-  },
-
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#0F1E17",
-  },
 
   content: {
     padding: 20,

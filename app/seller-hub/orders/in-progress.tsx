@@ -11,6 +11,7 @@ import {
   View,
 } from "react-native"
 
+import AppHeader from "@/components/app-header"
 import { supabase } from "@/lib/supabase"
 
 /* ---------------- TYPES ---------------- */
@@ -69,7 +70,7 @@ export default function SellerInProgressOrdersScreen() {
         image_url,
         listing_snapshot
       `)
-      .eq("seller_id", sellerId) // 🔒 seller-only
+      .eq("seller_id", sellerId)
       .in("status", ["shipped", "delivered", "issue_reported"])
       .order("created_at", { ascending: false })
 
@@ -90,17 +91,12 @@ export default function SellerInProgressOrdersScreen() {
 
   return (
     <View style={styles.screen}>
-      {/* HEADER */}
-      <View style={styles.headerWrap}>
-        <View style={styles.topBar}>
-          <TouchableOpacity onPress={() => router.back()}>
-            <Ionicons name="arrow-back" size={22} color="#0F1E17" />
-          </TouchableOpacity>
-
-          <Text style={styles.title}>In-Progress Orders</Text>
-          <View style={{ width: 22 }} />
-        </View>
-      </View>
+      {/* STANDARDIZED HEADER */}
+      <AppHeader
+        title="In-Progress Orders"
+        backLabel="Orders"
+        backRoute="/seller-hub/orders"
+      />
 
       {orders.length === 0 ? (
         <View style={styles.emptyWrap}>
@@ -201,25 +197,6 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: "#EAF4EF",
-  },
-
-  headerWrap: {
-    backgroundColor: "#7FAF9B",
-  },
-
-  topBar: {
-    paddingTop: 50,
-    paddingHorizontal: 14,
-    paddingBottom: 12,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-
-  title: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#ffffff",
   },
 
   emptyWrap: {

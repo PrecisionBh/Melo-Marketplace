@@ -13,6 +13,7 @@ import {
   View,
 } from "react-native"
 
+import AppHeader from "@/components/app-header"
 import { useAuth } from "../../context/AuthContext"
 import { supabase } from "../../lib/supabase"
 
@@ -144,78 +145,70 @@ if (!ratings || ratings.length === 0) {
 
   /* ---------------- MESSAGE SELLER ---------------- */
 
-  const handleMessageSeller = async () => {
-    if (!session?.user || !listing) return
+const handleMessageSeller = async () => {
+  if (!session?.user || !listing) return
 
-    const buyerId = session.user.id
-    const sellerId = listing.user_id
-    if (buyerId === sellerId) return
+  const buyerId = session.user.id
+  const sellerId = listing.user_id
+  if (buyerId === sellerId) return
 
-    let conversationId: string | null = null
+  let conversationId: string | null = null
 
-    const { data: direct } = await supabase
+  // Check direct conversation
+  const { data: direct } = await supabase
+    .from("conversations")
+    .select("id")
+    .eq("user_one", buyerId)
+    .eq("user_two", sellerId)
+    .order("created_at", { ascending: true })
+    .limit(1)
+
+  if (direct && direct.length > 0) {
+    conversationId = direct[0].id
+  } else {
+    // Check reverse conversation
+    const { data: reverse } = await supabase
       .from("conversations")
       .select("id")
-      .eq("user_one", buyerId)
-      .eq("user_two", sellerId)
+      .eq("user_one", sellerId)
+      .eq("user_two", buyerId)
       .order("created_at", { ascending: true })
       .limit(1)
 
-    if (direct && direct.length > 0) {
-      conversationId = direct[0].id
-    } else {
-      const { data: reverse } = await supabase
-        .from("conversations")
-        .select("id")
-        .eq("user_one", sellerId)
-        .eq("user_two", buyerId)
-        .order("created_at", { ascending: true })
-        .limit(1)
-
-      if (reverse && reverse.length > 0) {
-        conversationId = reverse[0].id
-      }
+    if (reverse && reverse.length > 0) {
+      conversationId = reverse[0].id
     }
-
-    if (!conversationId) {
-      const { data: created, error } = await supabase
-        .from("conversations")
-        .insert({
-          user_one: buyerId,
-          user_two: sellerId,
-        })
-        .select("id")
-        .single()
-
-      if (error || !created) {
-        console.error("conversation create error:", error)
-        return
-      }
-
-      conversationId = created.id
-    }
-
-    const { data: existingCard } = await supabase
-      .from("messages")
-      .select("id")
-      .eq("conversation_id", conversationId)
-      .eq("listing_id", listing.id)
-      .limit(1)
-
-    if (!existingCard || existingCard.length === 0) {
-      await supabase.from("messages").insert({
-        conversation_id: conversationId,
-        sender_id: buyerId,
-        listing_id: listing.id,
-        body: "Interested in this item",
-      })
-    }
-
-    router.push({
-      pathname: "/messages/[id]",
-      params: { id: conversationId! },
-    })
   }
+
+  // Create conversation if none exists
+  if (!conversationId) {
+    const { data: created, error } = await supabase
+      .from("conversations")
+      .insert({
+        user_one: buyerId,
+        user_two: sellerId,
+      })
+      .select("id")
+      .single()
+
+    if (error || !created) {
+      console.error("conversation create error:", error)
+      return
+    }
+
+    conversationId = created.id
+  }
+
+  // 🚀 DO NOT auto-send a message anymore
+  // Just open the chat with listing context
+  router.push({
+    pathname: "/messages/[id]",
+    params: {
+      id: conversationId!,
+      listingId: listing.id, // 👈 critical for showing listing card
+    },
+  })
+}
 
   /* ---------------- WATCHLIST ---------------- */
 
@@ -283,14 +276,10 @@ if (!ratings || ratings.length === 0) {
   return (
     <View style={styles.screen}>
       {/* HEADER */}
-      <View style={styles.topBar}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={22} color="#0F1E17" />
-        </TouchableOpacity>
-
-        <Text style={styles.headerTitle}>Listing</Text>
-        <View style={{ width: 22 }} />
-      </View>
+      <AppHeader
+  title="Listing"
+  backRoute="/"
+  />
 
       <ScrollView contentContainerStyle={{ paddingBottom: 140 }}>
         {/* IMAGE GALLERY */}
@@ -317,25 +306,35 @@ if (!ratings || ratings.length === 0) {
           </ScrollView>
         )}
 
-        {/* SELLER INFO */}
+        
+      {/* SELLER INFO */}
 <View style={styles.sellerInfoRow}>
+  <View style={styles.sellerInfoLeft}>
+    <TouchableOpacity
+      onPress={() => router.push(`/public-profile/${listing.user_id}`)}
+    >
+      <Text style={styles.sellerNameSmall}>
+        {sellerName ?? "Seller"}
+      </Text>
+    </TouchableOpacity>
+
+    {sellerRatingCount > 0 && (
+      <Text style={styles.sellerRatingSmall}>
+        {sellerRatingAvg} ★ ({sellerRatingCount})
+      </Text>
+    )}
+  </View>
+
+  {!isSeller && (
   <TouchableOpacity
-    onPress={() =>
-      router.push(`/public-profile/${listing.user_id}`)
-    }
+    onPress={handleMessageSeller}
+    style={styles.messageSellerButton}
+    activeOpacity={0.8}
   >
-    <Text style={styles.sellerNameSmall}>
-      {sellerName ?? "Seller"}
-    </Text>
+    <Text style={styles.messageSellerText}>Message Seller</Text>
   </TouchableOpacity>
-
-  {sellerRatingCount > 0 && (
-    <Text style={styles.sellerRatingSmall}>
-      {sellerRatingAvg} ★ ({sellerRatingCount})
-    </Text>
-  )}
+)}
 </View>
-
 
         {/* CONTENT */}
         <View style={styles.content}>
@@ -478,21 +477,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
-  topBar: {
-    paddingTop: 50,
-    paddingHorizontal: 14,
-    paddingBottom: 10,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#0F1E17",
-  },
-
   imagePage: {
     width: SCREEN_WIDTH,
     height: 360,
@@ -610,52 +594,52 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 
-  sellerRow: {
-    marginTop: 16,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: "#D6E6DE",
+  /* 🔹 SELLER INFO ROW (name + rating + message button) */
+  sellerInfoRow: {
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+
+  /* Left side: name + rating */
+  sellerInfoLeft: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
   },
 
-  sellerText: {
-    fontSize: 13,
-    color: "#6B8F7D",
-    fontWeight: "600",
-  },
-
-  /* ✅ NEW: seller line ABOVE title (below image) */
-  sellerRowTop: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 2,
-  },
-
-  /* ✅ NEW: seller text style for the top placement */
-  sellerTextTop: {
-    fontSize: 13,
-    color: "#6B8F7D",
-    fontWeight: "700",
-  },
-
-  messageSellerBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    alignSelf: "flex-start",
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#0F1E17",
-  },
-
-  messageSellerText: {
+  sellerNameSmall: {
     fontSize: 13,
     fontWeight: "700",
     color: "#0F1E17",
   },
 
+  sellerRatingSmall: {
+    fontSize: 12,
+    color: "#6B8F7D",
+    fontWeight: "600",
+  },
+
+  /* 🟢 Message Seller pill button (FINAL) */
+  messageSellerButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: 18,
+    backgroundColor: "#7FAF9B",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  messageSellerText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#0F1E17",
+  },
+
+  /* FULLSCREEN IMAGE MODAL */
   modal: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.95)",
@@ -679,26 +663,4 @@ const styles = StyleSheet.create({
     height: "100%",
     resizeMode: "contain",
   },
-
-  sellerInfoRow: {
-  paddingHorizontal: 16,
-  paddingTop: 10,
-  paddingBottom: 6,
-  flexDirection: "row",
-  alignItems: "center",
-  gap: 8,
-},
-
-sellerNameSmall: {
-  fontSize: 13,
-  fontWeight: "700",
-  color: "#0F1E17",
-},
-
-sellerRatingSmall: {
-  fontSize: 12,
-  color: "#6B8F7D",
-  fontWeight: "600",
-},
-
 })

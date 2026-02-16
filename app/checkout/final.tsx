@@ -12,8 +12,10 @@ import {
   View,
 } from "react-native"
 
+import AppHeader from "@/components/app-header"
 import { useAuth } from "../../context/AuthContext"
 import { supabase } from "../../lib/supabase"
+
 
 /* ---------------- TYPES ---------------- */
 
@@ -390,13 +392,15 @@ const stripeTotalCents = escrowCents + buyerFeeCents + taxCents
 
   return (
     <View style={styles.screen}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={22} color="#0F1E17" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Shipping</Text>
-        <View style={{ width: 22 }} />
-      </View>
+      <AppHeader
+  title="Shipping"
+  backRoute={{
+    pathname: "/checkout",
+    params: { listingId, offerId },
+  }}
+/>
+
+
 
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.card}>
@@ -518,20 +522,7 @@ const stripeTotalCents = escrowCents + buyerFeeCents + taxCents
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#EAF4EF" },
-  header: {
-    paddingTop: 50,
-    paddingBottom: 12,
-    paddingHorizontal: 14,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    backgroundColor: "#7FAF9B",
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#0F1E17",
-  },
+
   content: { padding: 20 },
   card: {
     backgroundColor: "#fff",

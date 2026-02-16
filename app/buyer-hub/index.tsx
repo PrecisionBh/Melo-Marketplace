@@ -1,3 +1,4 @@
+import AppHeader from "@/components/app-header"
 import { Ionicons } from "@expo/vector-icons"
 import { useRouter } from "expo-router"
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native"
@@ -9,16 +10,12 @@ export default function BuyerHubScreen() {
 
   return (
     <View style={styles.screen}>
-      {/* HEADER */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.replace("/profile")}>
-          <Ionicons name="arrow-back" size={22} color="#E8F5EE" />
-        </TouchableOpacity>
-
-        <Text style={styles.headerTitle}>Buying</Text>
-
-        <View style={{ width: 22 }} />
-      </View>
+      {/* STANDARDIZED HEADER */}
+      <AppHeader
+        title="Buying"
+        backLabel="Profile"
+        backRoute="/profile"
+      />
 
       {/* MENU */}
       <View style={styles.menu}>
@@ -81,22 +78,6 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: "#EAF4EF",
-  },
-
-  header: {
-    paddingTop: 60,
-    paddingBottom: 14,
-    paddingHorizontal: 14,
-    backgroundColor: "#7FAF9B",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#E8F5EE",
   },
 
   menu: {

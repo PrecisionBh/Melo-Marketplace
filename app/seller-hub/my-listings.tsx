@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons"
 import { useRouter } from "expo-router"
 import { useEffect, useState } from "react"
 import {
@@ -12,6 +11,7 @@ import {
   View,
 } from "react-native"
 
+import AppHeader from "@/components/app-header"
 import { useAuth } from "../../context/AuthContext"
 import { supabase } from "../../lib/supabase"
 
@@ -125,16 +125,11 @@ export default function MyListingsScreen() {
 
   return (
     <View style={styles.screen}>
-      <View style={styles.headerWrap}>
-        <View style={styles.headerRow}>
-          <TouchableOpacity onPress={() => router.back()}>
-            <Ionicons name="arrow-back" size={22} color="#0F1E17" />
-          </TouchableOpacity>
-
-          <Text style={styles.headerTitle}>My Listings</Text>
-          <View style={{ width: 22 }} />
-        </View>
-      </View>
+      <AppHeader
+        title="My Listings"
+        backLabel="Seller Hub"
+        backRoute="/seller-hub"
+      />
 
       {listings.length === 0 ? (
         <View style={styles.empty}>
@@ -227,6 +222,7 @@ export default function MyListingsScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#EAF4EF" },
 
+  /* (Old header styles kept for safety during refactor) */
   headerWrap: {
     backgroundColor: "#7FAF9B",
     paddingTop: 50,

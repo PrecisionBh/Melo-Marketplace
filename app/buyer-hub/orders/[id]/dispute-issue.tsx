@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons"
 import * as ImagePicker from "expo-image-picker"
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { useState } from "react"
@@ -14,8 +13,10 @@ import {
   View,
 } from "react-native"
 
+import AppHeader from "@/components/app-header"
 import { useAuth } from "../../../../context/AuthContext"
 import { supabase } from "../../../../lib/supabase"
+
 
 const REASONS = [
   "Item not received",
@@ -189,17 +190,11 @@ export default function DisputeIssuePage() {
 
   return (
     <View style={styles.screen}>
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backBtn}
-          onPress={() => router.back()}
-        >
-          <Ionicons name="arrow-back" size={20} color="#1F7A63" />
-        </TouchableOpacity>
+      <AppHeader
+  title="File a Dispute"
+  backRoute="/buyer-hub/orders"
+/>
 
-        <Text style={styles.headerTitle}>File a Dispute</Text>
-        <View style={{ width: 32 }} />
-      </View>
 
       <ScrollView contentContainerStyle={styles.container}>
         <Text style={styles.orderRef}>

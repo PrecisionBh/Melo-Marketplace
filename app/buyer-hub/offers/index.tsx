@@ -2,15 +2,16 @@ import { Ionicons } from "@expo/vector-icons"
 import { useFocusEffect, useRouter } from "expo-router"
 import { useCallback, useState } from "react"
 import {
-    ActivityIndicator,
-    FlatList,
-    Image,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  FlatList,
+  Image,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native"
 
+import AppHeader from "@/components/app-header"
 import { useAuth } from "@/context/AuthContext"
 import { supabase } from "@/lib/supabase"
 
@@ -92,22 +93,12 @@ export default function BuyerOffersScreen() {
 
   return (
     <View style={styles.screen}>
-      {/* HEADER */}
-      <View style={styles.headerWrap}>
-        <View style={styles.headerRow}>
-          <TouchableOpacity
-            style={styles.headerBtn}
-            onPress={() => router.back()}
-          >
-            <Ionicons name="arrow-back" size={22} color="#0F1E17" />
-            <Text style={styles.headerSub}>Buyer Hub</Text>
-          </TouchableOpacity>
-
-          <Text style={styles.headerTitle}>My Offers</Text>
-
-          <View style={{ width: 60 }} />
-        </View>
-      </View>
+      {/* STANDARDIZED HEADER */}
+      <AppHeader
+        title="My Offers"
+        backLabel="Buyer Hub"
+        backRoute="/buyer-hub"
+      />
 
       {/* CONTENT */}
       {loading ? (
@@ -180,7 +171,7 @@ export default function BuyerOffersScreen() {
   )
 }
 
-/* ---------------- STYLES ---------------- */
+/* ---------------- STYLES (UNCHANGED) ---------------- */
 
 const styles = StyleSheet.create({
   screen: {
@@ -188,39 +179,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#EAF4EF",
   },
 
-  /* HEADER */
-  headerWrap: {
-    backgroundColor: "#7FAF9B",
-    paddingTop: 50,
-    paddingBottom: 12,
-    paddingHorizontal: 14,
-  },
-
-  headerRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#ffffff",
-  },
-
-  headerBtn: {
-    alignItems: "center",
-    minWidth: 60,
-  },
-
-  headerSub: {
-    marginTop: 2,
-    fontSize: 11,
-    fontWeight: "600",
-    color: "#0F1E17",
-  },
-
-  /* EMPTY */
   empty: {
     flex: 1,
     alignItems: "center",
@@ -243,7 +201,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 
-  /* CARD */
   card: {
     flexDirection: "row",
     gap: 12,

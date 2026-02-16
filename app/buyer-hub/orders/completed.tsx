@@ -11,6 +11,7 @@ import {
   View,
 } from "react-native"
 
+import AppHeader from "@/components/app-header"
 import { useAuth } from "@/context/AuthContext"
 import { supabase } from "@/lib/supabase"
 
@@ -62,7 +63,6 @@ export default function BuyerCompletedOrdersScreen() {
         listing_snapshot
       `
       )
-      // 🔥 FIX: pull BUYER orders, not seller sales
       .eq("buyer_id", session!.user.id)
       .in("status", ["completed", "cancelled", "refunded"])
       .order("completed_at", { ascending: false })
@@ -90,44 +90,35 @@ export default function BuyerCompletedOrdersScreen() {
 
   return (
     <View style={styles.screen}>
-      {/* HEADER */}
-      <View style={styles.headerWrap}>
-        <View style={styles.headerRow}>
-          <TouchableOpacity
-            style={styles.headerBtn}
-            // 🔥 FIX: back to buyer hub, not seller hub
-            onPress={() => router.replace("/buyer-hub/orders")}
-          >
-            <Ionicons name="arrow-back" size={22} color="#ffffff" />
-          </TouchableOpacity>
+      {/* STANDARDIZED HEADER */}
+      <AppHeader
+        title="Completed Orders"
+        backLabel="Orders"
+        backRoute="/buyer-hub/orders"
+      />
 
-          <Text style={styles.headerTitle}>Completed Orders</Text>
-          <View style={{ width: 60 }} />
-        </View>
-
-        {/* FILTER PILLS */}
-        <View style={styles.filterRow}>
-          <FilterPill
-            label="All"
-            active={filter === "all"}
-            onPress={() => setFilter("all")}
-          />
-          <FilterPill
-            label="Completed"
-            active={filter === "completed"}
-            onPress={() => setFilter("completed")}
-          />
-          <FilterPill
-            label="Cancelled"
-            active={filter === "cancelled"}
-            onPress={() => setFilter("cancelled")}
-          />
-          <FilterPill
-            label="Refunded"
-            active={filter === "refunded"}
-            onPress={() => setFilter("refunded")}
-          />
-        </View>
+      {/* FILTER PILLS */}
+      <View style={styles.filterRow}>
+        <FilterPill
+          label="All"
+          active={filter === "all"}
+          onPress={() => setFilter("all")}
+        />
+        <FilterPill
+          label="Completed"
+          active={filter === "completed"}
+          onPress={() => setFilter("completed")}
+        />
+        <FilterPill
+          label="Cancelled"
+          active={filter === "cancelled"}
+          onPress={() => setFilter("cancelled")}
+        />
+        <FilterPill
+          label="Refunded"
+          active={filter === "refunded"}
+          onPress={() => setFilter("refunded")}
+        />
       </View>
 
       {/* CONTENT */}
@@ -155,7 +146,6 @@ export default function BuyerCompletedOrdersScreen() {
               <TouchableOpacity
                 style={styles.card}
                 onPress={() =>
-                  // 🔥 FIX: route to buyer order detail, NOT seller hub
                   router.push(`/buyer-hub/orders/${item.id}`)
                 }
               >
@@ -234,46 +224,16 @@ function FilterPill({
   )
 }
 
-/* ---------------- STYLES (UNCHANGED) ---------------- */
+/* ---------------- STYLES ---------------- */
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#EAF4EF" },
-
-  headerWrap: {
-    backgroundColor: "#7FAF9B",
-    paddingTop: 50,
-    paddingBottom: 12,
-    paddingHorizontal: 14,
-  },
-
-  headerRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#ffffff",
-  },
-
-  headerBtn: {
-    alignItems: "center",
-    minWidth: 60,
-  },
-
-  headerSub: {
-    marginTop: 2,
-    fontSize: 11,
-    fontWeight: "600",
-    color: "#0F1E17",
-  },
 
   filterRow: {
     flexDirection: "row",
     gap: 8,
     marginTop: 12,
+    paddingHorizontal: 14,
   },
 
   filterPill: {
@@ -332,7 +292,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 15,
     fontWeight: "800",
-    color: "#ffffff",
+    color: "#0F1E17",
   },
 
   price: {

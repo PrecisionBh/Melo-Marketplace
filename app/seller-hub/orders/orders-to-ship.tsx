@@ -11,6 +11,7 @@ import {
   View,
 } from "react-native"
 
+import AppHeader from "@/components/app-header"
 import { supabase } from "@/lib/supabase"
 
 /* ---------------- TYPES ---------------- */
@@ -66,7 +67,7 @@ export default function OrdersToShipScreen() {
         listing_snapshot
       `)
       .eq("status", "paid")
-      .eq("seller_id", sellerId) // 🔒 seller-only
+      .eq("seller_id", sellerId)
       .order("created_at", { ascending: true })
 
     if (!error && data) {
@@ -82,26 +83,25 @@ export default function OrdersToShipScreen() {
     return <ActivityIndicator style={{ marginTop: 60 }} />
   }
 
+  const hasOrdersToShip = orders.length > 0
+
   return (
     <View style={styles.screen}>
-      {/* HEADER */}
-      <View style={styles.headerWrap}>
-        <View style={styles.topBar}>
-          <TouchableOpacity onPress={() => router.back()}>
-            <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
-          </TouchableOpacity>
+      {/* STANDARDIZED HEADER */}
+      <AppHeader
+        title="Orders to Ship"
+        backLabel="Orders"
+        backRoute="/seller-hub/orders"
+      />
 
-          <Text style={styles.title}>Orders to Ship</Text>
-          <View style={{ width: 22 }} />
-        </View>
-
-        {/* URGENCY BANNER */}
+      {/* 🚨 URGENCY BANNER (ONLY IF ORDERS EXIST) */}
+      {hasOrdersToShip && (
         <View style={styles.urgencyBanner}>
           <Text style={styles.urgencyText}>
             Your funds are waiting — ship to get paid
           </Text>
         </View>
-      </View>
+      )}
 
       {orders.length === 0 ? (
         <View style={styles.emptyWrap}>
@@ -164,25 +164,6 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: "#EAF4EF",
-  },
-
-  headerWrap: {
-    backgroundColor: "#7FAF9B",
-  },
-
-  topBar: {
-    paddingTop: 50,
-    paddingHorizontal: 14,
-    paddingBottom: 12,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-
-  title: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#FFFFFF",
   },
 
   urgencyBanner: {

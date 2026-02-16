@@ -9,6 +9,7 @@ import {
   View,
 } from "react-native"
 
+import AppHeader from "@/components/app-header"
 import { useAuth } from "../context/AuthContext"
 import { isAdmin } from "../lib/admin"
 import { supabase } from "../lib/supabase"
@@ -47,10 +48,12 @@ export default function ProfileScreen() {
 
   return (
     <View style={styles.screen}>
-      {/* HEADER */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Profile</Text>
-      </View>
+      {/* GLOBAL MELO HEADER (WITH BACK TO HOME) */}
+      <AppHeader
+        title="Profile"
+        backLabel="Home"
+        backRoute="/"
+      />
 
       {/* PROFILE CARD */}
       <View style={styles.profileCard}>
@@ -87,9 +90,9 @@ export default function ProfileScreen() {
           style={styles.publicProfileBtn}
           onPress={() =>
             router.push(
-          `/public-profile/${session?.user?.id}`
-           )
-        }
+              `/public-profile/${session?.user?.id}`
+            )
+          }
         >
           <Text style={styles.publicProfileText}>
             View Public Profile
@@ -132,7 +135,7 @@ export default function ProfileScreen() {
         )}
       </View>
 
-      {/* BACK */}
+      {/* BACK (UNCHANGED - kept as requested) */}
       <TouchableOpacity
         style={styles.backBtn}
         onPress={() => router.replace("/")}
@@ -172,19 +175,6 @@ function MenuItem({
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#EAF4EF" },
-
-  header: {
-    paddingTop: 60,
-    paddingBottom: 12,
-    alignItems: "center",
-    backgroundColor: "#7FAF9B",
-  },
-
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#ffffff",
-  },
 
   profileCard: {
     alignItems: "center",

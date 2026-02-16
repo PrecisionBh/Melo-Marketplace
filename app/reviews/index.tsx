@@ -2,17 +2,19 @@ import { Ionicons } from "@expo/vector-icons"
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { useEffect, useState } from "react"
 import {
-    ActivityIndicator,
-    Alert,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native"
 
+import AppHeader from "@/components/app-header"
 import { supabase } from "@/lib/supabase"
+
 
 /* ---------------- QUICK TAG OPTIONS ---------------- */
 
@@ -220,15 +222,10 @@ export default function LeaveReviewScreen() {
   return (
     <View style={styles.screen}>
       {/* HEADER */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={22} color="#0F1E17" />
-        </TouchableOpacity>
+      <AppHeader
+  title="Leave a Review"
+/>
 
-        <Text style={styles.headerTitle}>Leave a Review</Text>
-
-        <View style={{ width: 22 }} />
-      </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
         <View style={styles.card}>
@@ -340,20 +337,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#EAF4EF",
   },
-  header: {
-    paddingTop: 60,
-    paddingBottom: 12,
-    paddingHorizontal: 14,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    backgroundColor: "#7FAF9B",
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#0F1E17",
-  },
+  
   card: {
     margin: 20,
     padding: 20,

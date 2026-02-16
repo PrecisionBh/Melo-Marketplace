@@ -3,6 +3,7 @@ import { useFocusEffect, useRouter } from "expo-router"
 import { useCallback, useState } from "react"
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native"
 
+import AppHeader from "@/components/app-header"
 import { useAuth } from "@/context/AuthContext"
 import { supabase } from "@/lib/supabase"
 
@@ -72,25 +73,19 @@ export default function SellerOrdersHubScreen() {
       .select("id", { count: "exact", head: true })
       .eq("seller_id", sellerId)
       .in("status", ["pending", "countered"])
-      .neq("last_actor", "seller") // only offers needing seller action
+      .neq("last_actor", "seller")
 
     setOffersCount(count ?? 0)
   }
 
   return (
     <View style={styles.screen}>
-      {/* HEADER */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backBtn}
-          onPress={() => router.back()}
-        >
-          <Ionicons name="arrow-back" size={20} color="#E8F5EE" />
-          <Text style={styles.backText}>Seller Hub</Text>
-        </TouchableOpacity>
-
-        <Text style={styles.headerTitle}>Orders</Text>
-      </View>
+      {/* STANDARDIZED MELO HEADER */}
+      <AppHeader
+        title="Orders"
+        backLabel="Seller Hub"
+        backRoute="/seller-hub"
+      />
 
       {/* MENU */}
       <View style={styles.menu}>
@@ -194,34 +189,6 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: "#EAF4EF",
-  },
-
-  header: {
-    paddingTop: 60,
-    paddingBottom: 14,
-    alignItems: "center",
-    backgroundColor: "#7FAF9B",
-  },
-
-  backBtn: {
-    position: "absolute",
-    left: 14,
-    bottom: 14,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-
-  backText: {
-    marginLeft: 6,
-    color: "#E8F5EE",
-    fontWeight: "600",
-    fontSize: 13,
-  },
-
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#E8F5EE",
   },
 
   menu: {

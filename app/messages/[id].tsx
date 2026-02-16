@@ -40,21 +40,24 @@ export default function ChatScreen() {
   const router = useRouter()
   const insets = useSafeAreaInsets()
 
-  const { id: conversationId } =
-    useLocalSearchParams<{ id: string }>()
+  // 🔥 UPDATED: now supports listingId from Listing screen
+  const { id: conversationId, listingId } =
+    useLocalSearchParams<{ id: string; listingId?: string }>()
+
   const { session } = useAuth()
 
   const [messages, setMessages] = useState<Message[]>([])
-const [listingMap, setListingMap] =
-  useState<Record<string, ListingPreview>>({})
-const [text, setText] = useState("")
-const [loading, setLoading] = useState(true)
+  const [listingMap, setListingMap] =
+    useState<Record<string, ListingPreview>>({})
+  const [text, setText] = useState("")
+  const [loading, setLoading] = useState(true)
 
-const [isOtherTyping, setIsOtherTyping] = useState(false)
-const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-const typingChannelRef = useRef<any>(null)
+  const [isOtherTyping, setIsOtherTyping] = useState(false)
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const typingChannelRef = useRef<any>(null)
 
-
+  // 🟢 NEW: holds the listing attached to this chat session
+  const [initialListingId, setInitialListingId] = useState<string | null>(null)
 
   const [otherUserName, setOtherUserName] = useState("Chat")
   const [otherUserAvatar, setOtherUserAvatar] = useState<string | null>(null)
@@ -62,24 +65,57 @@ const typingChannelRef = useRef<any>(null)
 
   const flatListRef = useRef<FlatList>(null)
 
+  /* 🟢 Capture listingId when chat is opened from a listing */
   useEffect(() => {
-  if (!conversationId) return
-
-  loadMessages()
-  loadConversationUser()
-  markAsRead()
-
-  // Subscribe to realtime (messages + typing)
-  const unsubscribe = subscribeToMessages()
-
-  // Cleanup ONLY this chat's channels (NOT all supabase channels)
-  return () => {
-    if (unsubscribe) {
-      unsubscribe()
+    if (listingId && typeof listingId === "string") {
+      setInitialListingId(listingId)
     }
-  }
-}, [conversationId])
+  }, [listingId])
 
+  /* 🟢 PRELOAD product card EVEN before first message */
+  useEffect(() => {
+    if (!initialListingId) return
+    preloadInitialListing()
+  }, [initialListingId])
+
+  useEffect(() => {
+    if (!conversationId) return
+
+    loadMessages()
+    loadConversationUser()
+    markAsRead()
+
+    // Subscribe to realtime (messages + typing)
+    const unsubscribe = subscribeToMessages()
+
+    // Cleanup ONLY this chat's channels
+    return () => {
+      if (unsubscribe) {
+        unsubscribe()
+      }
+    }
+  }, [conversationId])
+
+  /* 🟢 PRELOAD INITIAL LISTING CARD (CRITICAL FOR CARD BEFORE FIRST MESSAGE) */
+  const preloadInitialListing = async () => {
+    if (!initialListingId) return
+
+    // If already cached, skip
+    if (listingMap[initialListingId]) return
+
+    const { data } = await supabase
+      .from("listings")
+      .select("id,title,price,image_urls,allow_offers")
+      .eq("id", initialListingId)
+      .single()
+
+    if (!data) return
+
+    setListingMap((prev) => ({
+      ...prev,
+      [data.id]: data,
+    }))
+  }
 
   /* ---------------- LOAD MESSAGES ---------------- */
 
@@ -172,12 +208,11 @@ const typingChannelRef = useRef<any>(null)
       .is("read_at", null)
   }
 
-  /* ---------------- REALTIME ---------------- */
 
-  /* ---------------- REALTIME ---------------- */
+/* ---------------- REALTIME ---------------- */
 
 const subscribeToMessages = () => {
-  if (!conversationId) return
+  if (!conversationId) return () => {}
 
   const messagesChannel = supabase
     .channel(`messages-${conversationId}`)
@@ -192,7 +227,6 @@ const subscribeToMessages = () => {
       (payload) => {
         const newMessage = payload.new as Message
 
-        // Prevent duplicate messages (important with optimistic UI)
         setMessages((prev) => {
           const alreadyExists = prev.some(
             (m) =>
@@ -219,32 +253,29 @@ const subscribeToMessages = () => {
     .subscribe()
 
   const typingChannel = supabase
-  .channel(`typing-${conversationId}`)
-  .on("broadcast", { event: "typing" }, (payload) => {
-    // Ignore your own typing events
-    if (payload.payload?.userId === session?.user?.id) return
+    .channel(`typing-${conversationId}`)
+    .on("broadcast", { event: "typing" }, (payload) => {
+      if (payload.payload?.userId === session?.user?.id) return
 
-    setIsOtherTyping(true)
+      setIsOtherTyping(true)
 
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current)
-    }
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current)
+      }
 
-    typingTimeoutRef.current = setTimeout(() => {
-      setIsOtherTyping(false)
-    }, 2000)
-  })
+      typingTimeoutRef.current = setTimeout(() => {
+        setIsOtherTyping(false)
+      }, 2000)
+    })
+    .subscribe()
 
-typingChannel.subscribe()
+  typingChannelRef.current = typingChannel
 
-// Store channel reference for broadcasting (CRITICAL)
-typingChannelRef.current = typingChannel
-
-
-  // ✅ IMPORTANT: return cleanup function (Fix #2)
   return () => {
     supabase.removeChannel(messagesChannel)
     supabase.removeChannel(typingChannel)
+
+    typingChannelRef.current = null
 
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current)
@@ -303,28 +334,33 @@ typingChannelRef.current = typingChannel
     return
   }
 
+  // 🟢 CRITICAL: Attach listing ONLY to the first message (if chat came from listing)
+  const messageListingId =
+    messages.length === 0 && initialListingId
+      ? initialListingId
+      : null
+
   // 🔥 OPTIMISTIC MESSAGE (INSTANT UI)
   const tempMessage: Message = {
-    id: `temp-${Date.now()}`, // temporary ID
+    id: `temp-${Date.now()}`,
     body: message,
     sender_id: session.user.id,
     created_at: new Date().toISOString(),
     read_at: null,
-    listing_id: null,
+    listing_id: messageListingId, // 🟢 THIS makes the product card appear
   }
 
-  // Instantly show message in UI (NO REFRESH NEEDED)
+  // Instantly show message in UI
   setMessages((prev) => [...prev, tempMessage])
 
-  // Auto scroll immediately
+  // Auto scroll
   setTimeout(() => {
     flatListRef.current?.scrollToEnd({ animated: true })
   }, 50)
 
-  // 🛑 FIX #1: Stop typing indicator immediately when sending
+  // Stop typing indicator immediately
   setIsOtherTyping(false)
 
-  // Clear typing timeout (prevents lingering "is typing...")
   if (typingTimeoutRef.current) {
     clearTimeout(typingTimeoutRef.current)
     typingTimeoutRef.current = null
@@ -333,11 +369,12 @@ typingChannelRef.current = typingChannel
   // Clear input instantly
   setText("")
 
-  // 🚀 Send to Supabase in background
+  // 🚀 Send to Supabase (REAL MESSAGE)
   const { error } = await supabase.from("messages").insert({
     conversation_id: conversationId,
     sender_id: session.user.id,
     body: message,
+    listing_id: messageListingId, // 🟢 REAL DB card attachment
   })
 
   if (error) {
@@ -666,15 +703,19 @@ const styles = StyleSheet.create({
   },
 
   title: {
-    fontSize: 17,
-    fontWeight: "800",
-    color: "#FFFFFF",
-  },
+  fontSize: 18, // match AppHeader
+  fontWeight: "800",
+  color: "#FFFFFF",
+},
 
-  list: {
-    padding: 16,
-    paddingBottom: 140,
-  },
+
+ list: {
+  paddingTop: 12,
+  paddingHorizontal: 12,
+  paddingBottom: 8, // 🔥 SMALL padding only (NOT 140)
+  flexGrow: 1, // 🧠 CRITICAL: makes messages stick to bottom properly
+  justifyContent: "flex-end", // 🚀 anchors last message above input
+},
 
   productCard: {
     flexDirection: "row",

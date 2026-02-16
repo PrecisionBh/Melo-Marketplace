@@ -1,20 +1,21 @@
-import { Ionicons } from "@expo/vector-icons"
 import { useRouter } from "expo-router"
 import { useEffect, useState } from "react"
 import {
-    Alert,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native"
 
+import AppHeader from "@/components/app-header"
 import { useAuth } from "@/context/AuthContext"
 import { supabase } from "@/lib/supabase"
+
 
 /* ---------------- TYPES ---------------- */
 
@@ -136,13 +137,10 @@ export default function WithdrawalScreen() {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       {/* HEADER */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={22} color="#0F1E17" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Withdraw</Text>
-        <View style={{ width: 22 }} />
-      </View>
+      <AppHeader
+  title="Withdraw"
+/>
+
 
       <ScrollView contentContainerStyle={styles.content}>
         {/* AVAILABLE */}
@@ -276,15 +274,6 @@ export default function WithdrawalScreen() {
 /* ---------------- STYLES ---------------- */
 
 const styles = StyleSheet.create({
-  header: {
-    height: 85,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 14,
-    backgroundColor: "#7FAF9B",
-  },
-  headerTitle: { fontSize: 16, fontWeight: "900", color: "#0F1E17" },
 
   content: { padding: 16, gap: 16 },
 
