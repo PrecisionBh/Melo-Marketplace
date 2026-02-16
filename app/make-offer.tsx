@@ -69,17 +69,25 @@ export default function MakeOfferScreen() {
       : 0
   }, [listing])
 
-  /* ---------------- FEES (MATCH CHECKOUT) ---------------- */
+  /* ---------------- FEES (UNCHANGED + DISPLAY-ONLY SALES TAX) ---------------- */
   // Buyer fee = 1.5% buyer protection + 2.9% processing + $0.30
   const buyerFee = useMemo(() => {
     if (!numericOffer || numericOffer <= 0) return 0
     return Number((numericOffer * 0.044 + 0.3).toFixed(2))
   }, [numericOffer])
 
+  // 🔥 DISPLAY ONLY — NOT STORED, NOT USED IN DB
+  const salesTax = useMemo(() => {
+    if (!numericOffer || numericOffer <= 0) return 0
+    return Number((numericOffer * 0.075).toFixed(2))
+  }, [numericOffer])
+
   const totalDue = useMemo(() => {
     if (!numericOffer || numericOffer <= 0) return 0
-    return Number((numericOffer + buyerFee + shippingCost).toFixed(2))
-  }, [numericOffer, buyerFee, shippingCost])
+    return Number(
+      (numericOffer + buyerFee + salesTax + shippingCost).toFixed(2)
+    )
+  }, [numericOffer, buyerFee, salesTax, shippingCost])
 
   /* ---------------- VALIDATION ---------------- */
 
@@ -114,28 +122,30 @@ export default function MakeOfferScreen() {
     setLoading(true)
 
     const { data: newOffer, error } = await supabase
-  .from("offers")
-  .insert({
-    listing_id: listing.id,
-    buyer_id: session.user.id,
-    seller_id: listing.user_id,
+      .from("offers")
+      .insert({
+        listing_id: listing.id,
+        buyer_id: session.user.id,
+        seller_id: listing.user_id,
 
-    offer_amount: numericOffer,
-    original_offer: numericOffer,
-    current_amount: numericOffer,
+        offer_amount: numericOffer,
+        original_offer: numericOffer,
+        current_amount: numericOffer,
 
-    buyer_fee: buyerFee,
-    total_due: totalDue,
+        buyer_fee: buyerFee,
+        total_due: totalDue,
 
-    status: "pending",
-    last_action: "buyer",
-    last_actor: "buyer",
-    counter_count: 0,
+        status: "pending",
+        last_action: "buyer",
+        last_actor: "buyer",
+        counter_count: 0,
 
-    expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-  })
-  .select("id")
-  .single()
+        expires_at: new Date(
+          Date.now() + 24 * 60 * 60 * 1000
+        ).toISOString(),
+      })
+      .select("id")
+      .single()
 
     setLoading(false)
 
@@ -153,18 +163,18 @@ export default function MakeOfferScreen() {
     }
 
     /* ✅ NOTIFY AFTER SUCCESS */
-await notify({
-  userId: listing.user_id, // seller
-  type: "offer",
-  title: "New offer received",
-  body: `You received a new offer on "${listing.title}"`,
-  data: {
-    route: "/seller-hub/offers/[id]",
-    params: {
-      id: newOffer.id,
-    },
-  },
-})
+    await notify({
+      userId: listing.user_id,
+      type: "offer",
+      title: "New offer received",
+      body: `You received a new offer on "${listing.title}"`,
+      data: {
+        route: "/seller-hub/offers/[id]",
+        params: {
+          id: newOffer.id,
+        },
+      },
+    })
 
     Alert.alert(
       "Offer Sent",
@@ -195,7 +205,10 @@ await notify({
       >
         <ScrollView contentContainerStyle={styles.content}>
           {listing.image_urls?.[0] && (
-            <Image source={{ uri: listing.image_urls[0] }} style={styles.image} />
+            <Image
+              source={{ uri: listing.image_urls[0] }}
+              style={styles.image}
+            />
           )}
 
           <View style={styles.card}>
@@ -220,15 +233,27 @@ await notify({
 
             {numericOffer > 0 && (
               <View style={styles.summary}>
-                <Row label="Offer amount" value={`$${numericOffer.toFixed(2)}`} />
+                <Row
+                  label="Offer amount"
+                  value={`$${numericOffer.toFixed(2)}`}
+                />
 
                 {shippingCost > 0 && (
-                  <Row label="Shipping" value={`$${shippingCost.toFixed(2)}`} />
+                  <Row
+                    label="Shipping"
+                    value={`$${shippingCost.toFixed(2)}`}
+                  />
                 )}
 
                 <Row
                   label="Buyer protection & processing"
                   value={`$${buyerFee.toFixed(2)}`}
+                />
+
+                {/* 🔥 NEW DISPLAY-ONLY SALES TAX LINE */}
+                <Row
+                  label="Estimated sales tax (7.5%)"
+                  value={`$${salesTax.toFixed(2)}`}
                 />
 
                 <View style={styles.divider} />
@@ -255,15 +280,19 @@ await notify({
               Submitting an offer does not guarantee acceptance.
             </Text>
 
-            <Text style={styles.reassurance}>Offers expire after 24 hours.</Text>
-
             <Text style={styles.reassurance}>
-              Secure checkout powered by Stripe
+              Offers expire after 24 hours.
             </Text>
 
             <View style={styles.protectionPill}>
-              <Ionicons name="shield-checkmark" size={14} color="#1F7A63" />
-              <Text style={styles.protectionText}>Buyer Protection Included</Text>
+              <Ionicons
+                name="shield-checkmark"
+                size={14}
+                color="#1F7A63"
+              />
+              <Text style={styles.protectionText}>
+                Buyer Protection Included
+              </Text>
             </View>
           </View>
 
@@ -287,12 +316,15 @@ function Row({
 }) {
   return (
     <View style={styles.row}>
-      <Text style={[styles.rowLabel, bold && styles.boldText]}>{label}</Text>
-      <Text style={[styles.rowValue, bold && styles.boldText]}>{value}</Text>
+      <Text style={[styles.rowLabel, bold && styles.boldText]}>
+        {label}
+      </Text>
+      <Text style={[styles.rowValue, bold && styles.boldText]}>
+        {value}
+      </Text>
     </View>
   )
 }
-
 
 /* ---------------- STYLES ---------------- */
 

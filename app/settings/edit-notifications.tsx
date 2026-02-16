@@ -1,9 +1,70 @@
 import { Ionicons } from "@expo/vector-icons"
+import * as Notifications from "expo-notifications"
 import { useRouter } from "expo-router"
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import { useEffect, useState } from "react"
+import { Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native"
 
-export default function NotificationsPlaceholder() {
+export default function NotificationsSettingsScreen() {
   const router = useRouter()
+
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false)
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    checkPermissionStatus()
+  }, [])
+
+  const checkPermissionStatus = async () => {
+    try {
+      const { status } = await Notifications.getPermissionsAsync()
+      setNotificationsEnabled(status === "granted")
+    } catch (e) {
+      console.error("Permission check error:", e)
+    }
+  }
+
+  const handleToggleNotifications = async () => {
+    try {
+      setLoading(true)
+
+      if (!notificationsEnabled) {
+        // Request permission
+        const { status } = await Notifications.requestPermissionsAsync()
+
+        if (status !== "granted") {
+          Alert.alert(
+            "Permission Required",
+            "Enable notifications to receive message alerts, order updates, and important Melo notifications."
+          )
+          setLoading(false)
+          return
+        }
+
+        // Permission granted
+        setNotificationsEnabled(true)
+
+        Alert.alert(
+          "Notifications Enabled",
+          "You will now receive alerts for messages, orders, and important updates."
+        )
+      } else {
+        // Cannot truly disable system permission from app,
+        // but we toggle app-level preference for MVP
+        setNotificationsEnabled(false)
+
+        Alert.alert(
+          "Notifications Disabled",
+          "You can re-enable notifications anytime from this screen."
+        )
+      }
+
+      setLoading(false)
+    } catch (e) {
+      console.error("Notification toggle error:", e)
+      setLoading(false)
+      Alert.alert("Error", "Something went wrong while updating notification settings.")
+    }
+  }
 
   return (
     <View style={styles.screen}>
@@ -24,18 +85,70 @@ export default function NotificationsPlaceholder() {
         </View>
       </View>
 
-      {/* CONTENT */}
+      {/* MAIN CARD */}
       <View style={styles.card}>
         <Ionicons
-          name="notifications-outline"
-          size={40}
+          name={notificationsEnabled ? "notifications" : "notifications-outline"}
+          size={42}
           color="#7FAF9B"
         />
-        <Text style={styles.title}>Notifications coming soon</Text>
+
+        <Text style={styles.title}>Push Notifications</Text>
+
         <Text style={styles.text}>
-          You’ll be able to manage message alerts, order updates, and more.
-          Notification settings will be available once notifications are
-          enabled.
+          Get real-time alerts for new messages, order updates, offers,
+          and important Melo activity. Keeping notifications enabled
+          ensures you never miss a sale or message.
+        </Text>
+
+        {/* STATUS BADGE */}
+        <View
+          style={[
+            styles.statusBadge,
+            notificationsEnabled
+              ? styles.statusOn
+              : styles.statusOff,
+          ]}
+        >
+          <Text
+            style={[
+              styles.statusText,
+              notificationsEnabled
+                ? styles.statusTextOn
+                : styles.statusTextOff,
+            ]}
+          >
+            {notificationsEnabled ? "Enabled" : "Disabled"}
+          </Text>
+        </View>
+
+        {/* TOGGLE BUTTON */}
+        <TouchableOpacity
+          style={[
+            styles.toggleBtn,
+            loading && { opacity: 0.6 },
+          ]}
+          onPress={handleToggleNotifications}
+          disabled={loading}
+        >
+          <Ionicons
+            name={
+              notificationsEnabled ? "notifications-off" : "notifications"
+            }
+            size={18}
+            color="#FFFFFF"
+            style={{ marginRight: 6 }}
+          />
+          <Text style={styles.toggleText}>
+            {notificationsEnabled
+              ? "Disable Notifications"
+              : "Enable Notifications"}
+          </Text>
+        </TouchableOpacity>
+
+        <Text style={styles.helperText}>
+          You can change this anytime. Melo will only send important,
+          relevant notifications.
         </Text>
       </View>
     </View>
@@ -67,7 +180,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: "800",
-    color: "#0F1E17",
+    color: "#ffffff",
   },
 
   headerBtn: {
@@ -85,23 +198,78 @@ const styles = StyleSheet.create({
   card: {
     margin: 20,
     padding: 24,
-    borderRadius: 16,
+    borderRadius: 18,
     backgroundColor: "#FFFFFF",
     alignItems: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 3,
   },
 
   title: {
-    marginTop: 12,
-    fontSize: 16,
+    marginTop: 14,
+    fontSize: 18,
     fontWeight: "800",
     color: "#0F1E17",
   },
 
   text: {
-    marginTop: 8,
+    marginTop: 10,
     textAlign: "center",
     fontSize: 13,
     color: "#6B8F7D",
     lineHeight: 18,
+  },
+
+  statusBadge: {
+    marginTop: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+
+  statusOn: {
+    backgroundColor: "#E6F4EE",
+  },
+
+  statusOff: {
+    backgroundColor: "#F1F1F1",
+  },
+
+  statusText: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+
+  statusTextOn: {
+    color: "#2E7D5B",
+  },
+
+  statusTextOff: {
+    color: "#888888",
+  },
+
+  toggleBtn: {
+    marginTop: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#0F1E17",
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 14,
+  },
+
+  toggleText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+
+  helperText: {
+    marginTop: 14,
+    textAlign: "center",
+    fontSize: 12,
+    color: "#8AA79A",
   },
 })

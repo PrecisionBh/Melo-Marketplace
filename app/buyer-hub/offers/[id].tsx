@@ -6,8 +6,10 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Modal,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native"
@@ -17,7 +19,12 @@ import { supabase } from "@/lib/supabase"
 
 /* ---------------- TYPES ---------------- */
 
-type OfferStatus = "pending" | "countered" | "accepted" | "declined" | "expired"
+type OfferStatus =
+  | "pending"
+  | "countered"
+  | "accepted"
+  | "declined"
+  | "expired"
 
 type Offer = {
   id: string
@@ -60,59 +67,58 @@ export default function BuyerOfferDetailScreen() {
   /* ---------------- LOAD OFFER ---------------- */
 
   const loadOffer = async () => {
-  setLoading(true)
+    setLoading(true)
 
-  const { data, error } = await supabase
-    .from("offers")
-    .select(`
-      id,
-      buyer_id,
-      seller_id,
-      current_amount,
-      counter_count,
-      last_actor,
-      status,
-      created_at,
-      listings (
-        title,
-        image_urls,
-        shipping_type,
-        shipping_price
-      )
-    `)
-    .eq("id", id)
-    .single<Offer>()
+    const { data, error } = await supabase
+      .from("offers")
+      .select(`
+        id,
+        buyer_id,
+        seller_id,
+        current_amount,
+        counter_count,
+        last_actor,
+        status,
+        created_at,
+        listings (
+          title,
+          image_urls,
+          shipping_type,
+          shipping_price
+        )
+      `)
+      .eq("id", id)
+      .single<Offer>()
 
-  if (error || !data) {
-    setOffer(null)
+    if (error || !data) {
+      setOffer(null)
+      setLoading(false)
+      return
+    }
+
+    // 🔒 Buyer ownership check
+    if (data.buyer_id !== session!.user!.id) {
+      Alert.alert("Access denied", "You can only view your own offers.")
+      router.replace("/buyer-hub/offers")
+      return
+    }
+
+    // Prevent viewing if already paid
+    const { data: paidOrder } = await supabase
+      .from("orders")
+      .select("id")
+      .eq("offer_id", data.id)
+      .eq("status", "paid")
+      .maybeSingle()
+
+    if (paidOrder) {
+      router.replace("/buyer-hub/offers")
+      return
+    }
+
+    setOffer(data)
     setLoading(false)
-    return
   }
-
-  // 🔒 Buyer ownership check
-  if (data.buyer_id !== session!.user!.id) {
-    Alert.alert("Access denied", "You can only view your own offers.")
-    router.replace("/buyer-hub/offers")
-    return
-  }
-
-  // ✅ NEW: check if this offer has already been paid
-  const { data: paidOrder } = await supabase
-    .from("orders")
-    .select("id")
-    .eq("offer_id", data.id)
-    .eq("status", "paid")
-    .maybeSingle()
-
-  if (paidOrder) {
-    // Offer has been completed → remove from flow
-    router.replace("/buyer-hub/offers")
-    return
-  }
-
-  setOffer(data)
-  setLoading(false)
-}
 
   /* ---------------- EXPIRATION ---------------- */
 
@@ -122,47 +128,83 @@ export default function BuyerOfferDetailScreen() {
     return Date.now() > created + 24 * 60 * 60 * 1000
   }, [offer])
 
-  const offerIsFinal =
-    offer?.status === "accepted" ||
-    offer?.status === "declined" ||
-    offer?.status === "expired"
+  if (!offer) return null
 
-  /* ---------------- CALCULATIONS ---------------- */
+  /* ---------------- CALCULATIONS (BUYER CLEAN VIEW) ---------------- */
 
-  const shippingCost = useMemo(() => {
-    if (!offer) return 0
-    return offer.listings.shipping_type === "buyer_pays"
+  const itemPrice = offer.current_amount
+
+  const shippingCost =
+    offer.listings.shipping_type === "buyer_pays"
       ? offer.listings.shipping_price ?? 0
       : 0
-  }, [offer])
 
-  const itemPrice = offer?.current_amount ?? 0
+  // Buyer fee model (matches checkout)
+  const buyerFeeRate = 0.044
+  const buyerFlatFee = 0.3
 
-  const buyerProtectionFee = Number((itemPrice * 0.015).toFixed(2))
-  const stripeProcessingFee = Number((itemPrice * 0.029 + 0.3).toFixed(2))
+  const buyerFee = Number(
+    (itemPrice * buyerFeeRate + buyerFlatFee).toFixed(2)
+  )
 
-  const buyerTotal =
-    itemPrice +
-    shippingCost +
-    buyerProtectionFee +
-    stripeProcessingFee
+  const buyerTotal = Number(
+    (itemPrice + shippingCost + buyerFee).toFixed(2)
+  )
 
   const canRespond =
     !!offer &&
     !isExpired &&
-    !offerIsFinal &&
+    offer.status !== "accepted" &&
+    offer.status !== "declined" &&
     offer.counter_count < 6 &&
     offer.last_actor === "seller"
 
   const canPay =
-    !!offer &&
-    offer.status === "accepted" &&
-    !isExpired
+    offer.status === "accepted" && !isExpired
+
+  /* ---------------- STATUS BADGE (MATCHES SELLER UX) ---------------- */
+
+  const renderStatusBadge = () => {
+    if (isExpired) return <Badge text="Expired" color="#C0392B" />
+
+    if (offer.status === "accepted") {
+      return (
+        <Badge
+          text="Accepted • Complete payment"
+          color="#1F7A63"
+        />
+      )
+    }
+
+    if (offer.status === "declined") {
+      return <Badge text="Declined" color="#EB5757" />
+    }
+
+    if (offer.status === "countered") {
+      if (offer.last_actor === "buyer") {
+        return (
+          <Badge
+            text="Counter sent • Waiting on seller"
+            color="#E67E22"
+          />
+        )
+      }
+      if (offer.last_actor === "seller") {
+        return (
+          <Badge
+            text="Seller countered • Your response needed"
+            color="#2980B9"
+          />
+        )
+      }
+    }
+
+    return null
+  }
 
   /* ---------------- ACTIONS ---------------- */
 
   const goToPay = () => {
-    if (!offer) return
     router.push({
       pathname: "/checkout",
       params: { offerId: offer.id },
@@ -170,8 +212,7 @@ export default function BuyerOfferDetailScreen() {
   }
 
   const acceptOffer = async () => {
-    if (!offer || saving) return
-
+    if (saving || isExpired) return
     setSaving(true)
 
     const { error } = await supabase
@@ -180,8 +221,6 @@ export default function BuyerOfferDetailScreen() {
         status: "accepted",
         last_actor: "buyer",
         last_action: "accepted",
-
-        // 🔒 SNAPSHOT DATA
         accepted_price: offer.current_amount,
         accepted_title: offer.listings.title,
         accepted_image_url: offer.listings.image_urls?.[0] ?? null,
@@ -190,7 +229,6 @@ export default function BuyerOfferDetailScreen() {
           offer.listings.shipping_type === "buyer_pays"
             ? offer.listings.shipping_price ?? 0
             : 0,
-
         updated_at: new Date().toISOString(),
       })
       .eq("id", offer.id)
@@ -203,71 +241,55 @@ export default function BuyerOfferDetailScreen() {
     }
 
     await notify({
-  userId: offer.seller_id,
-  type: "offer",
-  title: "Offer accepted!",
-  body: "The buyer accepted your offer.",
-  data: {
-    route: "/seller-hub/offers/[id]",
-    params: { id: offer.id },
-  },
-})
-
+      userId: offer.seller_id,
+      type: "offer",
+      title: "Offer accepted!",
+      body: "The buyer accepted your offer.",
+      data: {
+        route: "/seller-hub/offers/[id]",
+        params: { id: offer.id },
+      },
+    })
 
     loadOffer()
   }
 
   const declineOffer = async () => {
-    if (!offer || saving) return
+    if (saving) return
+    setSaving(true)
 
-    Alert.alert("Decline offer?", "This will end the negotiation.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Decline",
-        style: "destructive",
-        onPress: async () => {
-          setSaving(true)
+    await supabase
+      .from("offers")
+      .update({
+        status: "declined",
+        last_actor: "buyer",
+        last_action: "declined",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", offer.id)
 
-          const { error } = await supabase
-            .from("offers")
-            .update({
-              status: "declined",
-              last_actor: "buyer",
-              last_action: "declined",
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", offer.id)
+    setSaving(false)
 
-          setSaving(false)
-
-          if (error) {
-            Alert.alert("Failed to decline offer", error.message)
-            return
-          }
-
-          await notify({
-  userId: offer.seller_id,
-  type: "offer",
-  title: "Offer declined",
-  body: "The buyer declined your offer.",
-  data: {
-    route: "/seller-hub/offers",
-  },
-})
-
-
-          loadOffer()
-        },
+    await notify({
+      userId: offer.seller_id,
+      type: "offer",
+      title: "Offer declined",
+      body: "The buyer declined your offer.",
+      data: {
+        route: "/seller-hub/offers",
       },
-    ])
+    })
+
+    loadOffer()
   }
 
   const submitCounter = async () => {
     if (!offer || saving) return
 
-    const amount = Number(counterAmount)
-    if (!amount || amount <= 0) {
-      Alert.alert("Enter a valid amount")
+    const amount = parseFloat(counterAmount.trim())
+
+    if (isNaN(amount) || amount <= 0) {
+      Alert.alert("Enter a valid counter amount")
       return
     }
 
@@ -296,45 +318,29 @@ export default function BuyerOfferDetailScreen() {
     setShowCounter(false)
     setCounterAmount("")
 
-  await notify({
-  userId: offer.seller_id,
-  type: "offer",
-  title: "Offer countered",
-  body: "The buyer sent a counter offer.",
-  data: {
-    route: "/seller-hub/offers/[id]",
-    params: { id: offer.id },
-  },
-})
+    await notify({
+      userId: offer.seller_id,
+      type: "offer",
+      title: "Offer countered",
+      body: "The buyer sent a counter offer.",
+      data: {
+        route: "/seller-hub/offers/[id]",
+        params: { id: offer.id },
+      },
+    })
 
     loadOffer()
   }
 
   /* ---------------- UI ---------------- */
 
-  if (loading) {
-    return <ActivityIndicator style={{ marginTop: 80 }} />
-  }
-
-  if (!offer) {
-    return (
-      <View style={styles.empty}>
-        <Text style={styles.emptyText}>This offer is no longer available.</Text>
-        <TouchableOpacity
-          style={styles.browseBtn}
-          onPress={() => router.replace("/home")}
-        >
-          <Text style={styles.browseText}>Back to Browsing</Text>
-        </TouchableOpacity>
-      </View>
-    )
-  }
+  if (loading) return <ActivityIndicator style={{ marginTop: 80 }} />
 
   return (
     <View style={styles.screen}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={22} />
+          <Ionicons name="arrow-back" size={22} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Offer</Text>
         <View style={{ width: 22 }} />
@@ -351,28 +357,37 @@ export default function BuyerOfferDetailScreen() {
             style={styles.image}
           />
 
-          <Text style={styles.title}>{offer.listings.title}</Text>
+          <Text style={styles.title}>
+            {offer.listings.title}
+          </Text>
 
+          {renderStatusBadge()}
+
+          {/* BUYER RECEIPT */}
           <View style={styles.receipt}>
-            <Row label="Item price" value={`$${itemPrice.toFixed(2)}`} />
+            <Row
+              label="Offer Price"
+              value={`$${itemPrice.toFixed(2)}`}
+            />
+
             <Row
               label="Shipping"
               value={
-                shippingCost === 0
-                  ? "Free"
-                  : `$${shippingCost.toFixed(2)}`
+                shippingCost > 0
+                  ? `$${shippingCost.toFixed(2)}`
+                  : "Free / Included"
               }
             />
+
             <Row
-              label="Buyer protection (1.5%)"
-              value={`$${buyerProtectionFee.toFixed(2)}`}
+              label="Buyer Protection & Processing"
+              value={`$${buyerFee.toFixed(2)}`}
             />
+
+            <View style={styles.divider} />
+
             <Row
-              label="Processing fee (2.9% + $0.30)"
-              value={`$${stripeProcessingFee.toFixed(2)}`}
-            />
-            <Row
-              label="Total due"
+              label="Total Due at Checkout"
               value={`$${buyerTotal.toFixed(2)}`}
               bold
             />
@@ -392,6 +407,76 @@ export default function BuyerOfferDetailScreen() {
           )}
         </View>
       </View>
+
+      {canRespond && (
+        <View style={styles.actionBar}>
+          <TouchableOpacity
+            style={styles.acceptBtn}
+            onPress={acceptOffer}
+          >
+            <Text style={styles.acceptText}>
+              Accept Offer
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.counterBtn}
+            onPress={() => setShowCounter(true)}
+          >
+            <Text style={styles.counterText}>
+              Counter
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.declineBtn}
+            onPress={declineOffer}
+          >
+            <Text style={styles.declineText}>
+              Decline
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* 🔥 IDENTICAL COUNTER MODAL AS SELLER (THIS FIXES BUTTON) */}
+      <Modal visible={showCounter} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>
+              Send Counter Offer
+            </Text>
+
+            <TextInput
+              style={styles.input}
+              placeholder="Enter counter amount"
+              keyboardType="decimal-pad"
+              value={counterAmount}
+              onChangeText={setCounterAmount}
+            />
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.modalCancel}
+                onPress={() => setShowCounter(false)}
+              >
+                <Text style={styles.modalCancelText}>
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.modalConfirm}
+                onPress={submitCounter}
+              >
+                <Text style={styles.modalConfirmText}>
+                  Send
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   )
 }
@@ -410,8 +495,23 @@ function Row({
   return (
     <View style={styles.row}>
       <Text style={styles.rowLabel}>{label}</Text>
-      <Text style={[styles.rowValue, bold && { fontWeight: "900" }]}>
+      <Text
+        style={[
+          styles.rowValue,
+          bold && styles.rowValueBold,
+        ]}
+      >
         {value}
+      </Text>
+    </View>
+  )
+}
+
+function Badge({ text, color }: { text: string; color: string }) {
+  return (
+    <View style={[styles.badge, { borderColor: color }]}>
+      <Text style={[styles.badgeText, { color }]}>
+        {text}
       </Text>
     </View>
   )
@@ -419,42 +519,43 @@ function Row({
 
 /* ---------------- STYLES ---------------- */
 
-
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#F6F7F8" },
+  screen: {
+    flex: 1,
+    backgroundColor: "#F6F7F8",
+  },
 
   header: {
     height: 90,
-    backgroundColor: "#7FAF9B",
+    backgroundColor: "#7FAF9B", // Melo brand header (locked)
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 14,
+    paddingTop: 20,
   },
 
-  headerTitle: { fontSize: 16, fontWeight: "900" },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: "900",
+    color: "#ffffff",
+    letterSpacing: 0.3,
+  },
 
   content: {
     padding: 16,
-    paddingBottom: 180, // keeps Pay button clear of bottom nav
-  },
-
-  empty: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-
-  emptyText: {
-    fontWeight: "800",
-    color: "#6B8F7D",
-    marginBottom: 14,
+    paddingBottom: 200, // keeps action bar above bottom nav
   },
 
   card: {
     backgroundColor: "#fff",
     borderRadius: 16,
     padding: 16,
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
   },
 
   image: {
@@ -462,56 +563,77 @@ const styles = StyleSheet.create({
     height: 220,
     borderRadius: 14,
     marginBottom: 12,
+    backgroundColor: "#EEE",
   },
 
   title: {
     fontSize: 18,
     fontWeight: "900",
-    marginBottom: 12,
+    marginBottom: 8,
+    color: "#0F1E17",
   },
 
-  /* ---------- RECEIPT ---------- */
+  /* ---------- STATUS BADGE ---------- */
+
+  badge: {
+    alignSelf: "flex-start",
+    borderWidth: 1,
+    borderRadius: 20,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    marginBottom: 14,
+    backgroundColor: "#FFFFFF",
+  },
+
+  badgeText: {
+    fontWeight: "800",
+    fontSize: 12,
+  },
+
+  /* ---------- RECEIPT (BUYER + SELLER SHARED STYLE) ---------- */
 
   receipt: {
     backgroundColor: "#F0FAF6",
     borderRadius: 14,
-    padding: 14,
+    padding: 16,
     borderWidth: 1,
     borderColor: "#CFE5DA",
+    marginTop: 4,
   },
 
   row: {
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingVertical: 6,
+    alignItems: "center",
+    paddingVertical: 7, // slightly more spacing = premium feel
   },
 
   rowLabel: {
     color: "#6B8F7D",
     fontWeight: "600",
+    fontSize: 14,
   },
 
   rowValue: {
     fontWeight: "700",
+    color: "#0F1E17",
+    fontSize: 14,
   },
 
-  feeRowLabel: {
-    color: "#8FAEA1",
-    fontWeight: "600",
-  },
-
-  feeRowValue: {
-    color: "#2E5F4F",
-    fontWeight: "600",
+  // Used for bold totals (Buyer Total / You Receive)
+  rowValueBold: {
+    fontWeight: "900",
+    color: "#1F7A63",
+    fontSize: 16,
   },
 
   divider: {
     height: 1,
     backgroundColor: "#CFE5DA",
-    marginVertical: 8,
+    marginVertical: 10,
   },
 
-  /* ---------- ACCEPTED ---------- */
+  /* ---------- ACCEPTED / PAY BOX (REQUIRED FOR BUYER PAGE) ---------- */
 
   acceptedBox: {
     marginTop: 16,
@@ -524,36 +646,143 @@ const styles = StyleSheet.create({
 
   payBtn: {
     backgroundColor: "#1F7A63",
-    paddingVertical: 14,
+    paddingVertical: 15,
     borderRadius: 16,
+    shadowColor: "#1F7A63",
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 2,
   },
 
   payText: {
     textAlign: "center",
     fontWeight: "900",
     color: "#fff",
+    fontSize: 15,
+    letterSpacing: 0.3,
   },
 
-  expired: {
-    marginTop: 10,
-    color: "#C0392B",
-    fontWeight: "800",
+  /* ---------- ACTION BAR (BOTTOM BUTTON STACK) ---------- */
+
+  actionBar: {
+    position: "absolute",
+    bottom: 57,
+    left: 16,
+    right: 16,
+    gap: 10,
   },
 
-  /* ---------- BROWSE ---------- */
-
-  browseBtn: {
-    marginTop: 20,
-    backgroundColor: "#7FAF9B",
-    paddingVertical: 14,
+  acceptBtn: {
+    backgroundColor: "#1F7A63",
+    paddingVertical: 15,
     borderRadius: 16,
+    shadowColor: "#1F7A63",
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 2,
   },
 
-  browseText: {
+  acceptText: {
     textAlign: "center",
     fontWeight: "900",
+    color: "#fff",
+    fontSize: 15,
+    letterSpacing: 0.3,
+  },
+
+  counterBtn: {
+    backgroundColor: "#E8F5EE",
+    paddingVertical: 12,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: "#1F7A63",
+  },
+
+  counterText: {
+    textAlign: "center",
+    fontWeight: "900",
+    color: "#1F7A63",
+    fontSize: 15,
+    letterSpacing: 0.3,
+  },
+
+  declineBtn: {
+    paddingVertical: 15,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: "#EB5757",
+  },
+
+  declineText: {
+    textAlign: "center",
+    fontWeight: "900",
+    color: "#EB5757",
+    fontSize: 15,
+    letterSpacing: 0.3,
+  },
+
+  /* ---------- COUNTER MODAL (IDENTICAL TO SELLER) ---------- */
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "center",
+    padding: 24,
+  },
+
+  modalCard: {
+    backgroundColor: "#fff",
+    borderRadius: 18,
+    padding: 20,
+  },
+
+  modalTitle: {
+    fontSize: 17,
+    fontWeight: "900",
+    marginBottom: 12,
     color: "#0F1E17",
   },
+
+  input: {
+    backgroundColor: "#F4F4F4",
+    padding: 14,
+    borderRadius: 12,
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#0F1E17",
+  },
+
+  modalActions: {
+    flexDirection: "row",
+    marginTop: 20,
+    gap: 10,
+  },
+
+  modalCancel: {
+    flex: 1,
+    padding: 13,
+    borderRadius: 12,
+    backgroundColor: "#E4EFEA",
+    alignItems: "center",
+  },
+
+  modalCancelText: {
+    fontWeight: "700",
+    color: "#2E5F4F",
+    fontSize: 14,
+  },
+
+  modalConfirm: {
+    flex: 1,
+    padding: 13,
+    borderRadius: 12,
+    backgroundColor: "#1F7A63",
+    alignItems: "center",
+  },
+
+  modalConfirmText: {
+    fontWeight: "900",
+    color: "#fff",
+    fontSize: 14,
+  },
 })
-
-

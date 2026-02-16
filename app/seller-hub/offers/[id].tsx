@@ -6,10 +6,12 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Modal,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
-  View
+  View,
 } from "react-native"
 
 import { useAuth } from "@/context/AuthContext"
@@ -107,26 +109,28 @@ export default function SellerOfferDetailScreen() {
     return Date.now() > created + 24 * 60 * 60 * 1000
   }, [offer])
 
-  /* ---------------- CALCULATIONS ---------------- */
-
   if (!offer) return null
+
+  /* ---------------- CALCULATIONS (SELLER CLEAN VIEW) ---------------- */
 
   const itemPrice = offer.current_amount
 
-  // ✅ shipping paid by buyer goes to seller
-  const shippingIncome =
+  // Only show shipping if buyer pays (actual seller revenue)
+  const shippingCost =
     offer.listings.shipping_type === "buyer_pays"
       ? offer.listings.shipping_price ?? 0
       : 0
 
-  // ✅ 4% fee ONLY on item price
+  // 4% seller fee ONLY (no buyer fees shown)
   const sellerFee = Number((itemPrice * 0.04).toFixed(2))
 
+  // What seller actually earns
   const sellerPayout = Number(
-    (itemPrice - sellerFee + shippingIncome).toFixed(2)
+    (itemPrice - sellerFee + shippingCost).toFixed(2)
   )
 
   const canRespond =
+    !!offer &&
     !isExpired &&
     offer.status !== "accepted" &&
     offer.status !== "declined" &&
@@ -153,10 +157,20 @@ export default function SellerOfferDetailScreen() {
 
     if (offer.status === "countered") {
       if (offer.last_actor === "seller") {
-        return <Badge text="Counter sent • Waiting on buyer" color="#E67E22" />
+        return (
+          <Badge
+            text="Counter sent • Waiting on buyer"
+            color="#E67E22"
+          />
+        )
       }
       if (offer.last_actor === "buyer") {
-        return <Badge text="Buyer countered • Your response needed" color="#2980B9" />
+        return (
+          <Badge
+            text="Buyer countered • Your response needed"
+            color="#2980B9"
+          />
+        )
       }
     }
 
@@ -195,19 +209,18 @@ export default function SellerOfferDetailScreen() {
     }
 
     await notify({
-  userId: offer.buyer_id,
-  type: "offer",
-  title: "Offer accepted!",
-  body: "Your offer was accepted. Please complete payment.",
-  data: {
-    route: "/checkout",
-    params: { offerId: offer.id },
-  },
-})
+      userId: offer.buyer_id,
+      type: "offer",
+      title: "Offer accepted!",
+      body: "Your offer was accepted. Please complete payment.",
+      data: {
+        route: "/checkout",
+        params: { offerId: offer.id },
+      },
+    })
+
     loadOffer()
   }
-
-  
 
   const declineOffer = async () => {
     if (saving) return
@@ -224,25 +237,32 @@ export default function SellerOfferDetailScreen() {
       .eq("id", offer.id)
 
     setSaving(false)
+
     await notify({
-  userId: offer.buyer_id,
-  type: "offer",
-  title: "Offer declined",
-  body: "The seller declined your offer.",
-  data: {
-    route: "/buyer-hub/offers",
-  },
-})
+      userId: offer.buyer_id,
+      type: "offer",
+      title: "Offer declined",
+      body: "The seller declined your offer.",
+      data: {
+        route: "/buyer-hub/offers",
+      },
+    })
+
     loadOffer()
   }
 
   const submitCounter = async () => {
+    if (!offer || saving) return
+
     const amount = Number(counterAmount)
-    if (!amount || amount <= 0) return
+    if (!amount || amount <= 0) {
+      Alert.alert("Enter a valid counter amount")
+      return
+    }
 
     setSaving(true)
 
-    await supabase
+    const { error } = await supabase
       .from("offers")
       .update({
         current_amount: amount,
@@ -256,17 +276,25 @@ export default function SellerOfferDetailScreen() {
       .eq("id", offer.id)
 
     setSaving(false)
+
+    if (error) {
+      Alert.alert("Failed to counter offer", error.message)
+      return
+    }
+
     setShowCounter(false)
+    setCounterAmount("")
+
     await notify({
-  userId: offer.buyer_id,
-  type: "offer",
-  title: "Offer countered",
-  body: "The seller countered your offer.",
-  data: {
-    route: "/buyer-hub/offers/[id]",
-    params: { id: offer.id },
-  },
-})
+      userId: offer.buyer_id,
+      type: "offer",
+      title: "Offer countered",
+      body: "The seller sent a counter offer.",
+      data: {
+        route: "/buyer-hub/offers/[id]",
+        params: { id: offer.id },
+      },
+    })
 
     loadOffer()
   }
@@ -296,29 +324,37 @@ export default function SellerOfferDetailScreen() {
             style={styles.image}
           />
 
-          <Text style={styles.title}>{offer.listings.title}</Text>
+          <Text style={styles.title}>
+            {offer.listings.title}
+          </Text>
 
           {renderStatusBadge()}
 
+          {/* CLEAN 4-LINE SELLER RECEIPT */}
           <View style={styles.receipt}>
-            <Row label="Item price" value={`$${itemPrice.toFixed(2)}`} />
-
-            {shippingIncome > 0 && (
-              <Row
-                label="Shipping received"
-                value={`$${shippingIncome.toFixed(2)}`}
-              />
-            )}
+            <Row
+              label="Offer Price"
+              value={`$${itemPrice.toFixed(2)}`}
+            />
 
             <Row
-              label="Seller fee (4%)"
+              label="Shipping"
+              value={
+                shippingCost > 0
+                  ? `$${shippingCost.toFixed(2)}`
+                  : "Free / Included"
+              }
+            />
+
+            <Row
+              label="Seller Fee (4%)"
               value={`-$${sellerFee.toFixed(2)}`}
             />
 
             <View style={styles.divider} />
 
             <Row
-              label="You receive"
+              label="You Receive"
               value={`$${sellerPayout.toFixed(2)}`}
               bold
             />
@@ -328,28 +364,72 @@ export default function SellerOfferDetailScreen() {
 
       {canRespond && (
         <View style={styles.actionBar}>
-          <TouchableOpacity style={styles.acceptBtn} onPress={acceptOffer}>
-            <Text style={styles.acceptText}>Accept Offer</Text>
+          <TouchableOpacity
+            style={styles.acceptBtn}
+            onPress={acceptOffer}
+          >
+            <Text style={styles.acceptText}>
+              Accept Offer
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.counterBtn}
             onPress={() => setShowCounter(true)}
           >
-            <Text style={styles.counterText}>Counter</Text>
+            <Text style={styles.counterText}>
+              Counter
+            </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.declineBtn} onPress={declineOffer}>
-            <Text style={styles.declineText}>Decline</Text>
+          <TouchableOpacity
+            style={styles.declineBtn}
+            onPress={declineOffer}
+          >
+            <Text style={styles.declineText}>
+              Decline
+            </Text>
           </TouchableOpacity>
         </View>
       )}
 
-      {/* COUNTER MODAL unchanged */}
+      {/* COUNTER MODAL (fixes your broken counter button) */}
+      <Modal visible={showCounter} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>
+              Send Counter Offer
+            </Text>
+
+            <TextInput
+              style={styles.input}
+              placeholder="Enter counter amount"
+              keyboardType="decimal-pad"
+              value={counterAmount}
+              onChangeText={setCounterAmount}
+            />
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.modalCancel}
+                onPress={() => setShowCounter(false)}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.modalConfirm}
+                onPress={submitCounter}
+              >
+                <Text style={styles.modalConfirmText}>Send</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   )
 }
-
 /* ---------------- HELPERS ---------------- */
 
 function Row({
@@ -364,7 +444,12 @@ function Row({
   return (
     <View style={styles.row}>
       <Text style={styles.rowLabel}>{label}</Text>
-      <Text style={[styles.rowValue, bold && { fontWeight: "900" }]}>
+      <Text
+        style={[
+          styles.rowValue,
+          bold && styles.rowValueBold,
+        ]}
+      >
         {value}
       </Text>
     </View>
@@ -383,25 +468,42 @@ function Badge({ text, color }: { text: string; color: string }) {
 /* ---------------- STYLES ---------------- */
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#F6F7F8" },
+  screen: {
+    flex: 1,
+    backgroundColor: "#F6F7F8",
+  },
 
   header: {
     height: 90,
-    backgroundColor: "#7FAF9B",
+    backgroundColor: "#7FAF9B", // Melo brand header (locked)
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 14,
+    paddingTop: 20,
   },
 
-  headerTitle: { fontSize: 16, fontWeight: "900" },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: "900",
+    color: "#ffffff",
+    letterSpacing: 0.3,
+  },
 
-  content: { padding: 16, paddingBottom: 200 },
+  content: {
+    padding: 16,
+    paddingBottom: 200, // keeps action bar above bottom nav
+  },
 
   card: {
     backgroundColor: "#fff",
     borderRadius: 16,
     padding: 16,
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
   },
 
   image: {
@@ -409,12 +511,14 @@ const styles = StyleSheet.create({
     height: 220,
     borderRadius: 14,
     marginBottom: 12,
+    backgroundColor: "#EEE",
   },
 
   title: {
     fontSize: 18,
     fontWeight: "900",
     marginBottom: 8,
+    color: "#0F1E17",
   },
 
   /* ---------- STATUS BADGE ---------- */
@@ -425,7 +529,8 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     paddingVertical: 4,
     paddingHorizontal: 10,
-    marginBottom: 12,
+    marginBottom: 14,
+    backgroundColor: "#FFFFFF",
   },
 
   badgeText: {
@@ -433,53 +538,54 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
 
-  /* ---------- RECEIPT ---------- */
+  /* ---------- RECEIPT (SELLER CLEAN 4-LINE) ---------- */
 
   receipt: {
     backgroundColor: "#F0FAF6",
     borderRadius: 14,
-    padding: 14,
+    padding: 16,
     borderWidth: 1,
     borderColor: "#CFE5DA",
+    marginTop: 4,
   },
 
   row: {
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingVertical: 6,
+    alignItems: "center",
+    paddingVertical: 7, // slightly more spacing = premium feel
   },
 
   rowLabel: {
     color: "#6B8F7D",
     fontWeight: "600",
+    fontSize: 14,
   },
 
   rowValue: {
     fontWeight: "700",
+    color: "#0F1E17",
+    fontSize: 14,
   },
 
-  /* ✅ NEW: Shipping income emphasis (subtle, honest) */
-  shippingRowLabel: {
+  // 🔥 Makes "You Receive" stand out (trust & conversion)
+  rowValueBold: {
+    fontWeight: "900",
     color: "#1F7A63",
-    fontWeight: "700",
-  },
-
-  shippingRowValue: {
-    color: "#1F7A63",
-    fontWeight: "800",
+    fontSize: 16,
   },
 
   divider: {
     height: 1,
     backgroundColor: "#CFE5DA",
-    marginVertical: 8,
+    marginVertical: 10,
   },
 
-  /* ---------- ACTION BAR ---------- */
+  /* ---------- ACTION BAR (BOTTOM BUTTON STACK) ---------- */
 
   actionBar: {
     position: "absolute",
-    bottom: 90,
+    bottom: 48,
     left: 16,
     right: 16,
     gap: 10,
@@ -487,21 +593,27 @@ const styles = StyleSheet.create({
 
   acceptBtn: {
     backgroundColor: "#1F7A63",
-    paddingVertical: 14,
+    paddingVertical: 15,
     borderRadius: 16,
+    shadowColor: "#1F7A63",
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 2,
   },
 
   acceptText: {
     textAlign: "center",
     fontWeight: "900",
     color: "#fff",
+    fontSize: 15,
+    letterSpacing: 0.3,
   },
 
   counterBtn: {
     backgroundColor: "#E8F5EE",
-    paddingVertical: 14,
+    paddingVertical: 12,
     borderRadius: 16,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: "#1F7A63",
   },
 
@@ -509,12 +621,14 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontWeight: "900",
     color: "#1F7A63",
+    fontSize: 15,
+    letterSpacing: 0.3,
   },
 
   declineBtn: {
-    paddingVertical: 14,
+    paddingVertical: 15,
     borderRadius: 16,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: "#EB5757",
   },
 
@@ -522,33 +636,37 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontWeight: "900",
     color: "#EB5757",
+    fontSize: 15,
+    letterSpacing: 0.3,
   },
 
-  /* ---------- MODAL ---------- */
+  /* ---------- COUNTER MODAL (FIXES COUNTER UX) ---------- */
 
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
+    backgroundColor: "rgba(0,0,0,0.45)",
     justifyContent: "center",
     padding: 24,
   },
 
   modalCard: {
     backgroundColor: "#fff",
-    borderRadius: 16,
+    borderRadius: 18,
     padding: 20,
   },
 
   modalTitle: {
     fontSize: 17,
     fontWeight: "900",
-    marginBottom: 10,
+    marginBottom: 12,
+    color: "#0F1E17",
   },
 
   input: {
     backgroundColor: "#F4F4F4",
     padding: 14,
-    borderRadius: 10,
+    borderRadius: 12,
+    fontSize: 16,
   },
 
   modalActions: {
@@ -559,8 +677,8 @@ const styles = StyleSheet.create({
 
   modalCancel: {
     flex: 1,
-    padding: 12,
-    borderRadius: 10,
+    padding: 13,
+    borderRadius: 12,
     backgroundColor: "#E4EFEA",
     alignItems: "center",
   },
@@ -568,12 +686,13 @@ const styles = StyleSheet.create({
   modalCancelText: {
     fontWeight: "700",
     color: "#2E5F4F",
+    fontSize: 14,
   },
 
   modalConfirm: {
     flex: 1,
-    padding: 12,
-    borderRadius: 10,
+    padding: 13,
+    borderRadius: 12,
     backgroundColor: "#1F7A63",
     alignItems: "center",
   },
@@ -581,6 +700,6 @@ const styles = StyleSheet.create({
   modalConfirmText: {
     fontWeight: "900",
     color: "#fff",
+    fontSize: 14,
   },
 })
-
