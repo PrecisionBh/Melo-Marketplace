@@ -3,6 +3,7 @@ import { Ionicons } from "@expo/vector-icons"
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { useEffect, useRef, useState } from "react"
 import {
+  Alert,
   FlatList,
   Image,
   KeyboardAvoidingView,
@@ -44,29 +45,41 @@ export default function ChatScreen() {
   const { session } = useAuth()
 
   const [messages, setMessages] = useState<Message[]>([])
-  const [listingMap, setListingMap] =
-    useState<Record<string, ListingPreview>>({})
-  const [text, setText] = useState("")
-  const [loading, setLoading] = useState(true)
+const [listingMap, setListingMap] =
+  useState<Record<string, ListingPreview>>({})
+const [text, setText] = useState("")
+const [loading, setLoading] = useState(true)
+
+const [isOtherTyping, setIsOtherTyping] = useState(false)
+const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+const typingChannelRef = useRef<any>(null)
+
+
 
   const [otherUserName, setOtherUserName] = useState("Chat")
-const [otherUserAvatar, setOtherUserAvatar] = useState<string | null>(null)
-const [otherUserId, setOtherUserId] = useState<string | null>(null)
-
-
+  const [otherUserAvatar, setOtherUserAvatar] = useState<string | null>(null)
+  const [otherUserId, setOtherUserId] = useState<string | null>(null)
 
   const flatListRef = useRef<FlatList>(null)
 
   useEffect(() => {
-    loadMessages()
-    loadConversationUser()
-    subscribeToMessages()
-    markAsRead()
+  if (!conversationId) return
 
-    return () => {
-      supabase.removeAllChannels()
+  loadMessages()
+  loadConversationUser()
+  markAsRead()
+
+  // Subscribe to realtime (messages + typing)
+  const unsubscribe = subscribeToMessages()
+
+  // Cleanup ONLY this chat's channels (NOT all supabase channels)
+  return () => {
+    if (unsubscribe) {
+      unsubscribe()
     }
-  }, [conversationId])
+  }
+}, [conversationId])
+
 
   /* ---------------- LOAD MESSAGES ---------------- */
 
@@ -106,9 +119,8 @@ const [otherUserId, setOtherUserId] = useState<string | null>(null)
       data.user_one === session.user.id
         ? data.user_two
         : data.user_one
-        
-    setOtherUserId(otherUserId)
 
+    setOtherUserId(otherUserId)
 
     const { data: profile } = await supabase
       .from("profiles")
@@ -162,219 +174,429 @@ const [otherUserId, setOtherUserId] = useState<string | null>(null)
 
   /* ---------------- REALTIME ---------------- */
 
-  const subscribeToMessages = () => {
-    if (!conversationId) return
+  /* ---------------- REALTIME ---------------- */
 
-    supabase
-      .channel(`messages-${conversationId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "messages",
-          filter: `conversation_id=eq.${conversationId}`,
-        },
-        (payload) => {
-          setMessages((prev) => [
-            ...prev,
-            payload.new as Message,
-          ])
-          markAsRead()
-          setTimeout(() => {
-            flatListRef.current?.scrollToEnd({
-              animated: true,
-            })
-          }, 50)
-        }
-      )
-      .subscribe()
+const subscribeToMessages = () => {
+  if (!conversationId) return
+
+  const messagesChannel = supabase
+    .channel(`messages-${conversationId}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "messages",
+        filter: `conversation_id=eq.${conversationId}`,
+      },
+      (payload) => {
+        const newMessage = payload.new as Message
+
+        // Prevent duplicate messages (important with optimistic UI)
+        setMessages((prev) => {
+          const alreadyExists = prev.some(
+            (m) =>
+              m.id === newMessage.id ||
+              (m.body === newMessage.body &&
+                m.sender_id === newMessage.sender_id &&
+                Math.abs(
+                  new Date(m.created_at).getTime() -
+                    new Date(newMessage.created_at).getTime()
+                ) < 5000)
+          )
+
+          if (alreadyExists) return prev
+          return [...prev, newMessage]
+        })
+
+        markAsRead()
+
+        setTimeout(() => {
+          flatListRef.current?.scrollToEnd({ animated: true })
+        }, 50)
+      }
+    )
+    .subscribe()
+
+  const typingChannel = supabase
+  .channel(`typing-${conversationId}`)
+  .on("broadcast", { event: "typing" }, (payload) => {
+    // Ignore your own typing events
+    if (payload.payload?.userId === session?.user?.id) return
+
+    setIsOtherTyping(true)
+
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current)
+    }
+
+    typingTimeoutRef.current = setTimeout(() => {
+      setIsOtherTyping(false)
+    }, 2000)
+  })
+
+typingChannel.subscribe()
+
+// Store channel reference for broadcasting (CRITICAL)
+typingChannelRef.current = typingChannel
+
+
+  // ✅ IMPORTANT: return cleanup function (Fix #2)
+  return () => {
+    supabase.removeChannel(messagesChannel)
+    supabase.removeChannel(typingChannel)
+
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current)
+      typingTimeoutRef.current = null
+    }
   }
+}
 
   /* ---------------- SEND ---------------- */
 
   const sendMessage = async () => {
-    if (!text.trim() || !session?.user) return
+  if (!text.trim() || !session?.user || !conversationId) return
 
-    const body = text.trim()
-    setText("")
+  const message = text.trim()
+  const lowerMessage = message.toLowerCase()
 
-    await supabase.from("messages").insert({
-      conversation_id: conversationId,
-      sender_id: session.user.id,
-      body,
-    })
+  // 🚫 Block emails
+  const emailRegex = /\S+@\S+\.\S+/
 
-    await notify({
-  userId: otherUserId!,
-  type: "message",
-  title: "New message",
-  body: "You have a new message",
-  data: {
-    route: "/messages/[id]",
-    params: { id: conversationId },
-  },
-})
+  // 🚫 Block phone numbers
+  const phoneRegex = /\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b/
 
+  // 🚫 Block off-platform payments & contact attempts
+  const bannedKeywords = [
+    "zelle",
+    "venmo",
+    "cashapp",
+    "paypal",
+    "apple pay",
+    "google pay",
+    "text me",
+    "call me",
+    "email me",
+    "hit me up",
+    "send your number",
+    "whatsapp",
+    "telegram",
+    "pay outside",
+    "outside the app",
+    "pay off app",
+  ]
+
+  const containsBannedKeyword = bannedKeywords.some((word) =>
+    lowerMessage.includes(word)
+  )
+
+  if (
+    emailRegex.test(message) ||
+    phoneRegex.test(message) ||
+    containsBannedKeyword
+  ) {
+    Alert.alert(
+      "Safety Notice",
+      "Keeping all communication through Melo is the only way we can ensure full buyer and seller protection. Sharing contact information or discussing off-platform payments is not allowed."
+    )
+    return
   }
+
+  // 🔥 OPTIMISTIC MESSAGE (INSTANT UI)
+  const tempMessage: Message = {
+    id: `temp-${Date.now()}`, // temporary ID
+    body: message,
+    sender_id: session.user.id,
+    created_at: new Date().toISOString(),
+    read_at: null,
+    listing_id: null,
+  }
+
+  // Instantly show message in UI (NO REFRESH NEEDED)
+  setMessages((prev) => [...prev, tempMessage])
+
+  // Auto scroll immediately
+  setTimeout(() => {
+    flatListRef.current?.scrollToEnd({ animated: true })
+  }, 50)
+
+  // 🛑 FIX #1: Stop typing indicator immediately when sending
+  setIsOtherTyping(false)
+
+  // Clear typing timeout (prevents lingering "is typing...")
+  if (typingTimeoutRef.current) {
+    clearTimeout(typingTimeoutRef.current)
+    typingTimeoutRef.current = null
+  }
+
+  // Clear input instantly
+  setText("")
+
+  // 🚀 Send to Supabase in background
+  const { error } = await supabase.from("messages").insert({
+    conversation_id: conversationId,
+    sender_id: session.user.id,
+    body: message,
+  })
+
+  if (error) {
+    console.error("Send message error:", error)
+  }
+
+  // 🔔 Notify other user
+  if (otherUserId) {
+    await notify({
+      userId: otherUserId,
+      type: "message",
+      title: "New message",
+      body: "You have a new message",
+      data: {
+        route: "/messages/[id]",
+        params: { id: conversationId },
+      },
+    })
+  }
+}
+
+const broadcastTyping = async () => {
+  if (!conversationId || !session?.user) return
+
+  // Reuse the existing typing channel (prevents channel spam)
+  if (!typingChannelRef.current) return
+
+  await typingChannelRef.current.send({
+    type: "broadcast",
+    event: "typing",
+    payload: {
+      userId: session.user.id,
+    },
+  })
+}
 
   /* ---------------- HELPERS ---------------- */
 
-  const formatTime = (date: string) =>
-    new Date(date).toLocaleTimeString([], {
-      hour: "numeric",
-      minute: "2-digit",
-    })
+const formatTime = (date: string) =>
+  new Date(date).toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit",
+  })
 
-  /* ---------------- RENDER ITEM ---------------- */
+const formatDateHeader = (date: string) => {
+  const d = new Date(date)
+  const today = new Date()
 
-  const renderItem = ({
-    item,
-    index,
-  }: {
-    item: Message
-    index: number
-  }) => {
-    const isMe = item.sender_id === session?.user?.id
+  const isToday =
+    d.toDateString() === today.toDateString()
 
-    const showProductCard =
-      item.listing_id &&
-      !messages
-        .slice(0, index)
-        .some((m) => m.listing_id === item.listing_id)
+  const yesterday = new Date()
+  yesterday.setDate(today.getDate() - 1)
 
-    return (
-      <View>
-        {showProductCard &&
-          item.listing_id &&
-          listingMap[item.listing_id] && (
-            <TouchableOpacity
-              style={styles.productCard}
-              onPress={() =>
-                router.push(`/listing/${item.listing_id}`)
-              }
-            >
-              <Image
-                source={{
-                  uri:
-                    listingMap[item.listing_id].image_urls?.[0],
-                }}
-                style={styles.productImage}
-              />
+  const isYesterday =
+    d.toDateString() === yesterday.toDateString()
 
-              <View style={styles.productInfo}>
-                <Text style={styles.productTitle}>
-                  {listingMap[item.listing_id].title}
-                </Text>
+  if (isToday) return "Today"
+  if (isYesterday) return "Yesterday"
 
-                <Text style={styles.productPrice}>
-                  $
-                  {listingMap[item.listing_id].price.toFixed(
-                    2
-                  )}
-                </Text>
+  return d.toLocaleDateString([], {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  })
+}
 
-                {listingMap[item.listing_id]
-                  .allow_offers && (
-                  <TouchableOpacity
-                    style={styles.offerBtn}
-                    onPress={() =>
-                      router.push({
-                        pathname: "/make-offer",
-                        params: {
-                          listingId: item.listing_id,
-                        },
-                      })
-                    }
-                  >
-                    <Text style={styles.offerText}>
-                      Make Offer
-                    </Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            </TouchableOpacity>
-          )}
+/* ---------------- RENDER ITEM ---------------- */
 
-        <View
-          style={[
-            styles.bubble,
-            isMe ? styles.myBubble : styles.theirBubble,
-          ]}
-        >
-          <Text
-            style={[
-              styles.bubbleText,
-              isMe && styles.myBubbleText,
-            ]}
-          >
-            {item.body}
-          </Text>
+const renderItem = ({
+  item,
+  index,
+}: {
+  item: Message
+  index: number
+}) => {
+  const isMe = item.sender_id === session?.user?.id
 
-          {isMe && (
-            <Text style={styles.meta}>
-              {formatTime(item.created_at)} •{" "}
-              {item.read_at ? "Seen" : "Unread"}
-            </Text>
-          )}
-        </View>
-      </View>
-    )
-  }
+  const prevMessage = messages[index - 1]
+
+  const showDateHeader =
+    !prevMessage ||
+    new Date(prevMessage.created_at).toDateString() !==
+      new Date(item.created_at).toDateString()
+
+  const showProductCard =
+    item.listing_id &&
+    !messages
+      .slice(0, index)
+      .some((m) => m.listing_id === item.listing_id)
 
   return (
-    <View style={styles.screen}>
-      {/* HEADER */}
-      <View style={styles.topBar}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons
-            name="arrow-back"
-            size={22}
-            color="#0F1E17"
-          />
-        </TouchableOpacity>
+    <View>
+      {/* DATE HEADER (only once per day) */}
+      {showDateHeader && (
+        <View style={styles.dateHeaderContainer}>
+          <Text style={styles.dateHeader}>
+            {formatDateHeader(item.created_at)}
+          </Text>
+        </View>
+      )}
 
-        <View style={styles.headerCenter}>
-  {otherUserAvatar ? (
-    <Image
-      source={{ uri: otherUserAvatar }}
-      style={styles.headerAvatar}
-    />
-  ) : (
-    <Image
-      source={require("../../assets/images/avatar-placeholder.png")}
-      style={styles.headerAvatar}
-    />
-  )}
-  <Text style={styles.title}>{otherUserName}</Text>
-</View>
+      {showProductCard &&
+        item.listing_id &&
+        listingMap[item.listing_id] && (
+          <TouchableOpacity
+            style={styles.productCard}
+            onPress={() =>
+              router.push(`/listing/${item.listing_id}`)
+            }
+          >
+            <Image
+              source={{
+                uri:
+                  listingMap[item.listing_id].image_urls?.[0],
+              }}
+              style={styles.productImage}
+            />
 
+            <View style={styles.productInfo}>
+              <Text style={styles.productTitle}>
+                {listingMap[item.listing_id].title}
+              </Text>
 
-        <View style={{ width: 22 }} />
+              <Text style={styles.productPrice}>
+                $
+                {listingMap[item.listing_id].price.toFixed(2)}
+              </Text>
+
+              {listingMap[item.listing_id]
+                .allow_offers && (
+                <TouchableOpacity
+                  style={styles.offerBtn}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/make-offer",
+                      params: {
+                        listingId: item.listing_id,
+                      },
+                    })
+                  }
+                >
+                  <Text style={styles.offerText}>
+                    Make Offer
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </TouchableOpacity>
+        )}
+
+      {/* SMALL TIME ABOVE MESSAGE */}
+      <View
+        style={[
+          styles.timeContainer,
+          isMe ? styles.timeRight : styles.timeLeft,
+        ]}
+      >
+        <Text style={styles.timeText}>
+          {formatTime(item.created_at)}
+        </Text>
       </View>
 
-      {/* CHAT BODY */}
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={
-          Platform.OS === "ios" ? "padding" : "height"
-        }
-        keyboardVerticalOffset={
-          Platform.OS === "ios" ? 90 : 20
-        }
+      {/* MESSAGE BUBBLE */}
+      <View
+        style={[
+          styles.bubble,
+          isMe ? styles.myBubble : styles.theirBubble,
+        ]}
       >
-        <FlatList
-          ref={flatListRef}
-          data={messages}
-          keyExtractor={(item) => item.id}
-          renderItem={renderItem}
-          contentContainerStyle={styles.list}
-          onContentSizeChange={() =>
-            flatListRef.current?.scrollToEnd({
-              animated: true,
-            })
-          }
+        <Text
+          style={[
+            styles.bubbleText,
+            isMe && styles.myBubbleText,
+          ]}
+        >
+          {item.body}
+        </Text>
+
+        {isMe && (
+          <Text style={styles.meta}>
+            {item.read_at ? "Seen" : "Sent"}
+          </Text>
+        )}
+      </View>
+    </View>
+  )
+}
+
+/* ---------------- MAIN RETURN (THIS WAS MISSING - CRITICAL FIX) ---------------- */
+
+return (
+  <View style={styles.screen}>
+    {/* HEADER */}
+    <View
+      style={[
+        styles.topBar,
+        { paddingTop: insets.top + 10 },
+      ]}
+    >
+      <TouchableOpacity onPress={() => router.back()}>
+        <Ionicons
+          name="arrow-back"
+          size={22}
+          color="#FFFFFF"
         />
+      </TouchableOpacity>
+
+      <View style={styles.headerCenter}>
+        {otherUserAvatar ? (
+          <Image
+            source={{ uri: otherUserAvatar }}
+            style={styles.headerAvatar}
+          />
+        ) : (
+          <Image
+            source={require("../../assets/images/avatar-placeholder.png")}
+            style={styles.headerAvatar}
+          />
+        )}
+        <Text style={styles.title}>{otherUserName}</Text>
+      </View>
+
+      <View style={{ width: 22 }} />
+    </View>
+
+    {/* CHAT BODY */}
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={
+        Platform.OS === "ios" ? "padding" : "height"
+      }
+      keyboardVerticalOffset={
+        Platform.OS === "ios" ? 90 : 20
+      }
+    >
+      <FlatList
+        ref={flatListRef}
+        data={messages}
+        keyExtractor={(item) => item.id}
+        renderItem={renderItem}
+        contentContainerStyle={styles.list}
+        onContentSizeChange={() =>
+          flatListRef.current?.scrollToEnd({
+            animated: true,
+          })
+        }
+      />
+
+              {/* TYPING INDICATOR */}
+        {isOtherTyping && (
+          <View style={styles.typingContainer}>
+            <View style={styles.typingBubble}>
+              <Text style={styles.typingText}>
+                {otherUserName} is typing...
+              </Text>
+            </View>
+          </View>
+        )}
 
         {/* INPUT */}
         <View
@@ -383,28 +605,33 @@ const [otherUserId, setOtherUserId] = useState<string | null>(null)
             { paddingBottom: insets.bottom + 10 },
           ]}
         >
-          <TextInput
-            value={text}
-            onChangeText={setText}
-            placeholder="Message..."
-            style={styles.input}
-            multiline
-          />
 
-          <TouchableOpacity
-            onPress={sendMessage}
-            style={styles.sendBtn}
-          >
-            <Ionicons
-              name="send"
-              size={18}
-              color="#fff"
-            />
-          </TouchableOpacity>
-        </View>
-      </KeyboardAvoidingView>
-    </View>
-  )
+        <TextInput
+  value={text}
+  onChangeText={(val) => {
+    setText(val)
+    broadcastTyping()
+  }}
+  placeholder="Message..."
+  style={styles.input}
+  multiline
+/>
+
+
+        <TouchableOpacity
+          onPress={sendMessage}
+          style={styles.sendBtn}
+        >
+          <Ionicons
+            name="send"
+            size={18}
+            color="#fff"
+          />
+        </TouchableOpacity>
+      </View>
+    </KeyboardAvoidingView>
+  </View>
+)
 }
 
 /* ---------------- STYLES ---------------- */
@@ -416,30 +643,32 @@ const styles = StyleSheet.create({
   },
 
   topBar: {
-    paddingTop: 50,
     paddingHorizontal: 14,
     paddingBottom: 10,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    backgroundColor: "#7FAF9B",
+    borderBottomWidth: 1,
+    borderBottomColor: "#6E9E8C",
   },
 
   headerCenter: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
   },
 
   headerAvatar: {
     width: 32,
     height: 32,
     borderRadius: 16,
+    marginRight: 8,
   },
 
   title: {
     fontSize: 17,
     fontWeight: "800",
-    color: "#0F1E17",
+    color: "#FFFFFF",
   },
 
   list: {
@@ -559,4 +788,59 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+
+  dateHeaderContainer: {
+    alignItems: "center",
+    marginVertical: 12,
+  },
+
+  dateHeader: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#6E9E8C",
+  },
+
+  timeContainer: {
+    marginBottom: 4,
+  },
+
+  timeLeft: {
+    alignItems: "flex-start",
+    marginLeft: 8,
+  },
+
+  timeRight: {
+    alignItems: "flex-end",
+    marginRight: 8,
+  },
+
+  timeText: {
+    fontSize: 10,
+    color: "#6E9E8C",
+    fontWeight: "600",
+  },
+
+    /* ---------------- TYPING INDICATOR ---------------- */
+
+  typingContainer: {
+    paddingHorizontal: 16,
+    marginBottom: 6,
+  },
+
+  typingBubble: {
+    alignSelf: "flex-start",
+    backgroundColor: "#D6E6DE", // matches your chat theme
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
+    maxWidth: "70%",
+  },
+
+  typingText: {
+    fontSize: 12,
+    color: "#2E5F4F",
+    fontStyle: "italic",
+    fontWeight: "500",
+  },
+
 })
