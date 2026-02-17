@@ -13,7 +13,9 @@ import {
 
 import AppHeader from "@/components/app-header"
 import { useAuth } from "../../context/AuthContext"
+import { handleAppError } from "../../lib/errors/appError"
 import { supabase } from "../../lib/supabase"
+
 
 type Listing = {
   id: string
@@ -31,47 +33,78 @@ export default function MyListingsScreen() {
   const [listings, setListings] = useState<Listing[]>([])
 
   useEffect(() => {
+  if (session?.user?.id) {
     loadListings()
-  }, [])
+  }
+}, [session?.user?.id])
+
 
   const loadListings = async () => {
-    if (!session?.user) return
+  if (!session?.user) {
+    handleAppError(new Error("Session missing"), {
+      context: "my_listings_no_session",
+      silent: true,
+    })
+    return
+  }
 
+  try {
     setLoading(true)
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("listings")
       .select("id,title,price,image_urls,status")
       .eq("user_id", session.user.id)
       .order("created_at", { ascending: false })
 
+    if (error) throw error
+
     setListings(data ?? [])
+  } catch (err) {
+    handleAppError(err, {
+      context: "my_listings_load",
+      fallbackMessage: "Failed to load listings.",
+    })
+  } finally {
     setLoading(false)
   }
+}
+
 
   /* ---------------- DEACTIVATE ---------------- */
 
   const deactivateListing = async (id: string) => {
-    await supabase
+  try {
+    const { error } = await supabase
       .from("listings")
       .update({ status: "inactive" })
       .eq("id", id)
 
+    if (error) throw error
+
     loadListings()
+  } catch (err) {
+    handleAppError(err, {
+      context: "my_listings_deactivate",
+      fallbackMessage: "Failed to deactivate listing.",
+    })
   }
+}
+
 
   /* ---------------- DUPLICATE ---------------- */
 
   const duplicateListing = async (id: string) => {
+  try {
     const { data: oldListing, error } = await supabase
       .from("listings")
       .select("*")
       .eq("id", id)
       .single()
 
-    if (error || !oldListing) {
-      Alert.alert("Error", "Could not duplicate listing.")
-      return
+    if (error) throw error
+    if (!oldListing) {
+      throw new Error("Listing not found for duplication")
     }
 
     const {
@@ -92,14 +125,18 @@ export default function MyListingsScreen() {
         created_at: new Date().toISOString(),
       })
 
-    if (insertError) {
-      Alert.alert("Error", "Duplicate failed.")
-      return
-    }
+    if (insertError) throw insertError
 
     Alert.alert("Success", "Listing duplicated.")
     loadListings()
+  } catch (err) {
+    handleAppError(err, {
+      context: "my_listings_duplicate",
+      fallbackMessage: "Could not duplicate listing.",
+    })
   }
+}
+
 
   const deleteListing = (id: string) => {
     Alert.alert(
@@ -111,9 +148,23 @@ export default function MyListingsScreen() {
           text: "Delete",
           style: "destructive",
           onPress: async () => {
-            await supabase.from("listings").delete().eq("id", id)
-            loadListings()
-          },
+  try {
+    const { error } = await supabase
+      .from("listings")
+      .delete()
+      .eq("id", id)
+
+    if (error) throw error
+
+    loadListings()
+  } catch (err) {
+    handleAppError(err, {
+      context: "my_listings_delete",
+      fallbackMessage: "Failed to delete listing.",
+    })
+  }
+},
+
         },
       ]
     )

@@ -1,14 +1,16 @@
 import { useRouter } from "expo-router"
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import {
   ActivityIndicator,
   Alert,
+  Keyboard,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native"
+import { handleAppError } from "../lib/errors/appError"
 import { supabase } from "../lib/supabase"
 
 export default function SignInScreen() {
@@ -19,26 +21,68 @@ export default function SignInScreen() {
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
 
-  const isFormValid = email.trim().length > 0 && password.length > 0
+  // Prevent setState on unmounted component
+  const mountedRef = useRef(true)
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
+
+  const normalizedEmail = email.trim().toLowerCase()
+  const isFormValid = normalizedEmail.length > 0 && password.length > 0
 
   const handleEmailLogin = async () => {
     if (!isFormValid || loading) return
 
-    setLoading(true)
+    try {
+      setLoading(true)
+      Keyboard.dismiss()
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
+      const { error } = await supabase.auth.signInWithPassword({
+        email: normalizedEmail,
+        password,
+      })
 
-    setLoading(false)
+      if (error) {
+        const msg = (error.message || "").toLowerCase()
 
-    if (error) {
-      Alert.alert("Sign in failed", error.message)
-      return
+        // Common Supabase auth UX improvements
+        if (msg.includes("email not confirmed")) {
+          Alert.alert(
+            "Confirm your email",
+            "Please check your inbox and confirm your email before signing in."
+          )
+          return
+        }
+
+        if (
+          msg.includes("invalid login credentials") ||
+          msg.includes("invalid") ||
+          msg.includes("credentials")
+        ) {
+          Alert.alert("Sign in failed", "Email or password is incorrect.")
+          return
+        }
+
+        throw error
+      }
+
+      // Optional: clear inputs on success
+      if (mountedRef.current) {
+        setEmail("")
+        setPassword("")
+      }
+
+      router.replace("/home")
+    } catch (err) {
+      handleAppError(err, {
+        fallbackMessage: "Sign in failed. Please try again.",
+      })
+    } finally {
+      if (mountedRef.current) setLoading(false)
     }
-
-    router.replace("/home")
   }
 
   return (
@@ -46,9 +90,7 @@ export default function SignInScreen() {
       {/* BRANDING */}
       <View style={styles.branding}>
         <Text style={styles.brandTitle}>MELO</Text>
-        <Text style={styles.subtitle}>
-          Your Sports Only Marketplace
-        </Text>
+        <Text style={styles.subtitle}>Your Sports Only Marketplace</Text>
       </View>
 
       {/* CARD */}
@@ -60,9 +102,11 @@ export default function SignInScreen() {
           placeholder="Email"
           placeholderTextColor="#6B8F82"
           autoCapitalize="none"
+          autoCorrect={false}
           keyboardType="email-address"
           value={email}
           onChangeText={setEmail}
+          returnKeyType="next"
         />
 
         <View style={styles.passwordWrapper}>
@@ -73,17 +117,23 @@ export default function SignInScreen() {
             secureTextEntry={!showPassword}
             value={password}
             onChangeText={setPassword}
+            returnKeyType="done"
+            onSubmitEditing={handleEmailLogin}
           />
 
-          <TouchableOpacity onPress={() => setShowPassword(p => !p)}>
+          <TouchableOpacity
+            onPress={() => setShowPassword((p) => !p)}
+            disabled={loading}
+          >
             <Text style={styles.eye}>{showPassword ? "🙈" : "👁️"}</Text>
           </TouchableOpacity>
         </View>
 
-        {/* FORGOT PASSWORD LINK (ADDED ONLY) */}
+        {/* FORGOT PASSWORD LINK */}
         <TouchableOpacity
           onPress={() => router.push("/forgot-password")}
           style={{ alignSelf: "flex-end", marginBottom: 12 }}
+          disabled={loading}
         >
           <Text
             style={{
@@ -104,6 +154,7 @@ export default function SignInScreen() {
           ]}
           onPress={handleEmailLogin}
           disabled={!isFormValid || loading}
+          activeOpacity={0.9}
         >
           {loading ? (
             <ActivityIndicator color="#FFFFFF" />
@@ -112,7 +163,10 @@ export default function SignInScreen() {
           )}
         </TouchableOpacity>
 
-        <TouchableOpacity onPress={() => router.push("/register")}>
+        <TouchableOpacity
+          onPress={() => router.push("/register")}
+          disabled={loading}
+        >
           <Text style={styles.link}>
             Don’t have an account?{" "}
             <Text style={styles.linkBold}>Create one</Text>
@@ -141,7 +195,7 @@ const styles = StyleSheet.create({
   branding: {
     alignItems: "center",
     marginBottom: 28,
-    transform: [{ translateY: -40 }], // raises MELO + subtitle ~20%
+    transform: [{ translateY: -40 }],
   },
 
   brandTitle: {

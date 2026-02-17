@@ -5,7 +5,9 @@ import { StyleSheet, Text, TouchableOpacity, View } from "react-native"
 
 import AppHeader from "@/components/app-header"
 import { useAuth } from "@/context/AuthContext"
+import { handleAppError } from "@/lib/errors/appError"
 import { supabase } from "@/lib/supabase"
+
 
 export default function SellerHubScreen() {
   const router = useRouter()
@@ -18,36 +20,76 @@ export default function SellerHubScreen() {
   /* ---------------- LOAD COUNTS ---------------- */
 
   useFocusEffect(
-    useCallback(() => {
-      if (!sellerId) return
-      loadOrdersToShipCount()
-      loadUnreadMessagesCount()
-    }, [sellerId])
-  )
+  useCallback(() => {
+    if (!sellerId) {
+      handleAppError(new Error("Missing seller session"), {
+        context: "seller_hub_no_session",
+        silent: true,
+      })
+      return
+    }
+
+    loadOrdersToShipCount()
+    loadUnreadMessagesCount()
+  }, [sellerId])
+)
+
 
   const loadOrdersToShipCount = async () => {
-    if (!sellerId) return
+  if (!sellerId) return
 
-    const { count } = await supabase
+  try {
+    const { count, error } = await supabase
       .from("orders")
       .select("id", { count: "exact", head: true })
       .eq("status", "paid")
       .eq("seller_id", sellerId)
 
+    if (error) {
+      handleAppError(error, {
+        context: "seller_hub_load_orders_to_ship",
+        silent: true, // background metric, no popup needed
+      })
+      return
+    }
+
     setOrdersToShipCount(count ?? 0)
+  } catch (err) {
+    handleAppError(err, {
+      context: "seller_hub_load_orders_to_ship_catch",
+      silent: true,
+    })
   }
+}
+
 
   const loadUnreadMessagesCount = async () => {
-    if (!sellerId) return
+  if (!sellerId) return
 
-    const { count } = await supabase
+  try {
+    const { count, error } = await supabase
       .from("messages")
       .select("id", { count: "exact", head: true })
       .is("read_at", null)
       .eq("receiver_id", sellerId)
 
+    if (error) {
+      handleAppError(error, {
+        context: "seller_hub_load_unread_messages",
+        silent: true, // background fetch
+      })
+      return
+    }
+
     setUnreadMessagesCount(count ?? 0)
+  } catch (err) {
+    handleAppError(err, {
+      context: "seller_hub_load_unread_messages_catch",
+      silent: true,
+    })
   }
+}
+
 
   return (
     <View style={styles.screen}>

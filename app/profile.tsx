@@ -12,39 +12,68 @@ import {
 import AppHeader from "@/components/app-header"
 import { useAuth } from "../context/AuthContext"
 import { isAdmin } from "../lib/admin"
+import { handleAppError } from "../lib/errors/appError"
 import { supabase } from "../lib/supabase"
 
 export default function ProfileScreen() {
   const router = useRouter()
   const { session } = useAuth()
 
+  const userId = session?.user?.id ?? null
+
   const [displayName, setDisplayName] = useState<string | null>(null)
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
 
-  const showAdmin = isAdmin(session?.user?.id)
+  const showAdmin = isAdmin(userId)
 
   /* ---------------- LOAD PROFILE ---------------- */
 
   useFocusEffect(
     useCallback(() => {
-      if (!session?.user?.id) return
+      if (!userId) return
 
       const loadProfile = async () => {
-        const { data } = await supabase
-          .from("profiles")
-          .select("display_name, avatar_url")
-          .eq("id", session.user.id)
-          .single()
+        try {
+          const { data, error } = await supabase
+            .from("profiles")
+            .select("display_name, avatar_url")
+            .eq("id", userId)
+            .single()
 
-        if (data) {
-          setDisplayName(data.display_name ?? null)
-          setAvatarUrl(data.avatar_url ?? null)
+          if (error) throw error
+
+          if (data) {
+            setDisplayName(data.display_name ?? null)
+            setAvatarUrl(data.avatar_url ?? null)
+          } else {
+            // Fail-safe defaults (never show blank UI)
+            setDisplayName(null)
+            setAvatarUrl(null)
+          }
+        } catch (err) {
+          handleAppError(err, {
+            context: "profile_load",
+            fallbackMessage: "Failed to load profile.",
+          })
         }
       }
 
       loadProfile()
-    }, [session?.user?.id])
+    }, [userId])
   )
+
+  const handlePublicProfilePress = () => {
+    if (!userId) return
+
+    try {
+      router.push(`/public-profile/${userId}`)
+    } catch (err) {
+      handleAppError(err, {
+        context: "profile_public_navigation",
+        fallbackMessage: "Unable to open public profile.",
+      })
+    }
+  }
 
   return (
     <View style={styles.screen}>
@@ -88,11 +117,8 @@ export default function ProfileScreen() {
         {/* 🔥 VIEW PUBLIC PROFILE BUTTON */}
         <TouchableOpacity
           style={styles.publicProfileBtn}
-          onPress={() =>
-            router.push(
-              `/public-profile/${session?.user?.id}`
-            )
-          }
+          onPress={handlePublicProfilePress}
+          disabled={!userId}
         >
           <Text style={styles.publicProfileText}>
             View Public Profile

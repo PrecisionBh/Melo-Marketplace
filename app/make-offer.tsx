@@ -1,7 +1,7 @@
 import { notify } from "@/lib/notifications/notify"
 import { Ionicons } from "@expo/vector-icons"
 import { useLocalSearchParams, useRouter } from "expo-router"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import {
   Alert,
   Image,
@@ -16,6 +16,7 @@ import {
 } from "react-native"
 
 import { useAuth } from "../context/AuthContext"
+import { handleAppError } from "../lib/errors/appError"
 import { supabase } from "../lib/supabase"
 
 /* ---------------- SCREEN ---------------- */
@@ -30,32 +31,51 @@ export default function MakeOfferScreen() {
   const [loading, setLoading] = useState(false)
   const [minError, setMinError] = useState<string | null>(null)
 
+  // 🔒 Prevent double submit spam taps
+  const submittingRef = useRef(false)
+
   /* ---------------- LOAD LISTING ---------------- */
 
   useEffect(() => {
     if (!listingId) return
 
-    supabase
-      .from("listings")
-      .select(`
-        id,
-        title,
-        price,
-        image_urls,
-        min_offer,
-        user_id,
-        shipping_type,
-        shipping_price
-      `)
-      .eq("id", listingId)
-      .single()
-      .then(({ data, error }) => {
-        if (error) {
-          console.error("Listing load error:", error)
-          return
+    let isMounted = true
+
+    const loadListing = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("listings")
+          .select(`
+            id,
+            title,
+            price,
+            image_urls,
+            min_offer,
+            user_id,
+            shipping_type,
+            shipping_price
+          `)
+          .eq("id", listingId)
+          .single()
+
+        if (error) throw error
+
+        if (isMounted) {
+          setListing(data)
         }
-        setListing(data)
-      })
+      } catch (err) {
+        console.error("Listing load error:", err)
+        handleAppError(err, {
+          fallbackMessage: "Failed to load listing. Please try again.",
+        })
+      }
+    }
+
+    loadListing()
+
+    return () => {
+      isMounted = false
+    }
   }, [listingId])
 
   const numericOffer = Number(offer)
@@ -104,6 +124,7 @@ export default function MakeOfferScreen() {
   /* ---------------- SUBMIT ---------------- */
 
   const submitOffer = async () => {
+    if (submittingRef.current) return
     if (!session?.user || !listing) return
 
     if (!numericOffer || numericOffer <= 0) {
@@ -119,72 +140,84 @@ export default function MakeOfferScreen() {
       return
     }
 
-    setLoading(true)
+    try {
+      submittingRef.current = true
+      setLoading(true)
 
-    const { data: newOffer, error } = await supabase
-      .from("offers")
-      .insert({
-        listing_id: listing.id,
-        buyer_id: session.user.id,
-        seller_id: listing.user_id,
+      const { data: newOffer, error } = await supabase
+        .from("offers")
+        .insert({
+          listing_id: listing.id,
+          buyer_id: session.user.id,
+          seller_id: listing.user_id,
 
-        offer_amount: numericOffer,
-        original_offer: numericOffer,
-        current_amount: numericOffer,
+          offer_amount: numericOffer,
+          original_offer: numericOffer,
+          current_amount: numericOffer,
 
-        buyer_fee: buyerFee,
-        total_due: totalDue,
+          buyer_fee: buyerFee,
+          total_due: totalDue,
 
-        status: "pending",
-        last_action: "buyer",
-        last_actor: "buyer",
-        counter_count: 0,
+          status: "pending",
+          last_action: "buyer",
+          last_actor: "buyer",
+          counter_count: 0,
 
-        expires_at: new Date(
-          Date.now() + 24 * 60 * 60 * 1000
-        ).toISOString(),
-      })
-      .select("id")
-      .single()
+          expires_at: new Date(
+            Date.now() + 24 * 60 * 60 * 1000
+          ).toISOString(),
+        })
+        .select("id")
+        .single()
 
-    setLoading(false)
-
-    if (error) {
-      if (error.code === "23505") {
-        Alert.alert(
-          "Offer already sent",
-          "You already have an active offer on this item."
-        )
-      } else {
-        console.error("Offer insert error:", error)
-        Alert.alert("Error", "Failed to submit offer.")
+      if (error) {
+        if (error.code === "23505") {
+          Alert.alert(
+            "Offer already sent",
+            "You already have an active offer on this item."
+          )
+          return
+        }
+        throw error
       }
-      return
+
+      /* ✅ NOTIFY AFTER SUCCESS (non-blocking safe) */
+      try {
+        await notify({
+          userId: listing.user_id,
+          type: "offer",
+          title: "New offer received",
+          body: `You received a new offer on "${listing.title}"`,
+          data: {
+            route: "/seller-hub/offers/[id]",
+            params: {
+              id: newOffer.id,
+            },
+          },
+        })
+      } catch (notifyErr) {
+        console.warn("Notify failed:", notifyErr)
+      }
+
+      Alert.alert(
+        "Offer Sent",
+        "The seller has been notified. You’ll be able to respond if they counter."
+      )
+
+      router.back()
+    } catch (err) {
+      console.error("Offer submit error:", err)
+      handleAppError(err, {
+        fallbackMessage: "Failed to submit offer. Please try again.",
+      })
+    } finally {
+      submittingRef.current = false
+      setLoading(false)
     }
-
-    /* ✅ NOTIFY AFTER SUCCESS */
-    await notify({
-      userId: listing.user_id,
-      type: "offer",
-      title: "New offer received",
-      body: `You received a new offer on "${listing.title}"`,
-      data: {
-        route: "/seller-hub/offers/[id]",
-        params: {
-          id: newOffer.id,
-        },
-      },
-    })
-
-    Alert.alert(
-      "Offer Sent",
-      "The seller has been notified. You’ll be able to respond if they counter."
-    )
-
-    router.back()
   }
 
   if (!listing) return null
+
 
   /* ---------------- UI ---------------- */
 

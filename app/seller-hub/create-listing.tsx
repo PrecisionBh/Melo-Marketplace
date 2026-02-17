@@ -17,7 +17,9 @@ import {
 
 import AppHeader from "@/components/app-header"
 import { useAuth } from "@/context/AuthContext"
+import { handleAppError } from "@/lib/errors/appError"
 import { supabase } from "@/lib/supabase"
+
 
 
 /* ---------------- CONSTANTS ---------------- */
@@ -67,6 +69,7 @@ export default function CreateListing() {
   /* ---------------- IMAGE PICKER ---------------- */
 
   const pickImage = async () => {
+  try {
     if (images.length >= 5) {
       Alert.alert("Limit reached", "You can upload up to 5 images.")
       return
@@ -80,7 +83,14 @@ export default function CreateListing() {
     if (!result.canceled) {
       setImages((prev) => [...prev, result.assets[0].uri])
     }
+  } catch (err) {
+    handleAppError(err, {
+      context: "create_listing_image_picker",
+      fallbackMessage: "Failed to select image. Please try again.",
+    })
   }
+}
+
 
   const removeImage = (uri: string) => {
     setImages((prev) => prev.filter((i) => i !== uri))
@@ -108,7 +118,14 @@ export default function CreateListing() {
       .from("listing-images")
       .upload(path, formData, { upsert: true })
 
-    if (error) throw error
+    if (error) {
+  handleAppError(error, {
+    context: "create_listing_storage_upload",
+    fallbackMessage: "Image upload failed. Please try again.",
+  })
+  throw error
+}
+
 
     const { data } = supabase.storage
       .from("listing-images")
@@ -120,7 +137,14 @@ export default function CreateListing() {
   /* ---------------- SUBMIT ---------------- */
 
   const submit = async () => {
-    if (!session?.user) return
+    if (!session?.user) {
+  handleAppError(new Error("User session missing"), {
+    context: "create_listing_no_session",
+    fallbackMessage: "Your session expired. Please sign in again.",
+  })
+  return
+}
+
 
     if (!title || !category || !condition || !price || images.length === 0) {
       Alert.alert("Missing info", "Please complete all required fields.")
@@ -175,7 +199,11 @@ export default function CreateListing() {
         .select()
         .single()
 
-      if (error || !listing) throw error
+      if (error) throw error
+if (!listing) {
+  throw new Error("Listing creation failed: No listing returned")
+}
+
 
       /* 2️⃣ UPLOAD IMAGES */
       const urls: string[] = []
@@ -190,18 +218,25 @@ export default function CreateListing() {
       }
 
       /* 3️⃣ UPDATE LISTING */
-      await supabase
-        .from("listings")
-        .update({ image_urls: urls })
-        .eq("id", listing.id)
+      const { error: updateError } = await supabase
+  .from("listings")
+  .update({ image_urls: urls })
+  .eq("id", listing.id)
+
+if (updateError) throw updateError
+
 
       Alert.alert("Success", "Listing created!")
       router.replace("/seller-hub")
     } catch (err: any) {
-      Alert.alert("Error", err?.message ?? "Failed to create listing")
-    } finally {
-      setSubmitting(false)
-    }
+  handleAppError(err, {
+    context: "create_listing_submit",
+    fallbackMessage: "Failed to create listing. Please try again.",
+  })
+} finally {
+  setSubmitting(false)
+}
+
   }
 
   /* ---------------- UI ---------------- */

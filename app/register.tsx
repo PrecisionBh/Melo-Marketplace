@@ -2,13 +2,14 @@ import { Ionicons } from "@expo/vector-icons"
 import { useRouter } from "expo-router"
 import { useState } from "react"
 import {
-    Alert,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native"
+import { handleAppError } from "../lib/errors/appError"
 import { supabase } from "../lib/supabase"
 
 export default function RegisterScreen() {
@@ -21,30 +22,61 @@ export default function RegisterScreen() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [loading, setLoading] = useState(false)
 
+  const normalizedEmail = email.trim().toLowerCase()
+
   const isFormValid =
-    email.length > 0 &&
+    normalizedEmail.length > 0 &&
     password.length >= 6 &&
     password === confirmPassword
 
   const handleCreateAccount = async () => {
-    if (!isFormValid) return
+    if (!isFormValid || loading) return
 
-    setLoading(true)
+    try {
+      setLoading(true)
 
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-    })
+      const { error } = await supabase.auth.signUp({
+        email: normalizedEmail,
+        password,
+      })
 
-    setLoading(false)
+      if (error) {
+        // Known auth errors handled cleanly for UX
+        if (error.message?.toLowerCase().includes("already registered")) {
+          Alert.alert(
+            "Account Exists",
+            "An account with this email already exists. Please sign in instead."
+          )
+          return
+        }
 
-    if (error) {
-      Alert.alert("Signup failed", error.message)
-      return
+        if (error.message?.toLowerCase().includes("invalid email")) {
+          Alert.alert(
+            "Invalid Email",
+            "Please enter a valid email address."
+          )
+          return
+        }
+
+        throw error
+      }
+
+      // Auth trigger handles profile + wallet creation (as designed in Melo)
+      Alert.alert(
+        "Account Created",
+        "Your account has been created successfully."
+      )
+
+      router.replace("/")
+    } catch (err) {
+      handleAppError(err, {
+        context: "auth_register",
+        fallbackMessage:
+          "Signup failed. Please check your connection and try again.",
+      })
+    } finally {
+      setLoading(false)
     }
-
-    // Auth trigger handles profile + wallet creation
-    router.replace("/")
   }
 
   return (
@@ -58,6 +90,7 @@ export default function RegisterScreen() {
         onChangeText={setEmail}
         style={styles.input}
         autoCapitalize="none"
+        autoCorrect={false}
         keyboardType="email-address"
       />
 
@@ -74,6 +107,7 @@ export default function RegisterScreen() {
         <TouchableOpacity
           onPress={() => setShowPassword(!showPassword)}
           style={styles.eyeButton}
+          disabled={loading}
         >
           <Ionicons
             name={showPassword ? "eye-off" : "eye"}
@@ -96,6 +130,7 @@ export default function RegisterScreen() {
         <TouchableOpacity
           onPress={() => setShowConfirmPassword(!showConfirmPassword)}
           style={styles.eyeButton}
+          disabled={loading}
         >
           <Ionicons
             name={showConfirmPassword ? "eye-off" : "eye"}
@@ -119,9 +154,15 @@ export default function RegisterScreen() {
         </Text>
       </TouchableOpacity>
 
-      <TouchableOpacity onPress={() => router.replace("/signinscreen")}>
+      <TouchableOpacity
+        onPress={() => {
+          if (loading) return
+          router.replace("/signinscreen")
+        }}
+      >
         <Text style={styles.backText}>
-          Already have an account? <Text style={styles.link}>Sign in</Text>
+          Already have an account?{" "}
+          <Text style={styles.link}>Sign in</Text>
         </Text>
       </TouchableOpacity>
     </View>

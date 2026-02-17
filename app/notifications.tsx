@@ -7,11 +7,12 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
+  View
 } from "react-native"
 
 import AppHeader from "@/components/app-header"
 import { useAuth } from "@/context/AuthContext"
+import { handleAppError } from "@/lib/errors/appError"
 import { supabase } from "@/lib/supabase"
 
 export default function NotificationsScreen() {
@@ -24,42 +25,89 @@ export default function NotificationsScreen() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (!userId) return
+    if (!userId) {
+      setLoading(false)
+      return
+    }
 
     const loadNotifications = async () => {
-      const { data } = await supabase
-        .from("notifications")
-        .select("*")
-        .eq("user_id", userId)
-        .order("created_at", { ascending: false })
+      try {
+        setLoading(true)
 
-      setNotifications(data ?? [])
-      setLoading(false)
+        const { data, error } = await supabase
+          .from("notifications")
+          .select("*")
+          .eq("user_id", userId)
+          .order("created_at", { ascending: false })
+
+        if (error) throw error
+
+        setNotifications(data ?? [])
+      } catch (err) {
+        handleAppError(err, {
+          context: "notifications_load",
+          fallbackMessage:
+            "Failed to load notifications. Please try again.",
+        })
+        setNotifications([]) // Fail-safe UI
+      } finally {
+        setLoading(false)
+      }
     }
 
     loadNotifications()
   }, [userId])
 
   const openNotification = async (n: any) => {
-    if (!n.read) {
-      await supabase
-        .from("notifications")
-        .update({ read: true })
-        .eq("id", n.id)
-    }
+    try {
+      // Mark as read (non-blocking UX)
+      if (!n.read) {
+        const { error } = await supabase
+          .from("notifications")
+          .update({ read: true })
+          .eq("id", n.id)
 
-    if (n.data?.route) {
-      router.push({
-        pathname: n.data.route,
-        params: n.data.params ?? {},
+        if (error) {
+          console.error("Mark read error:", error)
+          // Silent fail — do NOT block navigation
+        }
+      }
+
+      // Safe route navigation
+      if (n.data?.route) {
+        router.push({
+          pathname: n.data.route,
+          params: n.data.params ?? {},
+        })
+      }
+    } catch (err) {
+      handleAppError(err, {
+        context: "notifications_open",
+        fallbackMessage:
+          "Unable to open this notification right now.",
       })
     }
   }
 
   const clearAllNotifications = async () => {
     if (!userId) return
-    await supabase.from("notifications").delete().eq("user_id", userId)
-    setNotifications([])
+
+    try {
+      const { error } = await supabase
+        .from("notifications")
+        .delete()
+        .eq("user_id", userId)
+
+      if (error) throw error
+
+      setNotifications([])
+    } catch (err) {
+      handleAppError(err, {
+        context: "notifications_clear_all",
+        fallbackMessage:
+          "Failed to clear notifications. Please try again.",
+      })
+    }
   }
 
   return (
@@ -88,7 +136,12 @@ export default function NotificationsScreen() {
             Log in to see updates about purchases, offers, and messages.
           </Text>
         </View>
-      ) : loading ? null : notifications.length === 0 ? (
+      ) : loading ? (
+        <View style={styles.center}>
+          <Ionicons name="notifications-outline" size={48} color="#9FB8AC" />
+          <Text style={styles.subtext}>Loading notifications...</Text>
+        </View>
+      ) : notifications.length === 0 ? (
         <View style={styles.center}>
           <Ionicons name="notifications-outline" size={56} color="#9FB8AC" />
           <Text style={styles.headline}>No notifications yet</Text>
@@ -97,7 +150,7 @@ export default function NotificationsScreen() {
           </Text>
         </View>
       ) : (
-        <ScrollView>
+        <ScrollView showsVerticalScrollIndicator={false}>
           {notifications.map((n) => (
             <Pressable
               key={n.id}
@@ -129,9 +182,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#EAF4EF",
   },
-
-  /* (Old header styles kept for safety during polish phase) */
-  
 
   clearRow: {
     alignItems: "flex-end",

@@ -1,14 +1,15 @@
 import { useRouter } from "expo-router"
 import { useState } from "react"
 import {
-    ActivityIndicator,
-    Alert,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native"
+import { handleAppError } from "../lib/errors/appError"
 import { supabase } from "../lib/supabase"
 
 export default function ForgotPasswordScreen() {
@@ -17,35 +18,40 @@ export default function ForgotPasswordScreen() {
   const [loading, setLoading] = useState(false)
 
   const handleReset = async () => {
-    const normalizedEmail = email.trim().toLowerCase()
+    try {
+      const normalizedEmail = email.trim().toLowerCase()
 
-    if (!normalizedEmail) {
-      Alert.alert("Missing Email", "Please enter your account email.")
-      return
-    }
-
-    setLoading(true)
-
-    const { error } = await supabase.auth.resetPasswordForEmail(
-      normalizedEmail,
-      {
-        redirectTo: "melomp://reset-password",
+      if (!normalizedEmail) {
+        Alert.alert("Missing Email", "Please enter your account email.")
+        return
       }
-    )
 
-    setLoading(false)
+      setLoading(true)
 
-    if (error) {
-      Alert.alert("Reset Failed", error.message)
-      return
+      const { error } = await supabase.auth.resetPasswordForEmail(
+        normalizedEmail,
+        {
+          redirectTo: "melomp://reset-password",
+        }
+      )
+
+      if (error) throw error
+
+      Alert.alert(
+        "Check Your Email 📩",
+        "If an account exists with this email, a password reset link has been sent."
+      )
+
+      router.back()
+    } catch (err) {
+      handleAppError(err, {
+        context: "forgot_password_reset",
+        fallbackMessage:
+          "Failed to send reset email. Please try again.",
+      })
+    } finally {
+      setLoading(false)
     }
-
-    Alert.alert(
-      "Check Your Email 📩",
-      "If an account exists with this email, a password reset link has been sent."
-    )
-
-    router.back()
   }
 
   return (

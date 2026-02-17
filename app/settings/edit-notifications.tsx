@@ -5,6 +5,7 @@ import { useEffect, useState } from "react"
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native"
 
 import AppHeader from "@/components/app-header"
+import { handleAppError } from "@/lib/errors/appError"
 
 export default function NotificationsSettingsScreen() {
   const router = useRouter()
@@ -20,12 +21,18 @@ export default function NotificationsSettingsScreen() {
     try {
       const { status } = await Notifications.getPermissionsAsync()
       setNotificationsEnabled(status === "granted")
-    } catch (e) {
-      console.error("Permission check error:", e)
+    } catch (err) {
+      handleAppError(err, {
+        context: "notifications_settings_check_permission",
+        fallbackMessage: "Failed to check notification permissions.",
+        silent: true,
+      })
     }
   }
 
   const handleToggleNotifications = async () => {
+    if (loading) return
+
     try {
       setLoading(true)
 
@@ -36,9 +43,8 @@ export default function NotificationsSettingsScreen() {
         if (status !== "granted") {
           Alert.alert(
             "Permission Required",
-            "Enable notifications to receive message alerts, order updates, and important Melo notifications."
+            "Notifications are disabled at the device level. Please enable them in your phone Settings to receive Melo alerts."
           )
-          setLoading(false)
           return
         }
 
@@ -47,11 +53,10 @@ export default function NotificationsSettingsScreen() {
 
         Alert.alert(
           "Notifications Enabled",
-          "You will now receive alerts for messages, orders, and important updates."
+          "You will now receive alerts for messages, orders, and important Melo updates."
         )
       } else {
-        // Cannot truly disable system permission from app,
-        // but we toggle app-level preference for MVP
+        // App-level toggle (cannot revoke OS permission programmatically)
         setNotificationsEnabled(false)
 
         Alert.alert(
@@ -59,15 +64,14 @@ export default function NotificationsSettingsScreen() {
           "You can re-enable notifications anytime from this screen."
         )
       }
-
+    } catch (err) {
+      handleAppError(err, {
+        context: "notifications_settings_toggle",
+        fallbackMessage:
+          "Something went wrong while updating notification settings.",
+      })
+    } finally {
       setLoading(false)
-    } catch (e) {
-      console.error("Notification toggle error:", e)
-      setLoading(false)
-      Alert.alert(
-        "Error",
-        "Something went wrong while updating notification settings."
-      )
     }
   }
 

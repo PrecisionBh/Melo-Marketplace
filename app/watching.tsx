@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons"
 import { useFocusEffect, useRouter } from "expo-router"
-import { useCallback, useState } from "react"
+import { useCallback, useRef, useState } from "react"
 import {
   ActivityIndicator,
   FlatList,
@@ -13,6 +13,7 @@ import {
 
 import AppHeader from "@/components/app-header"
 import { useAuth } from "../context/AuthContext"
+import { handleAppError } from "../lib/errors/appError"
 import { supabase } from "../lib/supabase"
 
 type WatchedListing = {
@@ -32,45 +33,82 @@ export default function WatchingScreen() {
   const [listings, setListings] = useState<WatchedListing[]>([])
   const [loading, setLoading] = useState(true)
 
+  // Prevent state updates after unmount (important for focus screens)
+  const mountedRef = useRef(true)
+
   useFocusEffect(
     useCallback(() => {
+      mountedRef.current = true
       loadWatching()
-    }, [])
+
+      return () => {
+        mountedRef.current = false
+      }
+    }, [session?.user?.id])
   )
 
-  /* ---------------- LOAD WATCHING ---------------- */
+  /* ---------------- LOAD WATCHING (HARDENED) ---------------- */
 
   const loadWatching = async () => {
-    if (!session?.user) return
-
-    setLoading(true)
-
-    const { data, error } = await supabase
-      .from("watchlist")
-      .select(
-        `
-        listing:listings (
-          id,
-          title,
-          price,
-          image_urls,
-          shipping_type,
-          shipping_price,
-          is_sold
-        )
-      `
-      )
-      .eq("user_id", session.user.id)
-
-    if (!error && data) {
-      const clean = data
-        .map((w: any) => w.listing)
-        .filter((l: WatchedListing) => l && !l.is_sold)
-
-      setListings(clean)
+    if (!session?.user?.id) {
+      setListings([])
+      setLoading(false)
+      return
     }
 
-    setLoading(false)
+    try {
+      if (mountedRef.current) setLoading(true)
+
+      const { data, error } = await supabase
+        .from("watchlist")
+        .select(
+          `
+          listing:listings (
+            id,
+            title,
+            price,
+            image_urls,
+            shipping_type,
+            shipping_price,
+            is_sold
+          )
+        `
+        )
+        .eq("user_id", session.user.id)
+
+      if (error) {
+        throw error
+      }
+
+      // Defensive: listing join can return null if listing was deleted
+      const clean: WatchedListing[] = (data ?? [])
+        .map((w: any) => w?.listing)
+        .filter(
+          (l: WatchedListing | null) =>
+            l &&
+            !l.is_sold &&
+            l.id &&
+            typeof l.price === "number"
+        )
+
+      if (mountedRef.current) {
+        setListings(clean)
+      }
+    } catch (err) {
+      handleAppError(err, {
+        fallbackMessage:
+          "Failed to load watched listings. Please try again.",
+      })
+
+      // Fail safe UI instead of infinite spinner
+      if (mountedRef.current) {
+        setListings([])
+      }
+    } finally {
+      if (mountedRef.current) {
+        setLoading(false)
+      }
+    }
   }
 
   /* ---------------- RENDER ---------------- */
@@ -99,9 +137,11 @@ export default function WatchingScreen() {
           data={listings}
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ padding: 16, paddingBottom: 140 }}
+          showsVerticalScrollIndicator={false}
           renderItem={({ item }) => (
             <TouchableOpacity
               style={styles.card}
+              activeOpacity={0.85}
               onPress={() => router.push(`/listing/${item.id}`)}
             >
               <Image
@@ -119,13 +159,13 @@ export default function WatchingScreen() {
                 </Text>
 
                 <Text style={styles.price}>
-                  ${item.price.toFixed(2)}
+                  ${Number(item.price).toFixed(2)}
                 </Text>
 
                 <Text style={styles.shipping}>
                   {item.shipping_type === "free"
                     ? "Free shipping"
-                    : `+ $${item.shipping_price} shipping`}
+                    : `+ $${Number(item.shipping_price ?? 0).toFixed(2)} shipping`}
                 </Text>
               </View>
             </TouchableOpacity>
@@ -142,38 +182,6 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: "#EAF4EF",
-  },
-
-  /* (Old header styles kept but unused — safe to keep during polish phase) */
-  headerWrap: {
-    backgroundColor: "#7FAF9B",
-    paddingTop: 50,
-    paddingBottom: 12,
-    paddingHorizontal: 14,
-  },
-
-  headerRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#0F1E17",
-  },
-
-  headerBtn: {
-    alignItems: "center",
-    minWidth: 60,
-  },
-
-  headerSub: {
-    marginTop: 2,
-    fontSize: 11,
-    fontWeight: "600",
-    color: "#0F1E17",
   },
 
   empty: {

@@ -15,6 +15,7 @@ import {
 
 import AppHeader from "@/components/app-header"
 import { useAuth } from "../../context/AuthContext"
+import { handleAppError } from "../../lib/errors/appError"
 import { supabase } from "../../lib/supabase"
 
 export default function EditProfileScreen() {
@@ -30,19 +31,34 @@ export default function EditProfileScreen() {
   /* ---------------- LOAD PROFILE ---------------- */
 
   useEffect(() => {
-    if (!userId) return
+    if (!userId) {
+      handleAppError(new Error("Missing user session"), {
+        context: "edit_profile_no_user",
+        silent: true,
+      })
+      return
+    }
 
     const loadProfile = async () => {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("display_name, bio, avatar_url")
-        .eq("id", userId)
-        .single()
+      try {
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("display_name, bio, avatar_url")
+          .eq("id", userId)
+          .single()
 
-      if (!error && data) {
-        setDisplayName(data.display_name ?? "")
-        setBio(data.bio ?? "")
-        setAvatarUrl(data.avatar_url ?? null)
+        if (error) throw error
+
+        if (data) {
+          setDisplayName(data.display_name ?? "")
+          setBio(data.bio ?? "")
+          setAvatarUrl(data.avatar_url ?? null)
+        }
+      } catch (err) {
+        handleAppError(err, {
+          context: "edit_profile_load",
+          fallbackMessage: "Failed to load profile.",
+        })
       }
     }
 
@@ -52,22 +68,35 @@ export default function EditProfileScreen() {
   /* ---------------- IMAGE PICK ---------------- */
 
   const pickImage = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.9,
-    })
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.9,
+      })
 
-    if (result.canceled) return
+      if (result.canceled) return
 
-    uploadAvatar(result.assets[0].uri)
+      await uploadAvatar(result.assets[0].uri)
+    } catch (err) {
+      handleAppError(err, {
+        context: "edit_profile_image_picker",
+        fallbackMessage: "Failed to select image. Please try again.",
+      })
+    }
   }
 
   /* ---------------- AVATAR UPLOAD ---------------- */
 
   const uploadAvatar = async (uri: string) => {
-    if (!userId) return
+    if (!userId) {
+      handleAppError(new Error("Missing user ID"), {
+        context: "edit_profile_upload_no_user",
+        silent: true,
+      })
+      return
+    }
 
     try {
       setUploading(true)
@@ -85,18 +114,22 @@ export default function EditProfileScreen() {
         .from("profile-images")
         .upload(path, formData, { upsert: true })
 
-      if (error) {
-        Alert.alert("Upload failed", error.message)
-        return
-      }
+      if (error) throw error
 
       const { data: urlData } = supabase.storage
         .from("profile-images")
         .getPublicUrl(path)
 
+      if (!urlData?.publicUrl) {
+        throw new Error("Failed to retrieve public URL")
+      }
+
       setAvatarUrl(urlData.publicUrl)
-    } catch {
-      Alert.alert("Upload error", "Unexpected upload error")
+    } catch (err) {
+      handleAppError(err, {
+        context: "edit_profile_avatar_upload",
+        fallbackMessage: "Profile photo upload failed. Please try again.",
+      })
     } finally {
       setUploading(false)
     }
@@ -105,23 +138,34 @@ export default function EditProfileScreen() {
   /* ---------------- SAVE PROFILE ---------------- */
 
   const saveProfile = async () => {
-    if (!userId) return
-
-    const { error } = await supabase
-      .from("profiles")
-      .update({
-        display_name: displayName.trim(),
-        bio: bio.trim(),
-        avatar_url: avatarUrl,
+    if (!userId) {
+      handleAppError(new Error("Missing user session"), {
+        context: "edit_profile_save_no_user",
+        silent: true,
       })
-      .eq("id", userId)
-
-    if (error) {
-      Alert.alert("Save failed", error.message)
       return
     }
 
-    router.back()
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          display_name: displayName.trim(),
+          bio: bio.trim(),
+          avatar_url: avatarUrl,
+        })
+        .eq("id", userId)
+
+      if (error) throw error
+
+      Alert.alert("Success", "Profile updated successfully.")
+      router.back()
+    } catch (err) {
+      handleAppError(err, {
+        context: "edit_profile_save",
+        fallbackMessage: "Failed to save profile changes.",
+      })
+    }
   }
 
   /* ---------------- UI ---------------- */
@@ -148,7 +192,9 @@ export default function EditProfileScreen() {
               )}
             </View>
           </TouchableOpacity>
-          <Text style={styles.changePhoto}>Change Profile Photo</Text>
+          <Text style={styles.changePhoto}>
+            {uploading ? "Uploading..." : "Change Profile Photo"}
+          </Text>
         </View>
 
         <View style={styles.form}>

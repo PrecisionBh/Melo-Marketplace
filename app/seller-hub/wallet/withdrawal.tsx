@@ -14,7 +14,9 @@ import {
 
 import AppHeader from "@/components/app-header"
 import { useAuth } from "@/context/AuthContext"
+import { handleAppError } from "@/lib/errors/appError"
 import { supabase } from "@/lib/supabase"
+
 
 
 /* ---------------- TYPES ---------------- */
@@ -45,19 +47,30 @@ export default function WithdrawalScreen() {
   /* ---------------- LOAD WALLET ---------------- */
 
   const loadWallet = async () => {
-    const { data, error } = await supabase
-      .from("wallets")
-      .select("available_balance_cents")
-      .eq("user_id", session!.user.id)
-      .single()
+    try {
+      const { data, error } = await supabase
+        .from("wallets")
+        .select("available_balance_cents")
+        .eq("user_id", session!.user.id)
+        .single()
 
-    if (error) {
-      Alert.alert("Error", "Failed to load wallet")
+      if (error) {
+        handleAppError(error, {
+          context: "withdrawal_load_wallet",
+          fallbackMessage: "Failed to load wallet. Please try again.",
+        })
+        router.back()
+        return
+      }
+
+      setWallet(data)
+    } catch (err) {
+      handleAppError(err, {
+        context: "withdrawal_load_wallet_catch",
+        fallbackMessage: "Failed to load wallet. Please try again.",
+      })
       router.back()
-      return
     }
-
-    setWallet(data)
   }
 
   useEffect(() => {
@@ -93,40 +106,49 @@ export default function WithdrawalScreen() {
   const handleWithdraw = async () => {
     if (!isValidAmount || withdrawing) return
 
-    setWithdrawing(true)
+    try {
+      setWithdrawing(true)
 
-    const amount_cents = Math.round(numericAmount * 100)
+      const amount_cents = Math.round(numericAmount * 100)
 
-    const { error } = await supabase.functions.invoke(
-      "execute-withdrawal",
-      {
-        body: {
-          user_id: session!.user.id,
-          amount_cents,
-          payout_type: payoutType,
-        },
-      }
-    )
-
-    setWithdrawing(false)
-
-    if (error) {
-      Alert.alert(
-        "Withdrawal failed",
-        error.message || "Something went wrong"
+      const { error } = await supabase.functions.invoke(
+        "execute-withdrawal",
+        {
+          body: {
+            user_id: session!.user.id,
+            amount_cents,
+            payout_type: payoutType,
+          },
+        }
       )
-      return
+
+      if (error) {
+        handleAppError(error, {
+          context: "withdrawal_execute_function",
+          fallbackMessage: "Withdrawal failed. Please try again.",
+        })
+        setWithdrawing(false)
+        return
+      }
+
+      setWithdrawing(false)
+
+      Alert.alert(
+        "Success",
+        payoutType === "instant"
+          ? "Your instant payout is processing."
+          : "Your payout will arrive in 3–5 business days."
+      )
+
+      await loadWallet()
+      router.back()
+    } catch (err) {
+      setWithdrawing(false)
+      handleAppError(err, {
+        context: "withdrawal_handle_withdraw_catch",
+        fallbackMessage: "Withdrawal failed. Please try again.",
+      })
     }
-
-    Alert.alert(
-      "Success",
-      payoutType === "instant"
-        ? "Your instant payout is processing."
-        : "Your payout will arrive in 3–5 business days."
-    )
-
-    await loadWallet()
-    router.back()
   }
 
   /* ---------------- UI ---------------- */

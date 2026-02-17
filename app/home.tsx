@@ -16,8 +16,10 @@ import ListingsGrid from "../components/home/ListingsGrid"
 import SearchBar from "../components/home/SearchBar"
 
 import { Listing } from "../components/home/ListingCard"
+import { handleAppError } from "../lib/errors/appError"
 import { registerForPushNotifications } from "../lib/notifications"
 import { supabase } from "../lib/supabase"
+
 
 /* ---------------- CATEGORY MAPS ---------------- */
 
@@ -112,10 +114,9 @@ export default function HomeScreen() {
         .order("created_at", { ascending: false })
 
       if (error) {
-        console.error("Load listings error:", error)
-        setLoading(false)
-        return
-      }
+  throw error
+}
+
 
       const rows = (data ?? []) as ListingRow[]
 
@@ -190,10 +191,14 @@ export default function HomeScreen() {
 
       setListings(normalized)
     } catch (err) {
-      console.error("Load listings error:", err)
-    } finally {
-      setLoading(false)
-    }
+  handleAppError(err, {
+    fallbackMessage:
+      "Failed to load listings. Please refresh and try again.",
+  })
+} finally {
+  setLoading(false)
+}
+
   }
 
   const refreshListings = async () => {
@@ -204,18 +209,21 @@ export default function HomeScreen() {
 
   /* ---------------- PUSH TOKEN SETUP ---------------- */
 
-  async function setupPushTokenIfNeeded() {
+ async function setupPushTokenIfNeeded() {
+  try {
     const {
       data: { user },
     } = await supabase.auth.getUser()
 
     if (!user) return
 
-    const { data: profile } = await supabase
+    const { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select("expo_push_token")
       .eq("id", user.id)
       .single()
+
+    if (profileError) throw profileError
 
     if (profile?.expo_push_token) return
 
@@ -235,18 +243,26 @@ export default function HomeScreen() {
     const token = await registerForPushNotifications()
     if (!token) return
 
-    await supabase
+    const { error: updateError } = await supabase
       .from("profiles")
       .update({
         expo_push_token: token,
         notifications_enabled: true,
       })
       .eq("id", user.id)
+
+    if (updateError) throw updateError
+  } catch (err) {
+    console.error("Push setup error:", err)
+    // Silent fail on purpose (do NOT annoy user on home load)
   }
+}
+
 
   /* ---------------- UNREAD MESSAGES ---------------- */
 
-  async function checkUnreadMessages() {
+async function checkUnreadMessages() {
+  try {
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -256,18 +272,23 @@ export default function HomeScreen() {
       return
     }
 
-    const { count } = await supabase
+    const { count, error } = await supabase
       .from("messages")
       .select("id", { count: "exact", head: true })
       .neq("sender_id", user.id)
       .is("read_at", null)
 
+    if (error) throw error
+
     setHasUnreadMessages(!!count && count > 0)
+  } catch (err) {
+    console.error("Unread messages check error:", err)
+    setHasUnreadMessages(false) // Fail safe UI
   }
+}
 
-  /* ---------------- UNREAD NOTIFICATIONS ---------------- */
-
-  async function checkUnreadNotifications() {
+async function checkUnreadNotifications() {
+  try {
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -277,14 +298,21 @@ export default function HomeScreen() {
       return
     }
 
-    const { count } = await supabase
+    const { count, error } = await supabase
       .from("notifications")
       .select("id", { count: "exact", head: true })
       .eq("user_id", user.id)
       .eq("read", false)
 
+    if (error) throw error
+
     setHasUnreadNotifications(!!count && count > 0)
+  } catch (err) {
+    console.error("Unread notifications error:", err)
+    setHasUnreadNotifications(false) // Never break header UI
   }
+}
+
 
   /* ---------------- FILTERING ---------------- */
 

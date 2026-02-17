@@ -1,6 +1,8 @@
 import { Ionicons } from "@expo/vector-icons"
 import { useRouter } from "expo-router"
+import { useState } from "react"
 import {
+  ActivityIndicator,
   Alert,
   StyleSheet,
   Text,
@@ -9,12 +11,16 @@ import {
 } from "react-native"
 
 import AppHeader from "@/components/app-header"
+import { handleAppError } from "../lib/errors/appError"
 import { supabase } from "../lib/supabase"
 
 export default function SettingsScreen() {
   const router = useRouter()
+  const [loggingOut, setLoggingOut] = useState(false)
 
-  const handleLogout = async () => {
+  const handleLogout = () => {
+    if (loggingOut) return
+
     Alert.alert(
       "Log out",
       "Are you sure you want to log out?",
@@ -23,13 +29,32 @@ export default function SettingsScreen() {
         {
           text: "Log out",
           style: "destructive",
-          onPress: async () => {
-            await supabase.auth.signOut()
-            router.replace("/signinscreen")
-          },
+          onPress: performLogout,
         },
       ]
     )
+  }
+
+  const performLogout = async () => {
+    try {
+      setLoggingOut(true)
+
+      const { error } = await supabase.auth.signOut()
+
+      if (error) {
+        throw error
+      }
+
+      // Hard reset navigation stack (safer than push/back)
+      router.replace("/signinscreen")
+    } catch (err) {
+      handleAppError(err, {
+        fallbackMessage:
+          "Failed to log out. Please check your connection and try again.",
+      })
+    } finally {
+      setLoggingOut(false)
+    }
   }
 
   return (
@@ -77,15 +102,26 @@ export default function SettingsScreen() {
       {/* LOGOUT */}
       <View style={styles.content}>
         <TouchableOpacity
-          style={styles.logoutBtn}
+          style={[
+            styles.logoutBtn,
+            loggingOut && { opacity: 0.6 },
+          ]}
           onPress={handleLogout}
+          disabled={loggingOut}
+          activeOpacity={0.9}
         >
-          <Ionicons
-            name="log-out-outline"
-            size={20}
-            color="#fff"
-          />
-          <Text style={styles.logoutText}>Log out</Text>
+          {loggingOut ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <>
+              <Ionicons
+                name="log-out-outline"
+                size={20}
+                color="#fff"
+              />
+              <Text style={styles.logoutText}>Log out</Text>
+            </>
+          )}
         </TouchableOpacity>
       </View>
     </View>
@@ -104,7 +140,11 @@ function SettingsItem({
   onPress: () => void
 }) {
   return (
-    <TouchableOpacity style={styles.item} onPress={onPress}>
+    <TouchableOpacity
+      style={styles.item}
+      onPress={onPress}
+      activeOpacity={0.7}
+    >
       <Ionicons name={icon} size={20} color="#0F1E17" />
       <Text style={styles.itemText}>{label}</Text>
       <Ionicons

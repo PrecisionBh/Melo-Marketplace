@@ -2,14 +2,15 @@ import * as Linking from "expo-linking"
 import { useRouter } from "expo-router"
 import { useEffect, useState } from "react"
 import {
-    ActivityIndicator,
-    Alert,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native"
+import { handleAppError } from "../lib/errors/appError"
 import { supabase } from "../lib/supabase"
 
 export default function ResetPasswordScreen() {
@@ -26,38 +27,34 @@ export default function ResetPasswordScreen() {
     confirmPassword.length >= 6 &&
     password === confirmPassword
 
-  // 🔥 CRITICAL: Capture tokens from deep link and set Supabase session (ANDROID SAFE)
+  /* ---------------- DEEP LINK SESSION HANDLING (PRODUCTION SAFE) ---------------- */
+
   useEffect(() => {
-    const handleDeepLink = async () => {
+    let subscription: any
+
+    const processUrl = async (url: string | null) => {
       try {
-        const url = await Linking.getInitialURL()
-
         if (!url) {
-          console.warn("No deep link URL found")
           setSessionReady(true)
           return
         }
 
-        console.log("Deep link URL:", url)
-
-        // Supabase recovery tokens come AFTER the # (hash), not in query
-        let fragment = ""
+        // Supabase recovery tokens are in the HASH fragment
         const hashIndex = url.indexOf("#")
-        if (hashIndex !== -1) {
-          fragment = url.substring(hashIndex + 1)
-        }
-
-        if (!fragment) {
-          console.warn("No fragment found in deep link")
+        if (hashIndex === -1) {
           setSessionReady(true)
           return
         }
 
-        // Manually parse params (fixes URLSearchParams errors in RN)
-        const pairs = fragment.split("&")
-        const params: Record<string, string> = {}
+        const fragment = url.substring(hashIndex + 1)
+        if (!fragment) {
+          setSessionReady(true)
+          return
+        }
 
-        pairs.forEach((pair) => {
+        // Manual parsing (React Native safe)
+        const params: Record<string, string> = {}
+        fragment.split("&").forEach((pair) => {
           const [key, value] = pair.split("=")
           if (key && value) {
             params[key] = decodeURIComponent(value)
@@ -68,55 +65,93 @@ export default function ResetPasswordScreen() {
         const refresh_token = params["refresh_token"]
 
         if (access_token && refresh_token) {
-          console.log("Setting Supabase recovery session...")
-
           const { error } = await supabase.auth.setSession({
             access_token,
             refresh_token,
           })
 
           if (error) {
-            console.error("Session set error:", error)
-            Alert.alert("Session Error", error.message)
-          } else {
-            console.log("Recovery session set successfully ✅")
+            throw error
           }
-        } else {
-          console.warn("Missing tokens in deep link")
         }
       } catch (err) {
-        console.error("Deep link handling error:", err)
+        handleAppError(err, {
+          context: "password_reset_session",
+          fallbackMessage:
+            "This reset link may have expired. Please request a new one.",
+        })
       } finally {
         setSessionReady(true)
       }
     }
 
-    handleDeepLink()
+    const init = async () => {
+      const initialUrl = await Linking.getInitialURL()
+      await processUrl(initialUrl)
+    }
+
+    init()
+
+    // Listen for incoming links while app is open (important for Android)
+    subscription = Linking.addEventListener("url", ({ url }) => {
+      processUrl(url)
+    })
+
+    return () => {
+      subscription?.remove?.()
+    }
   }, [])
+
+  /* ---------------- RESET PASSWORD ---------------- */
 
   const handleResetPassword = async () => {
     if (!isValid || loading) return
 
-    setLoading(true)
+    try {
+      setLoading(true)
 
-    const { error } = await supabase.auth.updateUser({
-      password,
-    })
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
 
-    setLoading(false)
+      if (!session) {
+        Alert.alert(
+          "Session Expired",
+          "Your reset session expired. Please request a new password reset link."
+        )
+        return
+      }
 
-    if (error) {
-      Alert.alert("Reset Failed", error.message)
-      return
+      const { error } = await supabase.auth.updateUser({
+        password,
+      })
+
+      if (error) {
+        throw error
+      }
+
+      Alert.alert(
+        "Password Updated",
+        "Your password has been successfully changed. Please sign in.",
+        [
+          {
+            text: "OK",
+            onPress: () => router.replace("/signinscreen"),
+          },
+        ]
+      )
+    } catch (err) {
+      handleAppError(err, {
+        context: "password_reset",
+        fallbackMessage:
+          "Failed to update password. Please try the reset link again.",
+      })
+    } finally {
+      setLoading(false)
     }
-
-    Alert.alert(
-      "Password Updated",
-      "Your password has been successfully changed. Please sign in."
-    )
-
-    router.replace("/signinscreen")
   }
+
+  /* ---------------- LOADING STATE ---------------- */
 
   if (!sessionReady) {
     return (
@@ -126,14 +161,14 @@ export default function ResetPasswordScreen() {
     )
   }
 
+  /* ---------------- UI ---------------- */
+
   return (
     <View style={styles.screen}>
       {/* BRANDING */}
       <View style={styles.branding}>
         <Text style={styles.brandTitle}>MELO</Text>
-        <Text style={styles.subtitle}>
-          Secure Password Reset
-        </Text>
+        <Text style={styles.subtitle}>Secure Password Reset</Text>
       </View>
 
       {/* CARD */}
@@ -147,6 +182,7 @@ export default function ResetPasswordScreen() {
           secureTextEntry={!showPassword}
           value={password}
           onChangeText={setPassword}
+          autoCapitalize="none"
         />
 
         <TextInput
@@ -156,10 +192,12 @@ export default function ResetPasswordScreen() {
           secureTextEntry={!showPassword}
           value={confirmPassword}
           onChangeText={setConfirmPassword}
+          autoCapitalize="none"
         />
 
         <TouchableOpacity
           onPress={() => setShowPassword((p) => !p)}
+          disabled={loading}
         >
           <Text style={styles.showText}>
             {showPassword ? "Hide Password" : "Show Password"}
@@ -167,9 +205,7 @@ export default function ResetPasswordScreen() {
         </TouchableOpacity>
 
         {confirmPassword.length > 0 && password !== confirmPassword && (
-          <Text style={styles.error}>
-            Passwords do not match
-          </Text>
+          <Text style={styles.error}>Passwords do not match</Text>
         )}
 
         <TouchableOpacity
@@ -183,9 +219,7 @@ export default function ResetPasswordScreen() {
           {loading ? (
             <ActivityIndicator color="#FFFFFF" />
           ) : (
-            <Text style={styles.buttonText}>
-              Update Password
-            </Text>
+            <Text style={styles.buttonText}>Update Password</Text>
           )}
         </TouchableOpacity>
       </View>
@@ -234,12 +268,6 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     textAlign: "center",
     color: "#2E5F4F",
-  },
-  infoText: {
-    textAlign: "center",
-    color: "#6B8F82",
-    marginBottom: 12,
-    fontWeight: "600",
   },
   input: {
     borderWidth: 1,

@@ -3,17 +3,17 @@ import { useLocalSearchParams, useRouter } from "expo-router"
 import { useEffect, useState } from "react"
 import {
   ActivityIndicator,
-  Alert,
   Image,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
+  View
 } from "react-native"
 
 import AppHeader from "@/components/app-header"
 import { useAuth } from "../context/AuthContext"
+import { handleAppError } from "../lib/errors/appError"
 import { supabase } from "../lib/supabase"
 
 
@@ -57,13 +57,28 @@ export default function CheckoutScreen() {
   /* ---------------- LOAD DATA ---------------- */
 
   useEffect(() => {
-    if (offerId) loadFromOffer()
-    else if (listingId) loadFromListing()
-    else setLoading(false)
-  }, [offerId, listingId])
+  if (!session?.user) {
+    handleAppError(new Error("Missing session"), {
+      context: "checkout_no_session",
+      silent: true,
+    })
+    setLoading(false)
+    return
+  }
+
+  if (offerId) loadFromOffer()
+  else if (listingId) loadFromListing()
+  else setLoading(false)
+}, [offerId, listingId, session])
+
 
   const loadFromOffer = async () => {
+  try {
     setLoading(true)
+
+    if (!offerId) {
+      throw new Error("Missing offerId")
+    }
 
     const { data, error } = await supabase
       .from("offers")
@@ -81,10 +96,9 @@ export default function CheckoutScreen() {
       .eq("id", offerId)
       .single<OfferWithListing>()
 
-    if (error || !data || !data.listing) {
-      Alert.alert("Error", "Offer not found.")
-      setLoading(false)
-      return
+    if (error) throw error
+    if (!data || !data.listing) {
+      throw new Error("Offer or listing not found")
     }
 
     setItem({
@@ -99,12 +113,24 @@ export default function CheckoutScreen() {
       shipping_price: Number(data.listing.shipping_price ?? 0),
       seller_id: data.seller_id,
     })
-
+  } catch (err) {
+    handleAppError(err, {
+      context: "checkout_load_offer",
+      fallbackMessage: "Failed to load checkout data.",
+    })
+  } finally {
     setLoading(false)
   }
+}
+
 
   const loadFromListing = async () => {
+  try {
     setLoading(true)
+
+    if (!listingId) {
+      throw new Error("Missing listingId")
+    }
 
     const { data, error } = await supabase
       .from("listings")
@@ -114,10 +140,9 @@ export default function CheckoutScreen() {
       .eq("id", listingId)
       .single()
 
-    if (error || !data) {
-      Alert.alert("Error", "Listing not found.")
-      setLoading(false)
-      return
+    if (error) throw error
+    if (!data) {
+      throw new Error("Listing not found")
     }
 
     setItem({
@@ -132,9 +157,16 @@ export default function CheckoutScreen() {
       shipping_price: Number(data.shipping_price ?? 0),
       seller_id: data.user_id,
     })
-
+  } catch (err) {
+    handleAppError(err, {
+      context: "checkout_load_listing",
+      fallbackMessage: "Failed to load listing.",
+    })
+  } finally {
     setLoading(false)
   }
+}
+
 
   /* ---------------- RENDER ---------------- */
 
