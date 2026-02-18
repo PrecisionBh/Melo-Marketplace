@@ -151,51 +151,75 @@ export default function SellerOrderDetailScreen() {
 
   /* ---------------- ACTIONS ---------------- */
 
-  /* ---------------- ACTIONS ---------------- */
-
 const handleCompleteReturn = async () => {
-  if (!order) {
+  if (!order || !session?.user?.id) {
     Alert.alert("Error", "Order data is missing.")
     return
   }
 
   try {
-    setSaving(true)
-
-    // Require return tracking before completion (safety)
-    if (!order.return_tracking_number) {
+    // 🔒 Safety: must have tracking before seller can confirm receipt
+    if (!order.return_tracking_number || !order.return_shipped_at) {
       Alert.alert(
         "Tracking Required",
-        "You can only complete the return after the buyer uploads return tracking."
+        "You can only complete the return after the buyer ships the item and uploads return tracking."
       )
       return
     }
 
-    const { error } = await supabase
-      .from("orders")
-      .update({
-        status: "returned",
-        return_received: true,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", order.id)
-
-    if (error) throw error
-
+    // 🔒 Confirm irreversible action (VERY important for refunds)
     Alert.alert(
-      "Return Completed",
-      "Return has been confirmed. Refund processing will now proceed."
-    )
+      "Confirm Return Received",
+      "By confirming, you are stating that you have received the returned item. This will automatically issue a refund to the buyer and cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Confirm & Refund",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              setSaving(true)
 
-    router.replace("/seller-hub/orders/orders-to-ship")
+              const { data, error } = await supabase.functions.invoke(
+                "return-order-refund",
+                {
+                  body: { order_id: order.id },
+                }
+              )
+
+              if (error) {
+                throw error
+              }
+
+              // Optional: refresh order from DB (recommended)
+              await loadOrder()
+
+              Alert.alert(
+                "Return Completed & Refunded",
+                "The return has been confirmed and the buyer has been refunded successfully."
+              )
+
+              // Route back to seller orders list (consistent with your app)
+              router.replace("/seller-hub/orders/orders-to-ship")
+            } catch (err) {
+              handleAppError(err, {
+                fallbackMessage:
+                  "Failed to process return refund. Please try again.",
+              })
+            } finally {
+              setSaving(false)
+            }
+          },
+        },
+      ]
+    )
   } catch (err) {
     handleAppError(err, {
       fallbackMessage: "Failed to complete return. Please try again.",
     })
-  } finally {
-    setSaving(false)
   }
 }
+
 
   const submitTracking = async () => {
     if (!order) {
@@ -471,7 +495,8 @@ const handleCompleteReturn = async () => {
 
             {/* RETURN ACTIONS (CRITICAL FOR MELO RETURN FLOW) */}
       {order.status === "return_processing" &&
-        order.return_tracking_number && (
+  order.return_tracking_number &&
+  !order.return_received && (
           <View style={styles.actionBar}>
             {/* COMPLETE RETURN (ISSUES REFUND AFTER RECEIPT) */}
             <TouchableOpacity

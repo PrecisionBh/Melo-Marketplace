@@ -95,10 +95,10 @@ export default function SellerDisputeIssuePage() {
     try {
       setSubmitting(true)
 
-      // Get order to verify seller ownership + fetch buyer
+      // Get order to verify seller ownership + fetch buyer + check return state
       const { data: order, error: orderError } = await supabase
         .from("orders")
-        .select("buyer_id, seller_id, is_disputed")
+        .select("buyer_id, seller_id, is_disputed, status")
         .eq("id", id)
         .single()
 
@@ -126,7 +126,7 @@ export default function SellerDisputeIssuePage() {
         return
       }
 
-      // Insert dispute (SELLER perspective)
+      /* ---------------- CREATE DISPUTE RECORD ---------------- */
       const { data: dispute, error: disputeError } = await supabase
         .from("disputes")
         .insert({
@@ -136,13 +136,14 @@ export default function SellerDisputeIssuePage() {
           reason,
           description,
           status: "issue_open",
+          created_at: new Date().toISOString(),
         })
         .select()
         .single()
 
       if (disputeError || !dispute) throw disputeError
 
-      // Upload evidence images (if any)
+      /* ---------------- UPLOAD EVIDENCE (OPTIONAL) ---------------- */
       if (images.length > 0) {
         const evidenceUrls = await uploadEvidenceImages(dispute.id)
 
@@ -154,28 +155,32 @@ export default function SellerDisputeIssuePage() {
         if (updateEvidenceError) throw updateEvidenceError
       }
 
-      // Notify BUYER (important difference from buyer flow)
+      /* ---------------- CRITICAL: HARD PAUSE ESCROW + RETURNS + CRON ---------------- */
+      const { error: orderUpdateError } = await supabase
+        .from("orders")
+        .update({
+          is_disputed: true,           // 🧊 Pauses ALL cron timers
+          status: "disputed",          // 🧾 Audit trail + freezes return/refund flow
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", id)
+
+      if (orderUpdateError) throw orderUpdateError
+
+      /* ---------------- NOTIFY BUYER ---------------- */
       await supabase.from("notifications").insert({
         user_id: order.buyer_id,
         type: "dispute_opened",
         title: "Return Dispute Opened",
         message:
-          "The seller has opened a dispute regarding the returned item. Please respond promptly.",
+          "The seller has opened a dispute regarding the returned item. Refund and escrow are paused pending admin review.",
         related_id: dispute.id,
         created_at: new Date().toISOString(),
       })
 
-      // Flag order as disputed (pauses refund logic)
-      const { error: orderUpdateError } = await supabase
-        .from("orders")
-        .update({ is_disputed: true })
-        .eq("id", id)
-
-      if (orderUpdateError) throw orderUpdateError
-
       Alert.alert(
         "Dispute Submitted",
-        "Your dispute has been submitted and the refund has been paused pending review."
+        "Your dispute has been submitted. Escrow, auto-refunds, and return timers are now paused pending admin review."
       )
 
       router.replace("/seller-hub/orders")

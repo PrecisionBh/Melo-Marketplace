@@ -146,11 +146,13 @@ export default function ReturnInitiateScreen() {
       const { error: updateError } = await supabase
         .from("orders")
         .update({
-          status: "return_processing",
-          return_reason: reason,
-          return_notes: notes.trim() || null,
-          return_requested_at: new Date().toISOString(),
-        })
+  status: "return_processing",
+  return_reason: reason,
+  return_notes: notes.trim() || null,
+  return_requested_at: new Date().toISOString(),
+  return_deadline: new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString(), // ⏰ 72 hour buyer timer
+})
+
         .eq("id", order.id)
         .eq("buyer_id", user.id)
 
