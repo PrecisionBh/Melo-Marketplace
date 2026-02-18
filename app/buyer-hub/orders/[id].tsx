@@ -344,6 +344,29 @@ const totalPaid = (order.amount_cents ?? 0) / 100
             </TouchableOpacity>
           )}
 
+          {/* START RETURN (NEW - SIMPLE MVP) */}
+{!isCompleted && ["shipped", "delivered"].includes(order.status) && (
+  <TouchableOpacity
+    style={styles.disputeBtn}
+    onPress={() =>
+      router.push({
+        pathname: "/buyer-hub/returns",
+        params: { orderId: order.id },
+      })
+    }
+  >
+    <Ionicons
+      name="return-down-back-outline"
+      size={18}
+      color="#fff"
+    />
+    <Text style={styles.disputeText}>
+      Start a Return
+    </Text>
+  </TouchableOpacity>
+)}
+
+
           {/* LEAVE REVIEW (ADDED - COMPLETED ONLY, NOT DISPUTED, ONE PER USER) */}
           {isCompleted && !order.is_disputed && !hasReviewed && (
             <TouchableOpacity

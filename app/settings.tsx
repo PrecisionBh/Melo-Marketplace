@@ -36,6 +36,8 @@ export default function SettingsScreen() {
   }
 
   const performLogout = async () => {
+    if (loggingOut) return
+
     try {
       setLoggingOut(true)
 
@@ -45,14 +47,17 @@ export default function SettingsScreen() {
         throw error
       }
 
-      // Hard reset navigation stack (safer than push/back)
-      router.replace("/signinscreen")
+      // Give Supabase a moment to fully clear session to prevent
+      // "Missing session" errors on mounted screens
+      setTimeout(() => {
+        // Hard reset navigation stack (safer than push/back)
+        router.replace("/signinscreen")
+      }, 50)
     } catch (err) {
       handleAppError(err, {
         fallbackMessage:
           "Failed to log out. Please check your connection and try again.",
       })
-    } finally {
       setLoggingOut(false)
     }
   }
