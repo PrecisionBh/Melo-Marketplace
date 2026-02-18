@@ -35,32 +35,31 @@ export default function SettingsScreen() {
     )
   }
 
-  const performLogout = async () => {
-    if (loggingOut) return
+ const performLogout = async () => {
+  if (loggingOut) return
 
-    try {
-      setLoggingOut(true)
+  try {
+    setLoggingOut(true)
 
-      const { error } = await supabase.auth.signOut()
+    // 🔒 FIRST: immediately navigate away from protected screens
+    router.replace("/signinscreen")
 
-      if (error) {
-        throw error
-      }
+    // 🔒 SECOND: sign out AFTER navigation so mounted screens unmount cleanly
+    const { error } = await supabase.auth.signOut()
 
-      // Give Supabase a moment to fully clear session to prevent
-      // "Missing session" errors on mounted screens
-      setTimeout(() => {
-        // Hard reset navigation stack (safer than push/back)
-        router.replace("/signinscreen")
-      }, 50)
-    } catch (err) {
-      handleAppError(err, {
-        fallbackMessage:
-          "Failed to log out. Please check your connection and try again.",
-      })
-      setLoggingOut(false)
+    if (error) {
+      throw error
     }
+
+  } catch (err) {
+    handleAppError(err, {
+      fallbackMessage:
+        "Failed to log out. Please check your connection and try again.",
+      context: "logout",
+    })
+    setLoggingOut(false)
   }
+}
 
   return (
     <View style={styles.screen}>

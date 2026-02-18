@@ -1,7 +1,7 @@
 import { notify } from "@/lib/notifications/notify"
 import { Ionicons } from "@expo/vector-icons"
-import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router"
-import { useCallback, useEffect, useState } from "react"
+import { useLocalSearchParams, useRouter } from "expo-router"
+import { useEffect, useState } from "react"
 import {
   ActivityIndicator,
   Alert,
@@ -71,74 +71,76 @@ export default function BuyerOrderDetailScreen() {
   // ADDED: review state (does not change existing logic)
   const [hasReviewed, setHasReviewed] = useState(false)
 
-  useEffect(() => {
-    if (id && session?.user?.id) loadOrder()
+   useEffect(() => {
+    if (id) loadOrder()
   }, [id])
 
   const loadOrder = async () => {
-    const { data, error } = await supabase
-      .from("orders")
-      .select(`
-        id,
-        buyer_id,
-        seller_id,
-        status,
-        amount_cents,
-        item_price_cents,
-        shipping_amount_cents,
-        tax_cents, 
-        buyer_fee_cents,
-        image_url,
-        tracking_url,
-        carrier,
-        completed_at,
-        is_disputed,
-        listing_snapshot
-      `)
-      .eq("id", id)
-      .single()
+    try {
+      if (!id) return
 
-    if (error) {
-  handleAppError(error, {
-    fallbackMessage: "Failed to load order details.",
-  })
-  router.replace("/buyer-hub/orders")
-  return
-}
+      // 🔐 FIX: get fresh user directly (prevents session hydration race)
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser()
 
-if (!data || data.buyer_id !== session!.user.id) {
-  router.replace("/buyer-hub/orders")
-  return
-}
-
-
-    setOrder(data)
-    setLoading(false)
-  }
-
-  // UPDATED: re-check review status every time screen comes back into focus (so button disappears after review)
-  useFocusEffect(
-    useCallback(() => {
-      const checkIfReviewed = async () => {
-        if (!order?.id || !session?.user?.id) return
-
-        const { data } = await supabase
-          .from("ratings")
-          .select("id")
-          .eq("order_id", order.id)
-          .eq("from_user_id", session.user.id)
-          .maybeSingle()
-
-        if (data) {
-          setHasReviewed(true)
-        } else {
-          setHasReviewed(false)
-        }
+      if (userError || !user) {
+        router.replace("/buyer-hub/orders")
+        return
       }
 
-      checkIfReviewed()
-    }, [order?.id, session?.user?.id])
-  )
+      const { data, error } = await supabase
+        .from("orders")
+        .select(`
+          id,
+          buyer_id,
+          seller_id,
+          status,
+          amount_cents,
+          item_price_cents,
+          shipping_amount_cents,
+          tax_cents, 
+          buyer_fee_cents,
+          image_url,
+          tracking_url,
+          carrier,
+          completed_at,
+          is_disputed,
+          listing_snapshot
+        `)
+        .eq("id", id)
+        .single()
+
+      if (error) {
+        handleAppError(error, {
+          fallbackMessage: "Failed to load order details.",
+        })
+        router.replace("/buyer-hub/orders")
+        return
+      }
+
+      // 🔒 FIX: hydration-safe ownership check (was using session!.user.id)
+      if (!data || data.buyer_id !== user.id) {
+        console.log("[ORDER ACCESS BLOCKED]", {
+          orderBuyer: data?.buyer_id,
+          currentUser: user.id,
+          orderId: id,
+        })
+        router.replace("/buyer-hub/orders")
+        return
+      }
+
+      setOrder(data)
+    } catch (err) {
+      handleAppError(err, {
+        fallbackMessage: "Unexpected error loading order details.",
+      })
+      router.replace("/buyer-hub/orders")
+    } finally {
+      setLoading(false)
+    }
+  }
 
   /* ---------------- ACTIONS ---------------- */
 

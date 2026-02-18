@@ -52,6 +52,16 @@ function getUserFriendlyMessage(error: any, fallback?: string): string {
   const raw = normalized.message || ""
   const message = String(raw).toLowerCase()
 
+  // 🧠 CRITICAL FIX: Ignore intentional logout / navigation session loss
+  // This prevents scary alerts like:
+  // "Missing session" when user logs out (which is NORMAL behavior)
+  if (
+    message.includes("missing session") ||
+    message.includes("no session")
+  ) {
+    return "" // Silent UX (still logged in console for dev)
+  }
+
   // 💰 Wallet / Balance Errors
   if (
     message.includes("insufficient") ||
@@ -95,11 +105,10 @@ function getUserFriendlyMessage(error: any, fallback?: string): string {
     return "Server error. Please try again in a moment."
   }
 
-  // 🔐 Auth Errors
+  // 🔐 REAL Auth Errors (NOT logout)
   if (
     message.includes("auth") ||
     message.includes("jwt") ||
-    message.includes("session") ||
     message.includes("token has expired") ||
     message.includes("invalid login credentials")
   ) {
@@ -124,6 +133,7 @@ function getUserFriendlyMessage(error: any, fallback?: string): string {
  */
 export function handleAppError(error: any, options?: AppErrorOptions) {
   const normalized = normalizeError(error)
+  const messageLower = (normalized.message || "").toLowerCase()
 
   console.error("🚨 MELO APP ERROR:", {
     context: options?.context || "unknown",
@@ -132,10 +142,22 @@ export function handleAppError(error: any, options?: AppErrorOptions) {
     raw: error,
   })
 
-  const userMessage = getUserFriendlyMessage(error, options?.fallbackMessage)
+  // 🧠 SECOND LAYER SAFETY:
+  // Completely suppress alerts for expected session loss (logout, deep link, nav reset)
+  if (
+    messageLower.includes("missing session") ||
+    messageLower.includes("no session")
+  ) {
+    return
+  }
 
   // Silent errors (background systems like wallet sync / polling)
   if (options?.silent) return
+
+  const userMessage = getUserFriendlyMessage(error, options?.fallbackMessage)
+
+  // If message is intentionally empty (like logout), do nothing
+  if (!userMessage) return
 
   // Prevent stacked Alert spam
   if (isShowingError) return

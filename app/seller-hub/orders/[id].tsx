@@ -101,20 +101,32 @@ export default function SellerOrderDetailScreen() {
   const [tracking, setTracking] = useState("")
   const [saving, setSaving] = useState(false)
 
-  useEffect(() => {
-    if (id && session?.user?.id) {
+    useEffect(() => {
+    if (id) {
       loadOrder()
     }
-  }, [id, session?.user?.id])
+  }, [id])
 
   const loadOrder = async () => {
     try {
-      if (!id || !session?.user?.id) {
+      if (!id) {
         setLoading(false)
         return
       }
 
       setLoading(true)
+
+      // 🔐 CRITICAL FIX: Get fresh auth user (prevents hydration race)
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser()
+
+      if (userError || !user) {
+        Alert.alert("Access denied", "You must be signed in.")
+        router.back()
+        return
+      }
 
       const { data, error } = await supabase
         .from("orders")
@@ -130,7 +142,13 @@ export default function SellerOrderDetailScreen() {
         return
       }
 
-      if (data.seller_id !== session.user.id) {
+      // 🔒 HYDRATION-SAFE SELLER OWNERSHIP CHECK
+      if (data.seller_id !== user.id) {
+        console.log("[SELLER ORDER ACCESS BLOCKED]", {
+          orderSeller: data.seller_id,
+          currentUser: user.id,
+          orderId: id,
+        })
         Alert.alert("Access denied")
         router.back()
         return
@@ -148,6 +166,7 @@ export default function SellerOrderDetailScreen() {
       setLoading(false)
     }
   }
+
 
   /* ---------------- ACTIONS ---------------- */
 
