@@ -30,7 +30,9 @@ type OrderStatus =
   | "delivered"
   | "issue_open"
   | "disputed"
+  | "return_processing"
   | "completed"
+
 
 type Order = {
   id: string
@@ -63,6 +65,8 @@ export default function BuyerOrderDetailScreen() {
   const [loading, setLoading] = useState(true)
   const [confirmVisible, setConfirmVisible] = useState(false)
   const [processing, setProcessing] = useState(false)
+  const [cancelReturnVisible, setCancelReturnVisible] = useState(false)
+
 
   // ADDED: review state (does not change existing logic)
   const [hasReviewed, setHasReviewed] = useState(false)
@@ -159,7 +163,6 @@ if (!data || data.buyer_id !== session!.user.id) {
   return
 }
 
-
     setConfirmVisible(false)
     setProcessing(false)
 
@@ -231,11 +234,65 @@ if (!data || data.buyer_id !== session!.user.id) {
     )
   }
 
+  // NEW: Cancel Return (only for return_processing)
+  const cancelReturn = async () => {
+    if (!order || processing) return
+
+    Alert.alert(
+      "Cancel Return?",
+      "Are you sure you want to cancel the return? This will complete the order and can't be undone.",
+      [
+        { text: "Go Back", style: "cancel" },
+        {
+          text: "Yes, Cancel Return",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              setProcessing(true)
+
+              const { error } = await supabase.functions.invoke(
+                "cancel-return-complete-order",
+                {
+                  body: {
+                    order_id: order.id,
+                  },
+                }
+              )
+
+              if (error) {
+                handleAppError(error, {
+                  fallbackMessage: "Failed to cancel the return.",
+                })
+                setProcessing(false)
+                return
+              }
+
+              Alert.alert(
+                "Return Cancelled",
+                "The return has been cancelled and the order is now completed."
+              )
+
+              await loadOrder()
+              setProcessing(false)
+            } catch (err) {
+              handleAppError(err, {
+                fallbackMessage:
+                  "Something went wrong cancelling the return.",
+              })
+              setProcessing(false)
+            }
+          },
+        },
+      ]
+    )
+  }
+
   if (loading || !order) {
     return <ActivityIndicator style={{ marginTop: 60 }} />
   }
 
   const isCompleted = order.status === "completed"
+  const isReturnProcessing = order.status === "return_processing"
 
   const canTrack =
     !!order.tracking_url &&
@@ -366,6 +423,46 @@ const totalPaid = (order.amount_cents ?? 0) / 100
   </TouchableOpacity>
 )}
 
+          {/* RETURN PROCESSING ACTIONS (BUYER ONLY) */}
+          {!isCompleted && isReturnProcessing && (
+            <>
+              <TouchableOpacity
+                style={styles.trackBtn}
+                onPress={() =>
+                  router.push({
+                    pathname: "/buyer-hub/returns/tracking",
+                    params: { orderId: order.id },
+                  })
+                }
+              >
+                <Ionicons name="barcode-outline" size={18} color="#fff" />
+                <Text style={styles.trackText}>Add Return Tracking</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={{
+                  marginTop: 14,
+                  backgroundColor: "#D64545",
+                  height: 46,
+                  borderRadius: 23,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+                onPress={cancelReturn}
+                disabled={processing}
+              >
+                <Text
+                  style={{
+                    color: "#fff",
+                    fontWeight: "900",
+                    fontSize: 14,
+                  }}
+                >
+                  {processing ? "Processing…" : "Cancel Return"}
+                </Text>
+              </TouchableOpacity>
+            </>
+          )}
 
           {/* LEAVE REVIEW (ADDED - COMPLETED ONLY, NOT DISPUTED, ONE PER USER) */}
           {isCompleted && !order.is_disputed && !hasReviewed && (
@@ -379,7 +476,6 @@ const totalPaid = (order.amount_cents ?? 0) / 100
               <Text style={styles.reviewText}>Leave a Review</Text>
             </TouchableOpacity>
           )}
-
 
           {/* CANCEL ORDER (BEFORE SHIPMENT ONLY) */}
           {!isCompleted && canCancel && (

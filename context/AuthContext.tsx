@@ -1,5 +1,6 @@
 import { Session } from "@supabase/supabase-js"
-import { createContext, useContext, useEffect, useState } from "react"
+import React, { createContext, useContext, useEffect, useState } from "react"
+import { ActivityIndicator, StyleSheet, View } from "react-native"
 import { supabase } from "../lib/supabase"
 
 type AuthContextType = {
@@ -19,17 +20,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let mounted = true
 
-    // Restore session on app load
-    supabase.auth.getSession().then(({ data }) => {
+    console.log("[AUTH] Restoring session...")
+
+    // 🔒 Restore session on app load (CRITICAL FOR NO FLICKER)
+    supabase.auth.getSession().then(({ data, error }) => {
       if (!mounted) return
+
+      if (error) {
+        console.log("[AUTH] getSession error:", error.message)
+      }
+
+      console.log(
+        "[AUTH] Session restored:",
+        !!data.session,
+        data.session?.user?.id ?? "no-user"
+      )
+
       setSession(data.session)
       setLoading(false)
     })
 
-    // Listen for auth changes
+    // 🔁 Listen for login / logout changes
     const { data: listener } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        setSession(session)
+      (event, newSession) => {
+        console.log("[AUTH] Auth state changed:", event)
+        setSession(newSession)
       }
     )
 
@@ -39,6 +54,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
+  // 🚀 THIS IS THE FIX FOR YOUR FLASHING BUG
+  if (loading) {
+    console.log("[AUTH] Still loading session — blocking app render")
+
+    return (
+      <View style={styles.loaderScreen}>
+        <ActivityIndicator size="large" color="#7FAF9B" />
+      </View>
+    )
+  }
+
   return (
     <AuthContext.Provider value={{ session, loading }}>
       {children}
@@ -47,3 +73,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 }
 
 export const useAuth = () => useContext(AuthContext)
+
+const styles = StyleSheet.create({
+  loaderScreen: {
+    flex: 1,
+    backgroundColor: "#FFFFFF", // Matches your Melo login theme
+    justifyContent: "center",
+    alignItems: "center",
+  },
+})

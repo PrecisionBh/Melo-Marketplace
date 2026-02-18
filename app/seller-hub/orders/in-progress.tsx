@@ -17,7 +17,12 @@ import { supabase } from "@/lib/supabase"
 
 /* ---------------- TYPES ---------------- */
 
-type OrderStatus = "shipped" | "delivered" | "issue_reported"
+type OrderStatus =
+  | "shipped"
+  | "delivered"
+  | "issue_reported"
+  | "return_processing" // ← ADD THIS
+
 
 type Order = {
   id: string
@@ -75,7 +80,7 @@ export default function SellerInProgressOrdersScreen() {
           listing_snapshot
         `)
         .eq("seller_id", sellerId)
-        .in("status", ["shipped", "delivered", "issue_reported"])
+        .in("status", ["shipped", "delivered", "issue_reported", "return_processing"])
         .order("created_at", { ascending: false })
 
       if (error) throw error
@@ -139,37 +144,45 @@ export default function SellerInProgressOrdersScreen() {
 
                 {/* INFO */}
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.cardTitle} numberOfLines={2}>
-                    {item.listing_snapshot?.title ??
-                      `Order #${item.id.slice(0, 8)}`}
-                  </Text>
+  <Text style={styles.cardTitle} numberOfLines={2}>
+    {item.listing_snapshot?.title ??
+      `Order #${item.id.slice(0, 8)}`}
+  </Text>
 
-                  <Text style={styles.subText}>
-                    Buyer: {item.buyer_id?.slice(0, 8) ?? "Unknown"}
-                  </Text>
+  <Text style={styles.subText}>
+    Buyer: {item.buyer_id?.slice(0, 8) ?? "Unknown"}
+  </Text>
 
-                  <Text style={styles.subText}>
-                    ${(item.amount_cents / 100).toFixed(2)}
-                  </Text>
+  <Text style={styles.subText}>
+    ${(item.amount_cents / 100).toFixed(2)}
+  </Text>
 
-                  {item.status === "shipped" && (
-                    <Text style={styles.actionHint}>
-                      Shipped — awaiting delivery
-                    </Text>
-                  )}
+  {item.status === "shipped" && (
+    <Text style={styles.actionHint}>
+      Shipped — awaiting delivery
+    </Text>
+  )}
 
-                  {item.status === "delivered" && (
-                    <Text style={styles.actionHint}>
-                      Delivered — awaiting buyer completion
-                    </Text>
-                  )}
+  {item.status === "delivered" && (
+    <Text style={styles.actionHint}>
+      Delivered — awaiting buyer completion
+    </Text>
+  )}
 
-                  {item.status === "issue_reported" && (
-                    <Text style={styles.issueHint}>
-                      Buyer reported an issue
-                    </Text>
-                  )}
-                </View>
+  {item.status === "issue_reported" && (
+    <Text style={styles.issueHint}>
+      Buyer reported an issue
+    </Text>
+  )}
+
+  {item.status === "return_processing" && (
+    <Text style={styles.issueHint}>
+      Return in progress — awaiting buyer shipment
+    </Text>
+  )}
+</View>
+
+
 
                 <StatusBadge status={item.status} />
               </TouchableOpacity>
@@ -185,10 +198,12 @@ export default function SellerInProgressOrdersScreen() {
 
 function StatusBadge({ status }: { status: OrderStatus }) {
   const map: Record<OrderStatus, string> = {
-    shipped: "#9B51E0",
-    delivered: "#27AE60",
-    issue_reported: "#EB5757",
-  }
+  shipped: "#9B51E0",
+  delivered: "#27AE60",
+  issue_reported: "#EB5757",
+  return_processing: "#F2994A", // Orange = active return state
+}
+
 
   return (
     <View style={[styles.badge, { backgroundColor: map[status] }]}>

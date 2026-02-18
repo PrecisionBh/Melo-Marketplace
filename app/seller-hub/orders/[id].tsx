@@ -5,6 +5,7 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Linking,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,6 +13,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native"
+
 
 import AppHeader from "@/components/app-header"
 import { useAuth } from "@/context/AuthContext"
@@ -21,13 +23,20 @@ import { supabase } from "@/lib/supabase"
 
 /* ---------------- TYPES ---------------- */
 
-type OrderStatus = "paid" | "shipped" | "delivered" | "completed"
+type OrderStatus =
+  | "paid"
+  | "shipped"
+  | "delivered"
+  | "return_processing"
+  | "completed"
+
 
 type Order = {
   id: string
   seller_id: string
   buyer_id: string
-  status: OrderStatus
+  status: OrderStatus | string
+
 
   // 💰 NEW: Proper ledger fields (source of truth)
   amount_cents: number
@@ -49,7 +58,17 @@ type Order = {
   shipping_state: string | null
   shipping_postal_code: string | null
   shipping_country: string | null
+
+  return_reason: string | null
+  return_notes: string | null
+  return_requested_at: string | null
+  return_tracking_number: string | null
+  return_tracking_url: string | null
+  return_shipped_at: string | null
+  return_deadline: string | null
+  return_received: boolean | null
 }
+
 
 /* ---------------- HELPERS ---------------- */
 
@@ -88,119 +107,162 @@ export default function SellerOrderDetailScreen() {
     }
   }, [id, session?.user?.id])
 
- const loadOrder = async () => {
-  try {
-    if (!id || !session?.user?.id) {
+  const loadOrder = async () => {
+    try {
+      if (!id || !session?.user?.id) {
+        setLoading(false)
+        return
+      }
+
+      setLoading(true)
+
+      const { data, error } = await supabase
+        .from("orders")
+        .select("*")
+        .eq("id", id)
+        .single()
+
+      if (error) throw error
+
+      if (!data) {
+        Alert.alert("Order not found")
+        router.back()
+        return
+      }
+
+      if (data.seller_id !== session.user.id) {
+        Alert.alert("Access denied")
+        router.back()
+        return
+      }
+
+      setOrder(data)
+      setCarrier(data.carrier ?? "")
+      setTracking(data.tracking_number ?? "")
+    } catch (err) {
+      handleAppError(err, {
+        fallbackMessage: "Failed to load order details.",
+      })
+      router.back()
+    } finally {
       setLoading(false)
-      return
     }
-
-    setLoading(true)
-
-    const { data, error } = await supabase
-      .from("orders")
-      .select("*")
-      .eq("id", id)
-      .single()
-
-    if (error) throw error
-
-    if (!data) {
-      Alert.alert("Order not found")
-      router.back()
-      return
-    }
-
-    if (data.seller_id !== session.user.id) {
-      Alert.alert("Access denied")
-      router.back()
-      return
-    }
-
-    setOrder(data)
-    setCarrier(data.carrier ?? "")
-    setTracking(data.tracking_number ?? "")
-  } catch (err) {
-    handleAppError(err, {
-      fallbackMessage: "Failed to load order details.",
-    })
-    router.back()
-  } finally {
-    setLoading(false)
   }
-}
-
 
   /* ---------------- ACTIONS ---------------- */
 
-  const submitTracking = async () => {
-  if (!order) {
-    Alert.alert("Error", "Order data is missing. Please reload.")
-    return
-  }
+  /* ---------------- ACTIONS ---------------- */
 
-  if (!carrier || !tracking) {
-    Alert.alert("Missing info", "Please select a carrier and enter tracking.")
+const handleCompleteReturn = async () => {
+  if (!order) {
+    Alert.alert("Error", "Order data is missing.")
     return
   }
 
   try {
     setSaving(true)
 
-    const trackingUrl = buildTrackingUrl(carrier, tracking)
+    // Require return tracking before completion (safety)
+    if (!order.return_tracking_number) {
+      Alert.alert(
+        "Tracking Required",
+        "You can only complete the return after the buyer uploads return tracking."
+      )
+      return
+    }
 
     const { error } = await supabase
       .from("orders")
       .update({
-        carrier,
-        tracking_number: tracking,
-        tracking_url: trackingUrl,
-        status: "shipped",
-        shipped_at: new Date().toISOString(),
+        status: "returned",
+        return_received: true,
         updated_at: new Date().toISOString(),
       })
       .eq("id", order.id)
 
     if (error) throw error
 
-    try {
-      await notify({
-        userId: order.buyer_id,
-        type: "order",
-        title: "Order shipped",
-        body: "Your order has been shipped. Tracking information is now available.",
-        data: {
-          route: "/buyer-hub/orders/[id]",
-          params: { id: order.id },
-        },
-      })
-    } catch (notifyErr) {
-      // Do NOT block shipment if notification fails
-      handleAppError(notifyErr, {
-        fallbackMessage: "Order shipped, but notification failed.",
-      })
-    }
-
     Alert.alert(
-      "Order Shipped",
-      "Tracking has been added and the order is now in progress.",
-      [
-        {
-          text: "OK",
-          onPress: () =>
-            router.replace("/seller-hub/orders/orders-to-ship"),
-        },
-      ]
+      "Return Completed",
+      "Return has been confirmed. Refund processing will now proceed."
     )
+
+    router.replace("/seller-hub/orders/orders-to-ship")
   } catch (err) {
     handleAppError(err, {
-      fallbackMessage: "Failed to update tracking. Please try again.",
+      fallbackMessage: "Failed to complete return. Please try again.",
     })
   } finally {
     setSaving(false)
   }
 }
 
+  const submitTracking = async () => {
+    if (!order) {
+      Alert.alert("Error", "Order data is missing. Please reload.")
+      return
+    }
+
+    if (!carrier || !tracking) {
+      Alert.alert("Missing info", "Please select a carrier and enter tracking.")
+      return
+    }
+
+    try {
+      setSaving(true)
+
+      const trackingUrl = buildTrackingUrl(carrier, tracking)
+
+      const { error } = await supabase
+        .from("orders")
+        .update({
+          carrier,
+          tracking_number: tracking,
+          tracking_url: trackingUrl,
+          status: "shipped",
+          shipped_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", order.id)
+
+      if (error) throw error
+
+      try {
+        await notify({
+          userId: order.buyer_id,
+          type: "order",
+          title: "Order shipped",
+          body: "Your order has been shipped. Tracking information is now available.",
+          data: {
+            route: "/buyer-hub/orders/[id]",
+            params: { id: order.id },
+          },
+        })
+      } catch (notifyErr) {
+        handleAppError(notifyErr, {
+          fallbackMessage: "Order shipped, but notification failed.",
+        })
+      }
+
+      Alert.alert(
+        "Order Shipped",
+        "Tracking has been added and the order is now in progress.",
+        [
+          {
+            text: "OK",
+            onPress: () =>
+              router.replace("/seller-hub/orders/orders-to-ship"),
+          },
+        ]
+      )
+    } catch (err) {
+      handleAppError(err, {
+        fallbackMessage: "Failed to update tracking. Please try again.",
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
 
   if (loading) {
     return <ActivityIndicator style={{ marginTop: 80 }} />
@@ -208,16 +270,15 @@ export default function SellerOrderDetailScreen() {
 
   if (!order) return null
 
+  const isReturnProcessing = order.status === "return_processing"
+
   /* ---------------- MONEY (CORRECT LEDGER LOGIC) ---------------- */
 
-  // 🔐 Use DB snapshots — NEVER recompute from amount_cents
   const itemPrice = (order.item_price_cents ?? 0) / 100
   const shipping = (order.shipping_amount_cents ?? 0) / 100
   const tax = (order.tax_cents ?? 0) / 100
   const sellerFee = (order.seller_fee_cents ?? 0) / 100
   const sellerNet = (order.seller_net_cents ?? 0) / 100
-
-  // What the seller actually sold (item + shipping)
   const saleSubtotal = itemPrice + shipping
 
   /* ---------------- RENDER ---------------- */
@@ -226,13 +287,12 @@ export default function SellerOrderDetailScreen() {
     <View style={styles.screen}>
       {/* HEADER */}
       <AppHeader
-  title="Order"
-  backRoute="/seller-hub/orders/orders-to-ship"
-/>
-
+        title="Order"
+        backRoute="/seller-hub/orders/orders-to-ship"
+      />
 
       <ScrollView contentContainerStyle={styles.content}>
-        {/* PRODUCT */}
+        {/* PRODUCT (ALWAYS STAYS) */}
         <View style={styles.card}>
           {order.image_url && (
             <Image
@@ -254,86 +314,141 @@ export default function SellerOrderDetailScreen() {
           </View>
         </View>
 
-        {/* SHIPPING ADDRESS */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Ship To</Text>
-
-          <Text style={styles.addressText}>{order.shipping_name}</Text>
-          <Text style={styles.addressText}>{order.shipping_line1}</Text>
-          {order.shipping_line2 && (
-            <Text style={styles.addressText}>
-              {order.shipping_line2}
+        {/* RETURN STATUS CARD (SELLER VIEW) */}
+        {order.status === "return_processing" && (
+          <View style={styles.returnCard}>
+            <Text style={styles.returnTitle}>
+              Return in Progress
             </Text>
-          )}
-          <Text style={styles.addressText}>
-            {order.shipping_city}, {order.shipping_state}{" "}
-            {order.shipping_postal_code}
-          </Text>
-          <Text style={styles.addressText}>{order.shipping_country}</Text>
-        </View>
 
-        {/* TRACKING */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Tracking</Text>
+            {!order.return_tracking_number ? (
+              <>
+                <Text style={styles.returnText}>
+                  The buyer has initiated a return for this order.
+                </Text>
 
-          {order.status === "paid" ? (
-            <>
-              <View style={styles.carrierRow}>
-                {["USPS", "UPS", "FedEx", "DHL"].map((c) => (
-                  <TouchableOpacity
-                    key={c}
-                    style={[
-                      styles.carrierBtn,
-                      carrier === c && styles.carrierActive,
-                    ]}
-                    onPress={() => setCarrier(c)}
-                  >
-                    <Text
-                      style={[
-                        styles.carrierText,
-                        carrier === c &&
-                          styles.carrierTextActive,
-                      ]}
-                    >
-                      {c}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
+                <Text style={styles.returnSubText}>
+                  You are currently waiting for the buyer to ship the item back and upload return tracking. The buyer has 72 hours to provide return shipment details. Once tracking has been submitted, please allow up to 5 days for the item to arrive. If the item is not received within that timeframe, you should file a dispute to pause the refund.
+                </Text>
 
-              <TextInput
-                placeholder="Enter tracking number"
-                value={tracking}
-                onChangeText={setTracking}
-                style={styles.input}
+                <View style={styles.returnBadge}>
+                  <Text style={styles.returnBadgeText}>
+                    Waiting for Buyer Shipment
+                  </Text>
+                </View>
+              </>
+            ) : (
+              <>
+                <Text style={styles.returnText}>
+                  The buyer has shipped the return.
+                </Text>
+
+                <Text style={styles.returnSubText}>
+                  Please track the package and confirm once the item is received to issue the refund.
+                </Text>
+
+                <TouchableOpacity
+                  style={styles.trackReturnBtn}
+                  onPress={() => {
+                    if (order.return_tracking_url) {
+                      Linking.openURL(order.return_tracking_url)
+                    }
+                  }}
+                >
+                  <Text style={styles.trackReturnText}>
+                    Track Return Package
+                  </Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        )}
+
+        {/* ONLY SHOW NORMAL ORDER UI IF NOT IN RETURN */}
+        {!isReturnProcessing && (
+          <>
+            {/* SHIPPING ADDRESS */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Ship To</Text>
+
+              <Text style={styles.addressText}>{order.shipping_name}</Text>
+              <Text style={styles.addressText}>{order.shipping_line1}</Text>
+              {order.shipping_line2 && (
+                <Text style={styles.addressText}>
+                  {order.shipping_line2}
+                </Text>
+              )}
+              <Text style={styles.addressText}>
+                {order.shipping_city}, {order.shipping_state}{" "}
+                {order.shipping_postal_code}
+              </Text>
+              <Text style={styles.addressText}>{order.shipping_country}</Text>
+            </View>
+
+            {/* TRACKING */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Tracking</Text>
+
+              {order.status === "paid" ? (
+                <>
+                  <View style={styles.carrierRow}>
+                    {["USPS", "UPS", "FedEx", "DHL"].map((c) => (
+                      <TouchableOpacity
+                        key={c}
+                        style={[
+                          styles.carrierBtn,
+                          carrier === c && styles.carrierActive,
+                        ]}
+                        onPress={() => setCarrier(c)}
+                      >
+                        <Text
+                          style={[
+                            styles.carrierText,
+                            carrier === c &&
+                              styles.carrierTextActive,
+                          ]}
+                        >
+                          {c}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  <TextInput
+                    placeholder="Enter tracking number"
+                    value={tracking}
+                    onChangeText={setTracking}
+                    style={styles.input}
+                  />
+                </>
+              ) : (
+                <>
+                  <Text style={styles.infoText}>
+                    Carrier: {order.carrier}
+                  </Text>
+                  <Text style={styles.infoText}>
+                    Tracking: {order.tracking_number}
+                  </Text>
+                </>
+              )}
+            </View>
+
+            {/* RECEIPT */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Sale Breakdown</Text>
+
+              <Row label="Item Price" value={`$${itemPrice.toFixed(2)}`} />
+              <Row label="Shipping" value={`$${shipping.toFixed(2)}`} />
+              <Row label="Subtotal" value={`$${saleSubtotal.toFixed(2)}`} />
+              <Row label="Platform Fee (4%)" value={`-$${sellerFee.toFixed(2)}`} />
+              <Row
+                label="Your Payout"
+                value={`$${sellerNet.toFixed(2)}`}
+                bold
               />
-            </>
-          ) : (
-            <>
-              <Text style={styles.infoText}>
-                Carrier: {order.carrier}
-              </Text>
-              <Text style={styles.infoText}>
-                Tracking: {order.tracking_number}
-              </Text>
-            </>
-          )}
-        </View>
-
-        {/* RECEIPT (ACCOUNTING-CORRECT) */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Sale Breakdown</Text>
-
-          <Row label="Item Price" value={`$${itemPrice.toFixed(2)}`} />
-          <Row label="Shipping" value={`$${shipping.toFixed(2)}`} />
-          <Row label="Subtotal" value={`$${saleSubtotal.toFixed(2)}`} />
-          <Row label="Platform Fee (4%)" value={`-$${sellerFee.toFixed(2)}`} />
-          <Row
-            label="Your Payout"
-            value={`$${sellerNet.toFixed(2)}`}
-            bold
-          />
-        </View>
+            </View>
+          </>
+        )}
       </ScrollView>
 
       {/* ACTION BAR */}
@@ -342,25 +457,56 @@ export default function SellerOrderDetailScreen() {
           <TouchableOpacity
             style={[
               styles.primaryBtn,
-              (!carrier || !tracking) &&
-                styles.primaryDisabled,
+              (!carrier || !tracking) && styles.primaryDisabled,
             ]}
             disabled={!carrier || !tracking || saving}
             onPress={submitTracking}
           >
             <Text style={styles.primaryText}>
-              {saving
-                ? "Saving…"
-                : "Add Tracking & Mark Shipped"}
+              {saving ? "Saving…" : "Add Tracking & Mark Shipped"}
             </Text>
           </TouchableOpacity>
         </View>
       )}
+
+            {/* RETURN ACTIONS (CRITICAL FOR MELO RETURN FLOW) */}
+      {order.status === "return_processing" &&
+        order.return_tracking_number && (
+          <View style={styles.actionBar}>
+            {/* COMPLETE RETURN (ISSUES REFUND AFTER RECEIPT) */}
+            <TouchableOpacity
+              style={styles.primaryBtn}
+              disabled={saving}
+              onPress={handleCompleteReturn}
+            >
+              <Text style={styles.primaryText}>
+                {saving ? "Processing…" : "Complete Return"}
+              </Text>
+            </TouchableOpacity>
+
+            {/* FILE DISPUTE (SELLER SIDE - PAUSES REFUND) */}
+            <TouchableOpacity
+              style={styles.disputeBtn}
+              disabled={saving}
+              onPress={() =>
+                router.push({
+                  pathname: "/seller-hub/orders/disputes/dispute-issue",
+                  params: { id: order.id },
+                })
+              }
+            >
+              <Text style={styles.disputeText}>File a Dispute</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
     </View>
   )
 }
 
+
 /* ---------------- COMPONENTS ---------------- */
+
 
 function Row({
   label,
@@ -451,6 +597,16 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: "#E2EFE8",
+  },
+
+  /* 🆕 RETURN CARD (for return_processing state) */
+  returnCard: {
+    marginTop: 26,
+    backgroundColor: "#FFF7F7",
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#F1C6C6",
   },
 
   sectionTitle: {
@@ -572,4 +728,96 @@ const styles = StyleSheet.create({
     textAlign: "center",
     letterSpacing: 0.3,
   },
+
+    returnTitle: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#B54747",
+    marginBottom: 6,
+  },
+
+  returnText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#0F1E17",
+    marginBottom: 6,
+  },
+
+  returnSubText: {
+    fontSize: 13,
+    color: "#6B8F7D",
+    lineHeight: 18,
+    marginBottom: 14,
+  },
+
+  returnBadge: {
+    alignSelf: "flex-start",
+    backgroundColor: "#F4B4B4",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
+  },
+
+  returnBadgeText: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: "#7A1F1F",
+    letterSpacing: 0.4,
+  },
+
+  trackReturnBtn: {
+    marginTop: 6,
+    backgroundColor: "#7FAF9B",
+    height: 42,
+    borderRadius: 21,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  trackReturnText: {
+    color: "#fff",
+    fontWeight: "900",
+    fontSize: 13,
+  },
+
+  waitingCard: {
+  backgroundColor: "#FFFFFF",
+  borderRadius: 16,
+  padding: 16,
+  borderWidth: 1,
+  borderColor: "#E2EFE8",
+},
+
+waitingTitle: {
+  fontSize: 15,
+  fontWeight: "900",
+  color: "#0F1E17",
+  marginBottom: 6,
+},
+
+waitingText: {
+  fontSize: 13,
+  fontWeight: "600",
+  color: "#2E5F4F",
+  lineHeight: 18,
+},
+
+disputeBtn: {
+  marginTop: 12,
+  backgroundColor: "#FFF1F1",
+  borderWidth: 1,
+  borderColor: "#E5484D",
+  paddingVertical: 16,
+  borderRadius: 18,
+},
+
+disputeText: {
+  color: "#E5484D",
+  fontWeight: "900",
+  fontSize: 15,
+  textAlign: "center",
+  letterSpacing: 0.3,
+},
+
 })
+

@@ -19,6 +19,8 @@ import { supabase } from "@/lib/supabase"
 
 /* ---------------- TYPES ---------------- */
 
+/* ---------------- TYPES ---------------- */
+
 type OrderStatus =
   | "created"
   | "paid"
@@ -26,8 +28,10 @@ type OrderStatus =
   | "delivered"
   | "issue_open"
   | "disputed"
+  | "return_processing" // ADDED
   | "completed"
   | "cancelled" // added support (future safe)
+
 
 type Order = {
   id: string
@@ -72,7 +76,7 @@ export default function BuyerInProgressOrdersScreen() {
         listing_snapshot
       `)
       .eq("buyer_id", session!.user.id)
-      .in("status", ["paid", "shipped", "delivered", "disputed"])
+      .in("status", ["paid", "shipped", "delivered", "disputed", "return_processing"])
       .order("created_at", { ascending: false })
 
     if (error) {
@@ -202,6 +206,11 @@ function StatusBadge({ status }: { status: OrderStatus }) {
       label: "IN DISPUTE",
       color: "#EB5757",
     },
+
+    return_processing: {
+    label: "RETURN IN PROGRESS", // NEW (clear for buyers)
+    color: "#F2994A", // orange = action state (good UX)
+  },
     completed: {
       label: "COMPLETED",
       color: "#6FCF97",

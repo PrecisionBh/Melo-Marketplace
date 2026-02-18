@@ -51,7 +51,7 @@ const buildTrackingUrl = (carrier: string, tracking: string) => {
 /* ---------------- SCREEN ---------------- */
 
 export default function ReturnTrackingScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>()
+  const { orderId: id } = useLocalSearchParams<{ orderId: string }>()
   const router = useRouter()
   const { session } = useAuth()
 
@@ -199,7 +199,7 @@ export default function ReturnTrackingScreen() {
         [
           {
             text: "OK",
-            onPress: () => router.replace(`/orders/${order.id}` as any),
+            onPress: () => router.replace(`/buyer-hub/orders/${order.id}` as any),
           },
         ]
       )
@@ -228,7 +228,7 @@ export default function ReturnTrackingScreen() {
     <View style={styles.screen}>
       <AppHeader
   title="Return Tracking"
-  backRoute={`/orders/${order.id}` as any}
+  backRoute={`/buyer-hub/orders/${order.id}`}
 />
 
       <ScrollView contentContainerStyle={styles.content}>

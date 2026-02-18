@@ -15,7 +15,9 @@ import {
 
 import AppHeader from "@/components/app-header"
 import { useAuth } from "@/context/AuthContext"
+import { notify } from "@/lib/notifications/notify"
 import { supabase } from "@/lib/supabase"
+
 
 /* ---------------- TYPES ---------------- */
 
@@ -154,22 +156,26 @@ export default function ReturnInitiateScreen() {
 
       if (updateError) throw updateError
 
-      // Non-blocking seller notification
-      try {
-        await supabase.from("notifications").insert({
-          user_id: order.seller_id,
-          title: "Return Initiated",
-          body:
-            "A buyer has initiated a return. Please monitor the order for return tracking.",
-          type: "return",
-          reference_id: order.id,
-        })
-      } catch (notifyErr) {
-        console.warn(
-          "Notification insert failed (non-blocking):",
-          notifyErr
-        )
-      }
+// 🔔 Notify seller (use unified Melo notification system)
+try {
+  await notify({
+    userId: order.seller_id,
+    type: "order",
+    title: "Return Initiated",
+    body:
+      "The buyer has initiated a return. Please await the return shipment.",
+    data: {
+      route: "/seller-hub/orders/[id]",
+      params: { id: order.id },
+    },
+  })
+} catch (notifyErr) {
+  console.warn(
+    "Return notification failed (non-blocking):",
+    notifyErr
+  )
+}
+
 
       const redirectId = order.id
 
