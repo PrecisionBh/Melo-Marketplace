@@ -10,7 +10,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from "react-native"
 
@@ -24,15 +23,83 @@ type Dispute = {
   order_id: string
   buyer_id: string
   seller_id: string
+  opened_by: "buyer" | "seller" | null
   reason: string
   description: string
   evidence_urls: string[] | null
+  buyer_response: string | null
+  buyer_responded_at: string | null
+  seller_response: string | null
+  seller_responded_at: string | null
   status: string
   created_at: string
-  seller_responded_at: string | null
   resolved_at: string | null
   resolution: string | null
   admin_notes: string | null
+}
+
+/* ---------------- STATUS BADGE META (DB-ALIGNED) ---------------- */
+const getStatusMeta = (status: string, openedBy?: string | null) => {
+  switch (status) {
+    case "issue_open":
+      return {
+        label:
+          openedBy === "seller"
+            ? "Seller Dispute Open – Awaiting Review"
+            : "Buyer Dispute Open – Awaiting Review",
+        color: "#F2994A",
+        subtext:
+          "A dispute has been opened. Escrow, returns, and automated timers are paused pending admin review.",
+      }
+
+    case "buyer_responded":
+      return {
+        label: "Buyer Responded – Pending Review",
+        color: "#F2C94C",
+        subtext:
+          "The buyer has submitted their response and evidence. Awaiting admin review.",
+      }
+
+    case "seller_responded":
+      return {
+        label: "Seller Responded – Pending Review",
+        color: "#F2C94C",
+        subtext:
+          "The seller has submitted their response and evidence. Awaiting admin review.",
+      }
+
+    case "under_review":
+      return {
+        label: "Under Admin Review",
+        color: "#2F80ED",
+        subtext:
+          "An administrator is actively reviewing the dispute, evidence, and return details.",
+      }
+
+    case "resolved_buyer":
+      return {
+        label: "Resolved With Buyer",
+        color: "#EB5757",
+        subtext:
+          "This dispute was resolved in favor of the buyer. Funds and resolution were handled accordingly.",
+      }
+
+    case "resolved_seller":
+      return {
+        label: "Resolved With Seller",
+        color: "#27AE60",
+        subtext:
+          "This dispute was resolved in favor of the seller. Escrow and return outcome were finalized.",
+      }
+
+    default:
+      return {
+        label: "Dispute Active",
+        color: "#999999",
+        subtext:
+          "This dispute is currently active and pending further review.",
+      }
+  }
 }
 
 export default function SellerDisputeDetailPage() {
@@ -76,6 +143,7 @@ export default function SellerDisputeDetailPage() {
         return
       }
 
+      // 🔐 Only seller can view seller dispute page
       if (data.seller_id !== user.id) {
         router.back()
         return
@@ -89,22 +157,6 @@ export default function SellerDisputeDetailPage() {
       setDispute(null)
     } finally {
       setLoading(false)
-    }
-  }
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "issue_open":
-        return "#EB5757"
-      case "seller_responded":
-        return "#F2C94C"
-      case "under_review":
-        return "#2F80ED"
-      case "resolved_buyer":
-      case "resolved_seller":
-        return "#27AE60"
-      default:
-        return "#999"
     }
   }
 
@@ -124,12 +176,11 @@ export default function SellerDisputeDetailPage() {
     )
   }
 
+  const statusMeta = getStatusMeta(dispute.status, dispute.opened_by)
+
   return (
     <View style={styles.screen}>
-      <AppHeader
-        title="Dispute Details"
-        backRoute="/seller-hub/orders"
-      />
+      <AppHeader title="Dispute Details" backRoute="/seller-hub/orders" />
 
       <ScrollView contentContainerStyle={styles.container}>
         <Text style={styles.orderText}>
@@ -140,69 +191,71 @@ export default function SellerDisputeDetailPage() {
         <View
           style={[
             styles.statusBadge,
-            { backgroundColor: getStatusColor(dispute.status) },
+            { backgroundColor: statusMeta.color },
           ]}
         >
-          <Text style={styles.statusText}>
-            {dispute.status.replace("_", " ")}
+          <Text style={styles.statusText}>{statusMeta.label}</Text>
+        </View>
+
+        <Text style={styles.statusSubtext}>{statusMeta.subtext}</Text>
+
+        {/* WHO OPENED DISPUTE */}
+        <Text style={styles.sectionTitle}>Dispute Opened By</Text>
+        <View style={styles.card}>
+          <Text style={styles.infoStrong}>
+            {dispute.opened_by === "seller" ? "You (Seller)" : "Buyer"}
           </Text>
         </View>
 
-        {/* RESPOND BUTTON — ONLY IF ISSUE OPEN */}
-        {dispute.status === "issue_open" && (
-          <TouchableOpacity
-            style={styles.respondBtn}
-            onPress={() =>
-              router.push(
-                `/seller-hub/orders/${dispute.order_id}/dispute-issue`
-              )
-            }
-          >
-            <Text style={styles.respondText}>
-              Respond to Dispute
-            </Text>
-          </TouchableOpacity>
-        )}
-
-        {/* BUYER ISSUE */}
-        <Text style={styles.sectionTitle}>Buyer Issue</Text>
+        {/* ORIGINAL DISPUTE REASON */}
+        <Text style={styles.sectionTitle}>
+          {dispute.opened_by === "seller"
+            ? "Seller Dispute Reason"
+            : "Buyer Dispute Reason"}
+        </Text>
         <View style={styles.card}>
           <Text style={styles.reason}>{dispute.reason}</Text>
-          <Text style={styles.description}>
-            {dispute.description}
-          </Text>
+          <Text style={styles.description}>{dispute.description}</Text>
         </View>
 
-        {/* EVIDENCE */}
+        {/* ORIGINAL EVIDENCE */}
         {dispute.evidence_urls?.length ? (
           <>
-            <Text style={styles.sectionTitle}>Evidence</Text>
-            <ScrollView horizontal>
+            <Text style={styles.sectionTitle}>Submitted Evidence</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
               {dispute.evidence_urls.map((url) => (
-                <Image
-                  key={url}
-                  source={{ uri: url }}
-                  style={styles.image}
-                />
+                <Image key={url} source={{ uri: url }} style={styles.image} />
               ))}
             </ScrollView>
           </>
         ) : null}
 
+        {/* BUYER RESPONSE (NEW DB SUPPORT) */}
+        {dispute.buyer_response && (
+          <>
+            <Text style={styles.sectionTitle}>Buyer Response</Text>
+            <View style={styles.card}>
+              <Text style={styles.description}>
+                {dispute.buyer_response}
+              </Text>
+            </View>
+          </>
+        )}
+
         {/* TIMESTAMPS */}
-        <Text style={styles.sectionTitle}>Submitted</Text>
+        <Text style={styles.sectionTitle}>Dispute Submitted</Text>
         <Text style={styles.info}>
           {new Date(dispute.created_at).toLocaleString()}
         </Text>
 
-        {dispute.seller_responded_at && (
+        {dispute.buyer_responded_at && (
           <>
             <Text style={styles.sectionTitle}>
-              Seller Responded
+              Buyer Responded At
             </Text>
             <Text style={styles.info}>
               {new Date(
-                dispute.seller_responded_at
+                dispute.buyer_responded_at
               ).toLocaleString()}
             </Text>
           </>
@@ -210,9 +263,7 @@ export default function SellerDisputeDetailPage() {
 
         {dispute.resolution && (
           <>
-            <Text style={styles.sectionTitle}>
-              Resolution
-            </Text>
+            <Text style={styles.sectionTitle}>Final Resolution</Text>
             <Text style={styles.info}>
               {dispute.resolution.replace("_", " ")}
             </Text>
@@ -221,24 +272,16 @@ export default function SellerDisputeDetailPage() {
 
         {dispute.admin_notes && (
           <>
-            <Text style={styles.sectionTitle}>
-              Admin Notes
-            </Text>
-            <Text style={styles.info}>
-              {dispute.admin_notes}
-            </Text>
+            <Text style={styles.sectionTitle}>Admin Notes</Text>
+            <Text style={styles.info}>{dispute.admin_notes}</Text>
           </>
         )}
 
         {dispute.resolved_at && (
           <>
-            <Text style={styles.sectionTitle}>
-              Resolved At
-            </Text>
+            <Text style={styles.sectionTitle}>Resolved At</Text>
             <Text style={styles.info}>
-              {new Date(
-                dispute.resolved_at
-              ).toLocaleString()}
+              {new Date(dispute.resolved_at).toLocaleString()}
             </Text>
           </>
         )}
@@ -265,23 +308,33 @@ const styles = StyleSheet.create({
 
   statusBadge: {
     alignSelf: "flex-start",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    marginBottom: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 18,
+    marginBottom: 6,
   },
 
   statusText: {
     color: "#fff",
     fontSize: 12,
-    fontWeight: "800",
+    fontWeight: "900",
     textTransform: "capitalize",
   },
 
+  statusSubtext: {
+    marginBottom: 16,
+    color: "#6B7280",
+    fontSize: 13,
+    fontWeight: "600",
+    lineHeight: 18,
+  },
+
   sectionTitle: {
-    fontWeight: "800",
-    marginTop: 20,
+    fontWeight: "900",
+    fontSize: 15,
+    marginTop: 18,
     marginBottom: 8,
+    color: "#111827",
   },
 
   card: {
@@ -292,42 +345,40 @@ const styles = StyleSheet.create({
 
   reason: {
     fontWeight: "800",
+    fontSize: 14,
     marginBottom: 6,
   },
 
   description: {
     color: "#444",
+    fontSize: 14,
+    lineHeight: 20,
   },
 
   image: {
     width: 120,
     height: 120,
     borderRadius: 12,
-    marginRight: 8,
+    marginRight: 10,
   },
 
   info: {
     backgroundColor: "#fff",
     padding: 12,
     borderRadius: 10,
+    fontSize: 13,
+    color: "#374151",
+  },
+
+  infoStrong: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#111827",
   },
 
   center: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-  },
-
-  respondBtn: {
-    marginTop: 16,
-    backgroundColor: "#1F7A63",
-    padding: 14,
-    borderRadius: 14,
-    alignItems: "center",
-  },
-
-  respondText: {
-    color: "#fff",
-    fontWeight: "900",
   },
 })

@@ -92,10 +92,12 @@ export default function SellerDisputeIssuePage() {
       return
     }
 
+    if (submitting) return // 🛡️ prevents double taps
+
     try {
       setSubmitting(true)
 
-      // Get order to verify seller ownership + fetch buyer + check return state
+      // Fetch order (ownership + safety checks)
       const { data: order, error: orderError } = await supabase
         .from("orders")
         .select("buyer_id, seller_id, is_disputed, status")
@@ -104,13 +106,14 @@ export default function SellerDisputeIssuePage() {
 
       if (orderError || !order) throw orderError
 
-      // Security: ensure current user is the seller
+      // 🔐 Ensure current user is the seller
       if (order.seller_id !== user.id) {
         Alert.alert("Access denied", "You are not authorized for this order.")
+        setSubmitting(false)
         return
       }
 
-      // Prevent duplicate disputes
+      // 🚫 Prevent duplicate disputes
       const { data: existingDispute } = await supabase
         .from("disputes")
         .select("id")
@@ -133,10 +136,10 @@ export default function SellerDisputeIssuePage() {
           order_id: id,
           buyer_id: order.buyer_id,
           seller_id: order.seller_id,
+          opened_by: "seller", // ⭐ CRITICAL: role-aware disputes
           reason,
-          description,
+          description: description.trim(),
           status: "issue_open",
-          created_at: new Date().toISOString(),
         })
         .select()
         .single()
@@ -155,12 +158,12 @@ export default function SellerDisputeIssuePage() {
         if (updateEvidenceError) throw updateEvidenceError
       }
 
-      /* ---------------- CRITICAL: HARD PAUSE ESCROW + RETURNS + CRON ---------------- */
+      /* ---------------- HARD FREEZE ESCROW + RETURNS + CRON ---------------- */
       const { error: orderUpdateError } = await supabase
         .from("orders")
         .update({
-          is_disputed: true,           // 🧊 Pauses ALL cron timers
-          status: "disputed",          // 🧾 Audit trail + freezes return/refund flow
+          is_disputed: true, // 🧊 Pauses cron timers & auto-complete
+          status: "disputed", // 🧾 Audit trail + freeze all automated flows
           updated_at: new Date().toISOString(),
         })
         .eq("id", id)
@@ -171,16 +174,16 @@ export default function SellerDisputeIssuePage() {
       await supabase.from("notifications").insert({
         user_id: order.buyer_id,
         type: "dispute_opened",
-        title: "Return Dispute Opened",
+        title: "Seller Dispute Opened",
         message:
-          "The seller has opened a dispute regarding the returned item. Refund and escrow are paused pending admin review.",
+          "The seller has opened a dispute regarding the returned item. Escrow, refunds, and return processing are paused pending admin review.",
         related_id: dispute.id,
         created_at: new Date().toISOString(),
       })
 
       Alert.alert(
         "Dispute Submitted",
-        "Your dispute has been submitted. Escrow, auto-refunds, and return timers are now paused pending admin review."
+        "Your dispute has been submitted successfully. Escrow, returns, and automated timers are now paused pending admin review."
       )
 
       router.replace("/seller-hub/orders")
@@ -197,17 +200,12 @@ export default function SellerDisputeIssuePage() {
 
   return (
     <View style={styles.screen}>
-      <AppHeader
-        title="File a Dispute"
-        backRoute="/seller-hub/orders"
-      />
+      <AppHeader title="File a Seller Dispute" backRoute="/seller-hub/orders" />
 
       <ScrollView contentContainerStyle={styles.container}>
-        <Text style={styles.orderRef}>
-          Order #{id.slice(0, 8)}
-        </Text>
+        <Text style={styles.orderRef}>Order #{id.slice(0, 8)}</Text>
 
-        <Text style={styles.label}>Reason</Text>
+        <Text style={styles.label}>Dispute Reason</Text>
         {REASONS.map((r) => (
           <TouchableOpacity
             key={r}
@@ -228,16 +226,16 @@ export default function SellerDisputeIssuePage() {
           </TouchableOpacity>
         ))}
 
-        <Text style={styles.label}>Describe the issue</Text>
+        <Text style={styles.label}>Describe the Issue</Text>
         <TextInput
           style={styles.textArea}
           multiline
-          placeholder="Explain what is wrong with the returned item..."
+          placeholder="Explain what is wrong with the returned item and why the dispute is being opened..."
           value={description}
           onChangeText={setDescription}
         />
 
-        <Text style={styles.label}>Upload evidence (optional)</Text>
+        <Text style={styles.label}>Upload Evidence (Optional)</Text>
         <View style={styles.imageRow}>
           {images.map((uri, idx) => (
             <Image key={idx} source={{ uri }} style={styles.previewImage} />
@@ -269,12 +267,14 @@ export default function SellerDisputeIssuePage() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#EAF4EF" },
   container: { padding: 16, paddingBottom: 32 },
+
   orderRef: {
     fontSize: 12,
     fontWeight: "700",
     color: "#6B7280",
     marginBottom: 12,
   },
+
   label: {
     fontSize: 14,
     fontWeight: "700",
@@ -282,15 +282,20 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     color: "#0F1E17",
   },
+
   reasonBtn: {
     padding: 12,
     borderRadius: 10,
     backgroundColor: "#E8F5EE",
     marginBottom: 8,
   },
+
   reasonSelected: { backgroundColor: "#1F7A63" },
+
   reasonText: { color: "#0F1E17", fontWeight: "700" },
+
   reasonTextSelected: { color: "#fff" },
+
   textArea: {
     minHeight: 120,
     borderRadius: 10,
@@ -298,7 +303,9 @@ const styles = StyleSheet.create({
     padding: 12,
     textAlignVertical: "top",
   },
+
   imageRow: { flexDirection: "row", flexWrap: "wrap", marginTop: 8 },
+
   previewImage: {
     width: 80,
     height: 80,
@@ -306,6 +313,7 @@ const styles = StyleSheet.create({
     marginRight: 8,
     marginBottom: 8,
   },
+
   addImage: {
     width: 80,
     height: 80,
@@ -314,7 +322,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+
   addImageText: { fontSize: 32, color: "#0F1E17" },
+
   submitBtn: {
     marginTop: 22,
     backgroundColor: "#0F1E17",
@@ -322,6 +332,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
   },
+
   submitText: {
     color: "#fff",
     fontSize: 16,
