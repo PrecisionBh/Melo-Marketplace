@@ -30,13 +30,15 @@ type Offer = {
   current_amount: number
   counter_count: number
   status: OfferStatus
-  created_at: string // ← REQUIRED for expiry logic
+  created_at: string
   listings: {
     id: string
     title: string
     image_urls: string[] | null
+    is_sold?: boolean // 🔒 NEW (for Item Sold badge)
   }
 }
+
 
 
 /* ---------------- SCREEN ---------------- */
@@ -90,10 +92,12 @@ export default function SellerOffersScreen() {
           status,
           created_at,
           listings (
-            id,
-            title,
-            image_urls
-          )
+          id,
+          title,
+          image_urls,
+          is_sold
+         )
+
         `)
         .eq("seller_id", session.user.id)
         .order("created_at", { ascending: false })
@@ -131,11 +135,19 @@ export default function SellerOffersScreen() {
   }
 
   const getDerivedStatus = (offer: Offer) => {
-    if (offer.status === "pending" && isExpired(offer.created_at)) {
-      return "expired"
-    }
-    return offer.status
+  // 🔴 HIGHEST PRIORITY: ITEM SOLD
+  if (offer.listings?.is_sold) {
+    return "sold"
   }
+
+  // ⏳ Expiry logic
+  if (offer.status === "pending" && isExpired(offer.created_at)) {
+    return "expired"
+  }
+
+  return offer.status
+}
+
 
   const filteredOffers = useMemo(() => {
     return offers.filter((o) => {
@@ -296,13 +308,22 @@ export default function SellerOffersScreen() {
                   </Text>
                 </View>
 
-                {derivedStatus === "expired" && (
-                  <View style={styles.expiredBadge}>
-                    <Text style={styles.expiredBadgeText}>
-                      OFFER EXPIRED
-                    </Text>
-                  </View>
-                )}
+                {derivedStatus === "sold" && (
+  <View style={styles.soldBadge}>
+    <Text style={styles.soldBadgeText}>
+      ITEM SOLD
+    </Text>
+  </View>
+)}
+
+{derivedStatus === "expired" && (
+  <View style={styles.expiredBadge}>
+    <Text style={styles.expiredBadgeText}>
+      OFFER EXPIRED
+    </Text>
+  </View>
+)}
+
               </TouchableOpacity>
             )
           }}
@@ -464,5 +485,20 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     letterSpacing: 0.5,
   },
+
+  soldBadge: {
+  backgroundColor: "#6B7280", // neutral gray = marketplace standard
+  paddingHorizontal: 10,
+  paddingVertical: 6,
+  borderRadius: 999,
+},
+
+soldBadgeText: {
+  fontSize: 11,
+  fontWeight: "900",
+  color: "#FFFFFF",
+  letterSpacing: 0.5,
+},
+
 })
 

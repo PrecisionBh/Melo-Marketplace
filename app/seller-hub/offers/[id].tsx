@@ -33,11 +33,13 @@ type Offer = {
   status: OfferStatus
   created_at: string
   listings: {
-    title: string
-    image_urls: string[] | null
-    shipping_type: "seller_pays" | "buyer_pays"
-    shipping_price: number | null
-  }
+  title: string
+  image_urls: string[] | null
+  shipping_type: "seller_pays" | "buyer_pays"
+  shipping_price: number | null
+  is_sold?: boolean // 🔥 ADD THIS
+}
+
 }
 
 /* ---------------- SCREEN ---------------- */
@@ -79,11 +81,13 @@ export default function SellerOfferDetailScreen() {
         status,
         created_at,
         listings (
-          title,
-          image_urls,
-          shipping_type,
-          shipping_price
-        )
+  title,
+  image_urls,
+  shipping_type,
+  shipping_price,
+  is_sold
+)
+
       `)
       .eq("id", id)
       .single<Offer>()
@@ -108,15 +112,19 @@ export default function SellerOfferDetailScreen() {
   }
 }
 
-  /* ---------------- EXPIRATION ---------------- */
+ /* ---------------- EXPIRATION ---------------- */
 
-  const isExpired = useMemo(() => {
-    if (!offer) return false
-    const created = new Date(offer.created_at).getTime()
-    return Date.now() > created + 24 * 60 * 60 * 1000
-  }, [offer])
+const isExpired = useMemo(() => {
+  if (!offer) return false
+  const created = new Date(offer.created_at).getTime()
+  return Date.now() > created + 24 * 60 * 60 * 1000
+}, [offer])
 
-  if (!offer) return null
+// 🔴 NEW: listing sold guard (blocks actions + drives badge)
+const isSold = !!offer?.listings?.is_sold
+
+if (!offer) return null
+
 
   /* ---------------- CALCULATIONS (SELLER CLEAN VIEW) ---------------- */
 
@@ -137,58 +145,72 @@ export default function SellerOfferDetailScreen() {
   )
 
   const canRespond =
-    !!offer &&
-    !isExpired &&
-    offer.status !== "accepted" &&
-    offer.status !== "declined" &&
-    offer.counter_count < 6 &&
-    offer.last_actor === "buyer"
+  !!offer &&
+  !isSold && // 🔒 prevents actions if item already sold
+  !isExpired &&
+  offer.status !== "accepted" &&
+  offer.status !== "declined" &&
+  offer.counter_count < 6 &&
+  offer.last_actor === "buyer"
+
 
   /* ---------------- STATUS BADGE ---------------- */
 
-  const renderStatusBadge = () => {
-    if (isExpired) return <Badge text="Expired" color="#C0392B" />
+  /* ---------------- STATUS BADGE ---------------- */
 
-    if (offer.status === "accepted") {
+const renderStatusBadge = () => {
+  // 🔥 SOLD overrides everything
+  if (isSold) return <Badge text="Item Sold" color="#C0392B" />
+
+  if (isExpired) return <Badge text="Expired" color="#C0392B" />
+
+  if (offer.status === "accepted") {
+    return (
+      <Badge
+        text="Accepted • Waiting on buyer payment"
+        color="#1F7A63"
+      />
+    )
+  }
+
+  if (offer.status === "declined") {
+    return <Badge text="Declined" color="#EB5757" />
+  }
+
+  if (offer.status === "countered") {
+    if (offer.last_actor === "seller") {
       return (
         <Badge
-          text="Accepted • Waiting on buyer payment"
-          color="#1F7A63"
+          text="Counter sent • Waiting on buyer"
+          color="#E67E22"
         />
       )
     }
-
-    if (offer.status === "declined") {
-      return <Badge text="Declined" color="#EB5757" />
+    if (offer.last_actor === "buyer") {
+      return (
+        <Badge
+          text="Buyer countered • Your response needed"
+          color="#2980B9"
+        />
+      )
     }
-
-    if (offer.status === "countered") {
-      if (offer.last_actor === "seller") {
-        return (
-          <Badge
-            text="Counter sent • Waiting on buyer"
-            color="#E67E22"
-          />
-        )
-      }
-      if (offer.last_actor === "buyer") {
-        return (
-          <Badge
-            text="Buyer countered • Your response needed"
-            color="#2980B9"
-          />
-        )
-      }
-    }
-
-    return null
   }
+
+  return null
+}
 
   /* ---------------- ACTIONS ---------------- */
 
-  const acceptOffer = async () => {
+const acceptOffer = async () => {
   try {
-    if (saving || isExpired) return
+    // 🔒 HARD GUARDS (sold + expired + saving)
+    if (saving || isExpired || isSold) {
+      if (isSold) {
+        Alert.alert("Item Sold", "This item has already been purchased.")
+      }
+      return
+    }
+
     setSaving(true)
 
     const { error } = await supabase
@@ -232,10 +254,16 @@ export default function SellerOfferDetailScreen() {
   }
 }
 
-
-  const declineOffer = async () => {
+const declineOffer = async () => {
   try {
-    if (saving) return
+    // 🔒 HARD GUARD (sold + saving)
+    if (saving || isSold) {
+      if (isSold) {
+        Alert.alert("Item Sold", "This item has already been purchased.")
+      }
+      return
+    }
+
     setSaving(true)
 
     const { error } = await supabase
@@ -270,59 +298,63 @@ export default function SellerOfferDetailScreen() {
   }
 }
 
-
-  const submitCounter = async () => {
-    if (!offer || saving) return
-
-    const amount = Number(counterAmount)
-    if (!amount || amount <= 0) {
-      Alert.alert("Enter a valid counter amount")
-      return
+const submitCounter = async () => {
+  // 🔒 HARD GUARD (sold + saving)
+  if (!offer || saving || isSold) {
+    if (isSold) {
+      Alert.alert("Item Sold", "This item has already been purchased.")
     }
-
-    setSaving(true)
-
-    const { error } = await supabase
-      .from("offers")
-      .update({
-        current_amount: amount,
-        counter_amount: amount,
-        counter_count: offer.counter_count + 1,
-        last_actor: "seller",
-        last_action: "countered",
-        status: "countered",
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", offer.id)
-
-    setSaving(false)
-
-    if (error) {
-  handleAppError(error, {
-    fallbackMessage: "Failed to send counter offer.",
-  })
-  return
-}
-
-
-    setShowCounter(false)
-    setCounterAmount("")
-
-    await notify({
-      userId: offer.buyer_id,
-      type: "offer",
-      title: "Offer countered",
-      body: "The seller sent a counter offer.",
-      data: {
-        route: "/buyer-hub/offers/[id]",
-        params: { id: offer.id },
-      },
-    })
-
-    loadOffer()
+    return
   }
 
-  /* ---------------- UI ---------------- */
+  const amount = Number(counterAmount)
+  if (!amount || amount <= 0) {
+    Alert.alert("Enter a valid counter amount")
+    return
+  }
+
+  setSaving(true)
+
+  const { error } = await supabase
+    .from("offers")
+    .update({
+      current_amount: amount,
+      counter_amount: amount,
+      counter_count: offer.counter_count + 1,
+      last_actor: "seller",
+      last_action: "countered",
+      status: "countered",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", offer.id)
+
+  setSaving(false)
+
+  if (error) {
+    handleAppError(error, {
+      fallbackMessage: "Failed to send counter offer.",
+    })
+    return
+  }
+
+  setShowCounter(false)
+  setCounterAmount("")
+
+  await notify({
+    userId: offer.buyer_id,
+    type: "offer",
+    title: "Offer countered",
+    body: "The seller sent a counter offer.",
+    data: {
+      route: "/buyer-hub/offers/[id]",
+      params: { id: offer.id },
+    },
+  })
+
+  loadOffer()
+}
+
+/* ---------------- UI ---------------- */
 
   if (loading) return <ActivityIndicator style={{ marginTop: 80 }} />
 

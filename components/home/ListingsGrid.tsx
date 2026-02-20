@@ -24,11 +24,11 @@ export default function ListingsGrid({
   onRefresh,
 }: Props) {
   const router = useRouter()
-  const NUM_COLUMNS = 2
+  const NUM_COLUMNS = 3 // 🔥 CHANGED FROM 2 → 3 (higher density)
 
   return (
     <FlatList
-      key={`grid-${NUM_COLUMNS}`}
+      key={`grid-${NUM_COLUMNS}`} // forces proper re-render when columns change
       data={listings}
       keyExtractor={(item) => item.id}
       numColumns={NUM_COLUMNS}
@@ -58,11 +58,12 @@ export default function ListingsGrid({
 
 const styles = StyleSheet.create({
   grid: {
-    padding: 8,
+    paddingHorizontal: 3, // 🔥 FRACTIONAL SIDE PADDING (clean edge spacing)
+    paddingTop: 4,
     paddingBottom: 140,
   },
   row: {
-    gap: 8,
+    gap: 4, // 🔥 micro gap between columns (not bulky)
     flex: 1,
   },
   cardWrap: {

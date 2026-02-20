@@ -67,6 +67,9 @@ export default function HomeScreen() {
   const [hasUnreadNotifications, setHasUnreadNotifications] =
     useState(false)
 
+  const [menuOpen, setMenuOpen] = useState(false)
+
+
   /* ---------------- LOAD DATA ---------------- */
 
   useEffect(() => {
@@ -131,14 +134,16 @@ export default function HomeScreen() {
       // If user follows nobody, show ALL listings normally (NO algorithm)
       if (!followedSellerIds.length) {
         const normalized: Listing[] = validRows.map((l) => ({
-          id: l.id,
-          title: l.title,
-          price: Number(l.price),
-          category: l.category,
-          image_url: l.image_urls![0],
-          allow_offers: l.allow_offers ?? false,
-          shipping_type: l.shipping_type ?? null,
-        }))
+  id: l.id,
+  title: l.title,
+  price: Number(l.price),
+  category: l.category,
+  condition: l.condition, // 🔥 ADD THIS LINE
+  image_url: l.image_urls![0],
+  allow_offers: l.allow_offers ?? false,
+  shipping_type: l.shipping_type ?? null,
+}))
+
 
         setListings(normalized)
         setLoading(false)
@@ -180,14 +185,16 @@ export default function HomeScreen() {
       }
 
       const normalized: Listing[] = merged.map((l) => ({
-        id: l.id,
-        title: l.title,
-        price: Number(l.price),
-        category: l.category,
-        image_url: l.image_urls![0],
-        allow_offers: l.allow_offers ?? false,
-        shipping_type: l.shipping_type ?? null,
-      }))
+  id: l.id,
+  title: l.title,
+  price: Number(l.price),
+  category: l.category,
+  condition: l.condition, // 🔥 ADD THIS LINE
+  image_url: l.image_urls![0],
+  allow_offers: l.allow_offers ?? false,
+  shipping_type: l.shipping_type ?? null,
+}))
+
 
       setListings(normalized)
     } catch (err) {
@@ -327,41 +334,47 @@ async function checkUnreadNotifications() {
     }
 
     switch (activeCategory) {
-      case "cues":
-        return result.filter((l) =>
-          CUE_CATEGORIES.includes(l.category)
-        )
+  case "cues":
+    return result.filter((l) =>
+      CUE_CATEGORIES.includes(l.category)
+    )
 
-      case "cases":
-        return result.filter((l) =>
-          CASE_CATEGORIES.includes(l.category)
-        )
+  case "cases":
+    return result.filter((l) =>
+      CASE_CATEGORIES.includes(l.category)
+    )
 
-      case "new":
-        return result.filter(
-          (l: any) => (l as any).condition === "new"
-        )
+  case "new":
+    return result.filter(
+      (l: any) =>
+        l.condition &&
+        l.condition.toLowerCase() === "new"
+    )
 
-      case "used":
-        return result.filter(
-          (l: any) => (l as any).condition !== "new"
-        )
+  case "used":
+    return result.filter(
+      (l: any) =>
+        l.condition &&
+        l.condition.toLowerCase() !== "new"
+    )
 
-      case "other":
-        return result.filter(
-          (l) =>
-            !CUE_CATEGORIES.includes(l.category) &&
-            !CASE_CATEGORIES.includes(l.category)
-        )
+  case "other":
+    return result.filter(
+      (l) =>
+        !CUE_CATEGORIES.includes(l.category) &&
+        !CASE_CATEGORIES.includes(l.category)
+    )
 
-      default:
-        return result
-    }
+  default:
+    return result
+}
+
   }, [listings, activeCategory, search])
 
-  /* ---------------- RENDER ---------------- */
+ /* ---------------- RENDER ---------------- */
 
-  return (
+return (
+  <>
     <View style={styles.screen}>
       <View style={styles.headerBlock}>
         <HomeHeader
@@ -370,6 +383,7 @@ async function checkUnreadNotifications() {
           onNotificationsPress={() => router.push("/notifications")}
           onMessagesPress={() => router.push("/messages")}
           onProfilePress={() => router.push("/profile")}
+          onMenuPress={() => setMenuOpen(true)}
         />
 
         <SearchBar
@@ -403,7 +417,104 @@ async function checkUnreadNotifications() {
         <Text style={styles.fabText}>Create Listing</Text>
       </TouchableOpacity>
     </View>
+
+    {/* 🔥 UPGRADED DROPDOWN MENU OVERLAY */}
+    {menuOpen && (
+      <View style={styles.menuOverlay} pointerEvents="box-none">
+        {/* Backdrop */}
+        <TouchableOpacity
+          style={styles.menuBackdrop}
+          activeOpacity={1}
+          onPress={() => setMenuOpen(false)}
+        />
+
+        {/* Dropdown Card */}
+        <View style={styles.menuDropdown}>
+          <MenuItem
+            icon="albums-outline"
+            label="Buyer Hub"
+            onPress={() => {
+              setMenuOpen(false)
+              router.push("/buyer-hub")
+            }}
+          />
+
+          <MenuDivider />
+
+          <MenuItem
+            icon="briefcase-outline"
+            label="Seller Hub"
+            onPress={() => {
+              setMenuOpen(false)
+              router.push("/seller-hub")
+            }}
+          />
+
+          <MenuDivider />
+
+          <MenuItem
+            icon="wallet-outline"
+            label="Wallet"
+            onPress={() => {
+              setMenuOpen(false)
+              router.push("/seller-hub/wallet")
+            }}
+          />
+
+          <MenuDivider />
+
+          <MenuItem
+            icon="create-outline"
+            label="Edit Profile"
+            onPress={() => {
+              setMenuOpen(false)
+              router.push("/settings/edit-profile")
+            }}
+          />
+
+          <MenuDivider />
+
+          <MenuItem
+            icon="settings-outline"
+            label="Settings"
+            onPress={() => {
+              setMenuOpen(false)
+              router.push("/settings")
+            }}
+          />
+        </View>
+      </View>
+    )}
+  </>
+)
+
+}
+
+/* ---------------- MENU COMPONENTS ---------------- */
+
+function MenuItem({
+  icon,
+  label,
+  onPress,
+}: {
+  icon: any
+  label: string
+  onPress: () => void
+}) {
+  return (
+    <TouchableOpacity
+      style={styles.menuItemRow}
+      onPress={onPress}
+      activeOpacity={0.7}
+    >
+      <Ionicons name={icon} size={18} color="#0F1E17" />
+      <Text style={styles.menuItemText}>{label}</Text>
+    </TouchableOpacity>
   )
+}
+
+function MenuDivider() {
+  return <View style={styles.menuDivider} />
 }
 
 /* ---------------- STYLES ---------------- */
@@ -414,11 +525,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#EAF4EF",
   },
   headerBlock: {
-  backgroundColor: "#7FAF9B",
-  paddingBottom: 10,
-  zIndex: 999,        // 🔥 CRITICAL
-  elevation: 10,      // 🔥 ANDROID FIX
-},
+    backgroundColor: "#7FAF9B",
+    paddingBottom: 10,
+  },
   fab: {
     position: "absolute",
     bottom: 55,
@@ -441,5 +550,53 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "900",
     color: "#0F1E17",
+  },
+
+  /* 🔥 UPGRADED MENU STYLES */
+  menuOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 9999,
+    elevation: 9999,
+  },
+  menuBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.25)",
+  },
+  menuDropdown: {
+    position: "absolute",
+    top: 95,
+    left: 16,
+    width: 230,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 18,
+    paddingVertical: 6,
+    shadowColor: "#000",
+    shadowOpacity: 0.18,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 24,
+    borderWidth: 1,
+    borderColor: "#E6EFEA",
+  },
+  menuItemRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  menuItemText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#0F1E17",
+  },
+  menuDivider: {
+    height: 1,
+    backgroundColor: "#EEF3F0",
+    marginHorizontal: 12,
   },
 })

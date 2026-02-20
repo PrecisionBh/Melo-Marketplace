@@ -1,14 +1,5 @@
 import { Ionicons } from "@expo/vector-icons"
-import { useRouter } from "expo-router"
-import { useState } from "react"
-import {
-  Modal,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  TouchableWithoutFeedback,
-  View,
-} from "react-native"
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
 type Props = {
@@ -17,6 +8,7 @@ type Props = {
   onNotificationsPress: () => void
   onMessagesPress: () => void
   onProfilePress: () => void
+  onMenuPress: () => void // 🔥 NEW
 }
 
 export default function HomeHeader({
@@ -25,103 +17,62 @@ export default function HomeHeader({
   onNotificationsPress,
   onMessagesPress,
   onProfilePress,
+  onMenuPress,
 }: Props) {
   const insets = useSafeAreaInsets()
-  const router = useRouter()
-  const [menuOpen, setMenuOpen] = useState(false)
-
-  const navigate = (route: string) => {
-    setMenuOpen(false)
-    router.push(route as any)
-  }
 
   return (
-    <>
-      <View style={[styles.headerWrap, { paddingTop: insets.top + 8 }]}>
-        <View style={styles.headerRow}>
-          {/* 🍔 HAMBURGER MENU */}
+    <View style={[styles.headerWrap, { paddingTop: insets.top + 8 }]}>
+      <View style={styles.headerRow}>
+        {/* 🍔 HAMBURGER MENU */}
+        <TouchableOpacity
+          onPress={onMenuPress}
+          style={styles.menuBtn}
+          activeOpacity={0.7}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        >
+          <Ionicons name="menu" size={26} color="#ffffff" />
+        </TouchableOpacity>
+
+        {/* LOGO (NON-BLOCKING) */}
+        <Text style={styles.logo} pointerEvents="none">
+          Melo
+        </Text>
+
+        {/* ICONS */}
+        <View style={styles.headerIcons}>
           <TouchableOpacity
-            onPress={() => setMenuOpen(true)}
-            style={styles.menuBtn}
+            onPress={onNotificationsPress}
+            style={styles.iconWrap}
             activeOpacity={0.7}
           >
-            <Ionicons name="menu" size={26} color="#ffffff" />
+            <Ionicons name="notifications-outline" size={24} color="#ffffff" />
+            {hasUnreadNotifications && <View style={styles.redDot} />}
           </TouchableOpacity>
 
-          {/* LOGO */}
-          <Text style={styles.logo}>Melo</Text>
+          <TouchableOpacity
+            onPress={onMessagesPress}
+            style={styles.iconWrap}
+            activeOpacity={0.7}
+          >
+            <Ionicons
+              name="chatbubble-ellipses-outline"
+              size={22}
+              color="#ffffff"
+            />
+            {hasUnreadMessages && <View style={styles.redDot} />}
+          </TouchableOpacity>
 
-          {/* RIGHT ICONS */}
-          <View style={styles.headerIcons}>
-            <TouchableOpacity
-              onPress={onNotificationsPress}
-              style={styles.iconWrap}
-            >
-              <Ionicons
-                name="notifications-outline"
-                size={24}
-                color="#ffffff"
-              />
-              {hasUnreadNotifications && <View style={styles.redDot} />}
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={onMessagesPress}
-              style={styles.iconWrap}
-            >
-              <Ionicons
-                name="chatbubble-ellipses-outline"
-                size={22}
-                color="#ffffff"
-              />
-              {hasUnreadMessages && <View style={styles.redDot} />}
-            </TouchableOpacity>
-
-            <TouchableOpacity onPress={onProfilePress}>
-              <Ionicons
-                name="person-circle-outline"
-                size={30}
-                color="#ffffff"
-              />
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity onPress={onProfilePress} activeOpacity={0.7}>
+            <Ionicons
+              name="person-circle-outline"
+              size={30}
+              color="#ffffff"
+            />
+          </TouchableOpacity>
         </View>
       </View>
-
-      {/* 🔥 DROPDOWN MENU (TOP-LEFT ANCHORED) */}
-      <Modal
-        visible={menuOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setMenuOpen(false)}
-      >
-        <TouchableWithoutFeedback onPress={() => setMenuOpen(false)}>
-          <View style={styles.overlay}>
-            <View style={[styles.dropdown, { top: insets.top + 60 }]}>
-              <MenuItem label="Buyer Hub" onPress={() => navigate("/buyer-hub")} />
-              <MenuItem label="Seller Hub" onPress={() => navigate("/seller-hub")} />
-              <MenuItem label="Wallet" onPress={() => navigate("/seller-hub/wallet")} />
-              <MenuItem label="Edit Profile" onPress={() => navigate("/edit-profile")} />
-              <MenuItem label="Settings" onPress={() => navigate("/settings")} />
-            </View>
-          </View>
-        </TouchableWithoutFeedback>
-      </Modal>
-    </>
-  )
-}
-
-function MenuItem({
-  label,
-  onPress,
-}: {
-  label: string
-  onPress: () => void
-}) {
-  return (
-    <TouchableOpacity style={styles.menuItem} onPress={onPress}>
-      <Text style={styles.menuText}>{label}</Text>
-    </TouchableOpacity>
+    </View>
   )
 }
 
@@ -130,22 +81,19 @@ const styles = StyleSheet.create({
     backgroundColor: "#7FAF9B",
     paddingHorizontal: 16,
     paddingBottom: 12,
-    zIndex: 100,
   },
-
   headerRow: {
     height: 44,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
-
   menuBtn: {
     width: 36,
-    alignItems: "flex-start",
     justifyContent: "center",
+    alignItems: "flex-start",
+    zIndex: 10, // 🔥 ensures it stays clickable above centered elements
   },
-
   logo: {
     position: "absolute",
     left: 0,
@@ -155,17 +103,14 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#ffffff",
   },
-
   headerIcons: {
     flexDirection: "row",
     alignItems: "center",
     gap: 14,
   },
-
   iconWrap: {
     position: "relative",
   },
-
   redDot: {
     position: "absolute",
     top: -2,
@@ -174,34 +119,5 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     backgroundColor: "#FF4D4D",
-  },
-
-  overlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.15)",
-  },
-
-  dropdown: {
-    position: "absolute", // 🔥 CRITICAL FIX
-    left: 16,
-    width: 220,
-    backgroundColor: "#ffffff",
-    borderRadius: 16,
-    paddingVertical: 8,
-    shadowColor: "#000",
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-    elevation: 12,
-  },
-
-  menuItem: {
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-  },
-
-  menuText: {
-    fontSize: 15,
-    fontWeight: "800",
-    color: "#0F1E17",
   },
 })

@@ -300,6 +300,28 @@ setDisplayTotalCents(escrow + buyerFee + taxCents)
         throw new Error("Missing listing pricing data")
       }
 
+            /* ---------- HARD SOLD GUARD (ANTI DOUBLE PURCHASE) ---------- */
+
+      const { data: latestListing, error: soldCheckError } = await supabase
+        .from("listings")
+        .select("id, is_sold")
+        .eq("id", listingSnapshot.id)
+        .single()
+
+      if (soldCheckError) {
+        throw new Error("Failed to verify listing availability")
+      }
+
+      if (latestListing?.is_sold) {
+        Alert.alert(
+          "Item Sold",
+          "This item has already been sold and is no longer available."
+        )
+        setPaying(false)
+        return
+      }
+
+
       // 🚫 BLOCK BUYING YOUR OWN LISTING (CRITICAL MARKETPLACE GUARD)
 if (sellerId === session.user.id) {
   Alert.alert(

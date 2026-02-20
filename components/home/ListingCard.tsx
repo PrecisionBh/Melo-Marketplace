@@ -56,14 +56,15 @@ export default function ListingCard({
           </View>
         )}
 
-        {/* FREE SHIPPING BADGE */}
-        {showFreeShipping && (
-          <View style={styles.freeShipBadge}>
-            <Text style={styles.freeShipText}>
-              FREE SHIPPING
-            </Text>
-          </View>
-        )}
+  {/* FREE SHIPPING BADGE (CLEAR + CLEAN) */}
+{showFreeShipping && (
+  <View style={styles.freeShipBadge}>
+    <Text style={styles.freeShipText}>
+      Free Shipping
+    </Text>
+  </View>
+)}
+
 
         {/* SELLER ACTIONS */}
         {mode === "seller" && (
@@ -71,6 +72,7 @@ export default function ListingCard({
             <TouchableOpacity
               style={styles.actionBtn}
               onPress={onEdit}
+              activeOpacity={0.8}
             >
               <Text style={styles.actionText}>Edit</Text>
             </TouchableOpacity>
@@ -87,11 +89,13 @@ export default function ListingCard({
       {/* TEXT BELOW IMAGE */}
       <View style={styles.meta}>
         <Text
-          style={styles.title}
-          numberOfLines={2}
-        >
-          {listing.title}
-        </Text>
+  style={styles.title}
+  numberOfLines={2}        // 🔒 HARD LOCK: never exceeds 2 lines
+  ellipsizeMode="tail"     // Adds ... if too long
+>
+  {listing.title?.trim()}
+</Text>
+
 
         <Text style={styles.price}>
           ${listing.price}
@@ -103,11 +107,25 @@ export default function ListingCard({
 
 const styles = StyleSheet.create({
   card: {
-    flex: 1,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    overflow: "hidden",
-  },
+  flex: 1,
+  backgroundColor: "#FFFFFF",
+  borderRadius: 12,
+  overflow: "hidden",
+
+  // 🔥 uniform shrink (keeps badges, text, image proportional)
+  transform: [{ scale: 0.97 }],
+
+  // ❌ no margin (prevents double spacing)
+  margin: 0,
+
+  // subtle depth so tight grid still looks premium
+  shadowColor: "#000",
+  shadowOpacity: 0.05,
+  shadowRadius: 5,
+  shadowOffset: { width: 0, height: 2 },
+  elevation: 2,
+},
+
 
   /* IMAGE */
   imageWrap: {
@@ -127,24 +145,26 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
-  /* FREE SHIPPING */
-  freeShipBadge: {
-    position: "absolute",
-    top: 6,
-    left: 6,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderWidth: 1,
-    borderColor: "#EB5757",
-  },
+  /* FREE SHIPPING (CLEAR + COMPACT) */
+freeShipBadge: {
+  position: "absolute",
+  top: 6,
+  left: 6,
+  backgroundColor: "#FFFFFF",
+  borderRadius: 8,
+  paddingHorizontal: 6,
+  paddingVertical: 2,
+  borderWidth: 1,
+  borderColor: "#EB5757",
+},
 
-  freeShipText: {
-    fontSize: 10,
-    fontWeight: "900",
-    color: "#EB5757",
-  },
+freeShipText: {
+  fontSize: 9, // smaller for dense 3-column layout
+  fontWeight: "800",
+  color: "#EB5757",
+  letterSpacing: 0.2, // subtle premium feel
+},
+
 
   /* SELLER */
   sellerActions: {
