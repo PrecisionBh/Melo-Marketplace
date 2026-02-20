@@ -110,14 +110,19 @@ export default function ReturnTrackingScreen() {
       }
 
       // 🔒 Must be in return state
-      if (data.status !== "return_processing") {
-        Alert.alert(
-          "Invalid State",
-          "Return tracking can only be added when a return is active."
-        )
-        router.back()
-        return
-      }
+      // 🔒 Must be in an active return state
+if (
+  data.status !== "return_started" &&
+  data.status !== "return_processing"
+) {
+  Alert.alert(
+    "Invalid State",
+    "Return tracking can only be added when a return is active."
+  )
+  router.back()
+  return
+}
+
 
       setOrder(data as Order)
       setTracking(data.return_tracking_number ?? "")
@@ -162,16 +167,18 @@ export default function ReturnTrackingScreen() {
       const trackingUrl = buildTrackingUrl(carrier, tracking)
 
       const { error } = await supabase
-        .from("orders")
-        .update({
-          status: "return_processing", // 🔒 HARD ENFORCE RETURN STATE
-          return_tracking_number: tracking.trim(),
-          return_tracking_url: trackingUrl,
-          return_shipped_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", order.id)
-        .eq("buyer_id", session.user.id)
+  .from("orders")
+  .update({
+    // DO NOT override status — keep current return state
+    return_tracking_number: tracking.trim(),
+    return_tracking_url: trackingUrl,
+    return_shipped_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  })
+  .eq("id", order.id)
+  .eq("buyer_id", session.user.id)
+  .in("status", ["return_started", "return_processing"]) // 🛡️ lifecycle safety
+
 
       if (error) throw error
 

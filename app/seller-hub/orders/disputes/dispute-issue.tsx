@@ -44,13 +44,19 @@ export default function SellerDisputeIssuePage() {
   /* ---------------- IMAGE PICKER ---------------- */
 
   const pickImage = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.7,
-    })
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.7,
+      })
 
-    if (!result.canceled && result.assets[0]?.uri) {
-      setImages((prev) => [...prev, result.assets[0].uri])
+      if (!result.canceled && result.assets[0]?.uri) {
+        setImages((prev) => [...prev, result.assets[0].uri])
+      }
+    } catch (err) {
+      handleAppError(err, {
+        fallbackMessage: "Failed to open image picker.",
+      })
     }
   }
 
@@ -63,7 +69,7 @@ export default function SellerDisputeIssuePage() {
       const response = await fetch(uri)
       const blob = await response.blob()
       const filename = `${Date.now()}-${Math.random()}.jpg`
-      const path = `${disputeId}/${filename}`
+      const path = `${disputeId}/seller-${filename}`
 
       const { error } = await supabase.storage
         .from("dispute-images")
@@ -75,7 +81,9 @@ export default function SellerDisputeIssuePage() {
         .from("dispute-images")
         .getPublicUrl(path)
 
-      uploadedUrls.push(data.publicUrl)
+      if (data?.publicUrl) {
+        uploadedUrls.push(data.publicUrl)
+      }
     }
 
     return uploadedUrls
@@ -92,15 +100,15 @@ export default function SellerDisputeIssuePage() {
       return
     }
 
-    if (submitting) return // 🛡️ prevents double taps
+    if (submitting) return
 
     try {
       setSubmitting(true)
 
-      // Fetch order (ownership + safety checks)
+      /* -------- FETCH ORDER + STRICT LIFECYCLE CHECK -------- */
       const { data: order, error: orderError } = await supabase
         .from("orders")
-        .select("buyer_id, seller_id, is_disputed, status")
+        .select("buyer_id, seller_id, status, is_disputed")
         .eq("id", id)
         .single()
 
@@ -109,6 +117,16 @@ export default function SellerDisputeIssuePage() {
       // 🔐 Ensure current user is the seller
       if (order.seller_id !== user.id) {
         Alert.alert("Access denied", "You are not authorized for this order.")
+        setSubmitting(false)
+        return
+      }
+
+      // 🚨 CRITICAL: ONLY allow dispute during return_started
+      if (order.status !== "return_started") {
+        Alert.alert(
+          "Dispute Not Available",
+          "Seller disputes can only be opened while a return is in progress."
+        )
         setSubmitting(false)
         return
       }
@@ -123,7 +141,7 @@ export default function SellerDisputeIssuePage() {
       if (existingDispute) {
         Alert.alert(
           "Dispute Already Open",
-          "A dispute has already been opened for this order."
+          "A dispute has already been opened for this return."
         )
         setSubmitting(false)
         return
@@ -136,10 +154,10 @@ export default function SellerDisputeIssuePage() {
           order_id: id,
           buyer_id: order.buyer_id,
           seller_id: order.seller_id,
-          opened_by: "seller", // ⭐ CRITICAL: role-aware disputes
+          opened_by: "seller", // 🔥 REQUIRED for role logic
           reason,
           description: description.trim(),
-          status: "issue_open",
+          status: "return_processing", // 🔥 MATCHES YOUR SYSTEM DESIGN
         })
         .select()
         .single()
@@ -158,12 +176,12 @@ export default function SellerDisputeIssuePage() {
         if (updateEvidenceError) throw updateEvidenceError
       }
 
-      /* ---------------- HARD FREEZE ESCROW + RETURNS + CRON ---------------- */
+      /* ---------------- FREEZE ESCROW + MOVE TO RETURN_PROCESSING ---------------- */
       const { error: orderUpdateError } = await supabase
         .from("orders")
         .update({
-          is_disputed: true, // 🧊 Pauses cron timers & auto-complete
-          status: "disputed", // 🧾 Audit trail + freeze all automated flows
+          is_disputed: true, // 🧊 freezes cron + auto-complete
+          status: "return_processing", // 🔥 THIS = ACTIVE DISPUTE STATE
           updated_at: new Date().toISOString(),
         })
         .eq("id", id)
@@ -176,14 +194,14 @@ export default function SellerDisputeIssuePage() {
         type: "dispute_opened",
         title: "Seller Dispute Opened",
         message:
-          "The seller has opened a dispute regarding the returned item. Escrow, refunds, and return processing are paused pending admin review.",
+          "The seller has opened a dispute regarding your return. Escrow and automated timers are now paused pending review.",
         related_id: dispute.id,
         created_at: new Date().toISOString(),
       })
 
       Alert.alert(
         "Dispute Submitted",
-        "Your dispute has been submitted successfully. Escrow, returns, and automated timers are now paused pending admin review."
+        "Your dispute has been opened. The return is now under review and escrow has been frozen."
       )
 
       router.replace("/seller-hub/orders")
@@ -261,6 +279,7 @@ export default function SellerDisputeIssuePage() {
     </View>
   )
 }
+
 
 /* ---------------- STYLES ---------------- */
 

@@ -14,11 +14,10 @@ import {
 } from "react-native"
 
 import AppHeader from "@/components/app-header"
+import { notify } from "@/lib/notifications/notify"
 import { useAuth } from "../../../../context/AuthContext"
 import { handleAppError } from "../../../../lib/errors/appError"
 import { supabase } from "../../../../lib/supabase"
-
-
 
 const REASONS = [
   "Item not received",
@@ -46,17 +45,24 @@ export default function DisputeIssuePage() {
   /* ---------------- IMAGE PICKER ---------------- */
 
   const pickImage = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.7,
-    })
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.7,
+      })
 
-    if (!result.canceled && result.assets[0]?.uri) {
-      setImages((prev) => [...prev, result.assets[0].uri])
+      if (!result.canceled && result.assets[0]?.uri) {
+        setImages((prev) => [...prev, result.assets[0].uri])
+      }
+    } catch (err) {
+      handleAppError(err, {
+        context: "dispute_image_pick",
+        fallbackMessage: "Failed to select image.",
+      })
     }
   }
 
-  /* ---------------- UPLOAD EVIDENCE ---------------- */
+  /* ---------------- UPLOAD EVIDENCE (BUYER SAFE) ---------------- */
 
   const uploadEvidenceImages = async (disputeId: string) => {
     const uploadedUrls: string[] = []
@@ -64,12 +70,15 @@ export default function DisputeIssuePage() {
     for (const uri of images) {
       const response = await fetch(uri)
       const blob = await response.blob()
-      const filename = `${Date.now()}-${Math.random()}.jpg`
+      const filename = `buyer-${Date.now()}-${Math.random()}.jpg`
       const path = `${disputeId}/${filename}`
 
       const { error } = await supabase.storage
         .from("dispute-images")
-        .upload(path, blob, { contentType: "image/jpeg" })
+        .upload(path, blob, {
+          contentType: "image/jpeg",
+          upsert: false,
+        })
 
       if (error) throw error
 
@@ -77,13 +86,15 @@ export default function DisputeIssuePage() {
         .from("dispute-images")
         .getPublicUrl(path)
 
-      uploadedUrls.push(data.publicUrl)
+      if (data?.publicUrl) {
+        uploadedUrls.push(data.publicUrl)
+      }
     }
 
     return uploadedUrls
   }
 
-  /* ---------------- SUBMIT DISPUTE ---------------- */
+  /* ---------------- SUBMIT DISPUTE (HARDENED DB FLOW) ---------------- */
 
   const submitDispute = async () => {
     if (!reason || !description.trim()) {
@@ -97,95 +108,124 @@ export default function DisputeIssuePage() {
     try {
       setSubmitting(true)
 
-      // Get order buyer & seller
+      /* 1️⃣ Fetch order + validate ownership + lifecycle */
       const { data: order, error: orderError } = await supabase
         .from("orders")
-        .select("buyer_id, seller_id")
+        .select("id, buyer_id, seller_id, status, is_disputed")
         .eq("id", id)
         .single()
 
       if (orderError || !order) throw orderError
 
-      // 🔍 Check if dispute already exists
+      // 🔒 Security: must be the buyer
+      if (order.buyer_id !== user.id) {
+        Alert.alert("Access denied", "You cannot dispute this order.")
+        return
+      }
+
+      // 🔒 Lifecycle enforcement (your rule: no disputes after complete)
+      if (order.status === "completed" || order.status === "cancelled") {
+        Alert.alert(
+          "Dispute Not Allowed",
+          "This order is already finalized and cannot be disputed."
+        )
+        return
+      }
+
+      /* 2️⃣ Prevent duplicate disputes */
       const { data: existingDispute } = await supabase
         .from("disputes")
-        .select("id")
+        .select("id, status")
         .eq("order_id", id)
+        .not("status", "in", "(resolved_buyer,resolved_seller,closed)")
         .maybeSingle()
 
       if (existingDispute) {
         Alert.alert(
-          "Dispute Already Opened",
-          "A dispute has already been opened for this order."
+          "Dispute Already Open",
+          "There is already an active dispute for this order."
         )
-        setSubmitting(false)
         return
       }
 
-      // Insert dispute
+      /* 3️⃣ Insert dispute (aligned with your schema + flow) */
       const { data: dispute, error: disputeError } = await supabase
         .from("disputes")
         .insert({
           order_id: id,
-          buyer_id: order.buyer_id,
+          buyer_id: user.id,
           seller_id: order.seller_id,
+          opened_by: "buyer",
           reason,
-          description,
-          status: "issue_open",
+          description: description.trim(),
+          status: "open", // ✅ consistent with review flow
+          created_at: new Date().toISOString(),
         })
         .select()
         .single()
 
       if (disputeError || !dispute) throw disputeError
 
-      // Upload evidence images
+      /* 4️⃣ Upload buyer evidence (correct column) */
       if (images.length > 0) {
         const evidenceUrls = await uploadEvidenceImages(dispute.id)
 
-        const { error: updateEvidenceError } = await supabase
-          .from("disputes")
-          .update({ evidence_urls: evidenceUrls })
-          .eq("id", dispute.id)
+        if (evidenceUrls.length > 0) {
+          const { error: updateEvidenceError } = await supabase
+            .from("disputes")
+            .update({
+              buyer_evidence_urls: evidenceUrls,
+            })
+            .eq("id", dispute.id)
 
-        if (updateEvidenceError) throw updateEvidenceError
+          if (updateEvidenceError) throw updateEvidenceError
+        }
       }
 
-      // 🔔 Notify seller
-      await supabase.from("notifications").insert({
-        user_id: order.seller_id,
-        type: "dispute_opened",
-        title: "Dispute Opened",
-        message:
-          "A dispute was opened on one of your orders. Please respond promptly. If no response is received within 72 hours, we may automatically side with the buyer.",
-        related_id: dispute.id,
-        created_at: new Date().toISOString(),
-      })
-
-      // ✅ Flag order as disputed (DO NOT TOUCH ESCROW)
+      /* 5️⃣ Flag order as disputed (TRIGGERS ESCROW FREEZE) */
       const { error: orderUpdateError } = await supabase
         .from("orders")
-        .update({ is_disputed: true })
+        .update({
+          is_disputed: true,
+          status: "disputed", // aligns with your lifecycle
+        })
         .eq("id", id)
+        .eq("buyer_id", user.id)
 
       if (orderUpdateError) throw orderUpdateError
 
+      /* 6️⃣ Notify seller (using unified Melo system) */
+      try {
+        await notify({
+          userId: order.seller_id,
+          type: "order",
+          title: "Dispute Opened",
+          body:
+            "A buyer has opened a dispute on an order. Please review and respond with evidence.",
+          data: {
+            route: "/seller-hub/orders/[id]",
+            params: { id },
+          },
+        })
+      } catch (notifyErr) {
+        console.warn("Dispute notification failed:", notifyErr)
+      }
+
       Alert.alert(
         "Dispute Submitted",
-        "Your dispute has been submitted and the seller has been notified."
+        "Your dispute has been submitted. Escrow is now frozen while this issue is reviewed."
       )
 
-      // 🔁 Reroute back to Orders page
       router.replace("/buyer-hub/orders")
-
     } catch (err) {
-  handleAppError(err, {
-    fallbackMessage:
-      "Unable to submit dispute. Please try again.",
-  })
-} finally {
-  setSubmitting(false)
-}
-
+      handleAppError(err, {
+        context: "buyer_dispute_submit",
+        fallbackMessage:
+          "Unable to submit dispute. Please try again.",
+      })
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   /* ---------------- RENDER ---------------- */

@@ -27,10 +27,10 @@ type OrderStatus =
   | "created"
   | "paid"
   | "shipped"
-  | "delivered"
+  | "return_started"
+  | "return_processing"
   | "issue_open"
   | "disputed"
-  | "return_processing"
   | "completed"
 
 
@@ -294,19 +294,31 @@ export default function BuyerOrderDetailScreen() {
   }
 
   const isCompleted = order.status === "completed"
-  const isReturnProcessing = order.status === "return_processing"
+const isReturnStarted = order.status === "return_started"
+const isShipped = order.status === "shipped"
+const isPaid = order.status === "paid"
 
-  const canTrack =
-    !!order.tracking_url &&
-    ["shipped", "delivered", "completed"].includes(order.status)
+// 🔥 THIS WAS MISSING (causing errors)
+const isInReturnFlow = isReturnStarted
 
-  const canConfirmDelivery = order.status === "shipped"
+// Return tracking only matters during return flow
+const hasReturnTracking = isReturnStarted && !!order.tracking_url
 
-  const canCancel = order.status === "paid"
+// Track when shipped, in return flow, or completed
+const canTrack =
+  !!order.tracking_url && (isShipped || isReturnStarted || isCompleted)
 
-  const canDispute =
-    !order.is_disputed &&
-    ["shipped", "delivered"].includes(order.status)
+// Confirm delivery ONLY if shipped and NOT in return
+const canConfirmDelivery = isShipped && !isReturnStarted && !isCompleted
+
+// Cancel only before seller ships
+const canCancel = isPaid && !isCompleted
+
+// Buyer disputes allowed ONLY before return starts
+// (Once return_started, seller either completes return or disputes it)
+const canDispute =
+  !isCompleted && !isReturnStarted && !order.is_disputed && isShipped
+
 
   const itemPrice = (order.item_price_cents ?? 0) / 100
 const shipping = (order.shipping_amount_cents ?? 0) / 100
@@ -347,13 +359,24 @@ const totalPaid = (order.amount_cents ?? 0) / 100
             ]}
           >
             <Text style={styles.badgeText}>
-              {isCompleted
-                ? "COMPLETED"
-                : order.status === "paid"
-                ? "WAITING FOR SELLER TO SHIP"
-                : order.status.replace("_", " ").toUpperCase()}
-            </Text>
-          </View>
+  {isCompleted
+    ? "COMPLETED"
+    : order.status === "paid"
+    ? "AWAITING SELLER SHIPMENT"
+    : order.status === "shipped"
+    ? "SHIPPED"
+    : order.status === "return_started"
+    ? order.is_disputed
+      ? "RETURN DISPUTED BY SELLER"
+      : hasReturnTracking
+      ? "RETURN SHIPPED (AWAITING SELLER)"
+      : "RETURN STARTED (AWAITING BUYER SHIPMENT)"
+    : order.status === "disputed"
+    ? "DISPUTED"
+    : order.status.replace("_", " ").toUpperCase()}
+</Text>
+</View>
+
 
           <View style={styles.receipt}>
   <ReceiptRow label="Item price" value={`$${itemPrice.toFixed(2)}`} />
@@ -403,68 +426,105 @@ const totalPaid = (order.amount_cents ?? 0) / 100
             </TouchableOpacity>
           )}
 
-          {/* START RETURN (NEW - SIMPLE MVP) */}
-{!isCompleted && ["shipped", "delivered"].includes(order.status) && (
-  <TouchableOpacity
-    style={styles.disputeBtn}
-    onPress={() =>
-      router.push({
-        pathname: "/buyer-hub/returns",
-        params: { orderId: order.id },
-      })
-    }
-  >
-    <Ionicons
-      name="return-down-back-outline"
-      size={18}
-      color="#fff"
-    />
-    <Text style={styles.disputeText}>
-      Start a Return
-    </Text>
-  </TouchableOpacity>
+          {/* START RETURN — ONLY allowed if item is shipped and no return/dispute exists */}
+{!isCompleted &&
+  order.status === "shipped" &&
+  !order.is_disputed && (
+    <TouchableOpacity
+      style={styles.disputeBtn}
+      onPress={() =>
+        router.push({
+          pathname: "/buyer-hub/returns",
+          params: { orderId: order.id },
+        })
+      }
+    >
+      <Ionicons
+        name="return-down-back-outline"
+        size={18}
+        color="#fff"
+      />
+      <Text style={styles.disputeText}>
+        Start a Return
+      </Text>
+    </TouchableOpacity>
 )}
 
-          {/* RETURN PROCESSING ACTIONS (BUYER ONLY) */}
-          {!isCompleted && isReturnProcessing && (
-            <>
-              <TouchableOpacity
-                style={styles.trackBtn}
-                onPress={() =>
-                  router.push({
-                    pathname: "/buyer-hub/returns/tracking",
-                    params: { orderId: order.id },
-                  })
-                }
-              >
-                <Ionicons name="barcode-outline" size={18} color="#fff" />
-                <Text style={styles.trackText}>Add Return Tracking</Text>
-              </TouchableOpacity>
 
-              <TouchableOpacity
-                style={{
-                  marginTop: 14,
-                  backgroundColor: "#D64545",
-                  height: 46,
-                  borderRadius: 23,
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-                onPress={cancelReturn}
-                disabled={processing}
-              >
-                <Text
-                  style={{
-                    color: "#fff",
-                    fontWeight: "900",
-                    fontSize: 14,
-                  }}
-                >
-                  {processing ? "Processing…" : "Cancel Return"}
-                </Text>
-              </TouchableOpacity>
-            </>
-          )}
+
+                 {/* RETURN PROCESSING ACTIONS (BUYER ONLY) */}
+{!isCompleted && isReturnStarted && !order.is_disputed && (
+  <>
+    {/* IF RETURN TRACKING ALREADY ADDED */}
+    {hasReturnTracking ? (
+      <>
+        <TouchableOpacity
+          style={styles.trackBtn}
+          onPress={() =>
+            order.tracking_url && Linking.openURL(order.tracking_url)
+          }
+        >
+          <Ionicons name="cube-outline" size={18} color="#fff" />
+          <Text style={styles.trackText}>Track Your Return</Text>
+        </TouchableOpacity>
+
+        <Text
+          style={{
+            marginTop: 10,
+            fontSize: 13,
+            color: "#6B8F7D",
+            fontWeight: "600",
+            lineHeight: 18,
+          }}
+        >
+          Once the seller has received the return, your refund will be
+          automatically processed.
+        </Text>
+      </>
+    ) : (
+      <>
+        {/* ADD RETURN TRACKING (ONLY BEFORE TRACKING EXISTS) */}
+        <TouchableOpacity
+          style={styles.trackBtn}
+          onPress={() =>
+            router.push({
+              pathname: "/buyer-hub/returns/tracking",
+              params: { orderId: order.id },
+            })
+          }
+        >
+          <Ionicons name="barcode-outline" size={18} color="#fff" />
+          <Text style={styles.trackText}>Add Return Tracking</Text>
+        </TouchableOpacity>
+
+        {/* CANCEL RETURN (HIDES AFTER TRACKING IS ADDED) */}
+        <TouchableOpacity
+          style={{
+            marginTop: 14,
+            backgroundColor: "#D64545",
+            height: 46,
+            borderRadius: 23,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+          onPress={cancelReturn}
+          disabled={processing}
+        >
+          <Text
+            style={{
+              color: "#fff",
+              fontWeight: "900",
+              fontSize: 14,
+            }}
+          >
+            {processing ? "Processing…" : "Cancel Return"}
+          </Text>
+        </TouchableOpacity>
+      </>
+    )}
+  </>
+)}
+
 
           {/* LEAVE REVIEW (ADDED - COMPLETED ONLY, NOT DISPUTED, ONE PER USER) */}
           {isCompleted && !order.is_disputed && !hasReviewed && (
@@ -555,6 +615,7 @@ const totalPaid = (order.amount_cents ?? 0) / 100
     </View>
   )
 }
+
 
 /* ---------------- COMPONENTS ---------------- */
 

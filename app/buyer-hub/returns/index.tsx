@@ -104,7 +104,11 @@ export default function ReturnInitiateScreen() {
       }
 
       // Prevent duplicate return requests
-      if (safeOrder.status === "return_processing") {
+      // Prevent duplicate return requests
+if (
+  safeOrder.status === "return_started" ||
+  safeOrder.status === "return_processing"
+) {
         Alert.alert(
           "Return Already Started",
           "A return has already been initiated for this order."
@@ -146,7 +150,7 @@ export default function ReturnInitiateScreen() {
       const { error: updateError } = await supabase
         .from("orders")
         .update({
-  status: "return_processing",
+  status: "return_started",
   return_reason: reason,
   return_notes: notes.trim() || null,
   return_requested_at: new Date().toISOString(),

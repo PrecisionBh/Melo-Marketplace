@@ -1,3 +1,4 @@
+import * as ImagePicker from "expo-image-picker"
 import {
   useFocusEffect,
   useLocalSearchParams,
@@ -10,6 +11,8 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
+  TouchableOpacity,
   View,
 } from "react-native"
 
@@ -31,6 +34,7 @@ type Dispute = {
   buyer_responded_at: string | null
   seller_response: string | null
   seller_responded_at: string | null
+  seller_evidence_urls?: string[] | null
   status: string
   created_at: string
   resolved_at: string | null
@@ -38,67 +42,48 @@ type Dispute = {
   admin_notes: string | null
 }
 
-/* ---------------- STATUS BADGE META (DB-ALIGNED) ---------------- */
 const getStatusMeta = (status: string, openedBy?: string | null) => {
-  switch (status) {
-    case "issue_open":
-      return {
-        label:
-          openedBy === "seller"
-            ? "Seller Dispute Open – Awaiting Review"
-            : "Buyer Dispute Open – Awaiting Review",
-        color: "#F2994A",
-        subtext:
-          "A dispute has been opened. Escrow, returns, and automated timers are paused pending admin review.",
-      }
+  if (status === "under_review") {
+    return {
+      label: "Under Review",
+      color: "#2F80ED",
+      subtext:
+        "Both the buyer and you have submitted evidence. This dispute is under review.",
+    }
+  }
 
-    case "buyer_responded":
-      return {
-        label: "Buyer Responded – Pending Review",
-        color: "#F2C94C",
-        subtext:
-          "The buyer has submitted their response and evidence. Awaiting admin review.",
-      }
+  if (status === "resolved_seller") {
+    return {
+      label: "Resolved With Seller",
+      color: "#27AE60",
+      subtext:
+        "This dispute was resolved in your favor. The order has been completed.",
+    }
+  }
 
-    case "seller_responded":
-      return {
-        label: "Seller Responded – Pending Review",
-        color: "#F2C94C",
-        subtext:
-          "The seller has submitted their response and evidence. Awaiting admin review.",
-      }
+  if (status === "resolved_buyer") {
+    return {
+      label: "Resolved With Buyer",
+      color: "#EB5757",
+      subtext:
+        "This dispute was resolved in favor of the buyer. A refund has been issued.",
+    }
+  }
 
-    case "under_review":
-      return {
-        label: "Under Admin Review",
-        color: "#2F80ED",
-        subtext:
-          "An administrator is actively reviewing the dispute, evidence, and return details.",
-      }
+  if (openedBy === "buyer") {
+    return {
+      label: "Buyer Dispute Open – Awaiting Your Response",
+      color: "#F2994A",
+      subtext:
+        "The buyer has opened a dispute. Please review the reason and submit your response and evidence.",
+    }
+  }
 
-    case "resolved_buyer":
-      return {
-        label: "Resolved With Buyer",
-        color: "#EB5757",
-        subtext:
-          "This dispute was resolved in favor of the buyer. Funds and resolution were handled accordingly.",
-      }
-
-    case "resolved_seller":
-      return {
-        label: "Resolved With Seller",
-        color: "#27AE60",
-        subtext:
-          "This dispute was resolved in favor of the seller. Escrow and return outcome were finalized.",
-      }
-
-    default:
-      return {
-        label: "Dispute Active",
-        color: "#999999",
-        subtext:
-          "This dispute is currently active and pending further review.",
-      }
+  return {
+    label: "Dispute Active",
+    color: "#F2994A",
+    subtext:
+      "This dispute is currently active and pending further review.",
   }
 }
 
@@ -110,8 +95,10 @@ export default function SellerDisputeDetailPage() {
 
   const [dispute, setDispute] = useState<Dispute | null>(null)
   const [loading, setLoading] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
+  const [response, setResponse] = useState("")
+  const [images, setImages] = useState<string[]>([])
 
-  /* 🔁 REFRESH EVERY TIME SCREEN GAINS FOCUS */
   useFocusEffect(
     useCallback(() => {
       if (id && user?.id) {
@@ -121,13 +108,9 @@ export default function SellerDisputeDetailPage() {
   )
 
   const fetchDispute = async () => {
-    try {
-      if (!id || !user?.id) {
-        setDispute(null)
-        setLoading(false)
-        return
-      }
+    if (!id || !user?.id) return
 
+    try {
       setLoading(true)
 
       const { data, error } = await supabase
@@ -138,25 +121,134 @@ export default function SellerDisputeDetailPage() {
 
       if (error) throw error
 
-      if (!data) {
-        setDispute(null)
-        return
-      }
-
-      // 🔐 Only seller can view seller dispute page
-      if (data.seller_id !== user.id) {
+      if (!data || data.seller_id !== user.id) {
         router.back()
         return
       }
 
+      // 🔒 Block editing if already resolved (protects seller lifecycle)
+      if (data.resolved_at) {
+        setDispute(data)
+        setResponse(data.seller_response || "")
+        setImages(data.seller_evidence_urls || [])
+        return
+      }
+
       setDispute(data)
+      setResponse(data.seller_response || "")
+      setImages(data.seller_evidence_urls || [])
     } catch (err) {
       handleAppError(err, {
         fallbackMessage: "Failed to load dispute details.",
       })
-      setDispute(null)
     } finally {
       setLoading(false)
+    }
+  }
+
+  /* ---------------- IMAGE PICKER (FIXED FOR EXPO) ---------------- */
+  const pickImage = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: false,
+        quality: 0.8,
+        allowsMultipleSelection: true,
+      })
+
+      if (result.canceled) return
+
+      const uris = result.assets.map((asset) => asset.uri)
+      setImages((prev) => [...prev, ...uris])
+    } catch (err) {
+      handleAppError(err, {
+        context: "seller_dispute_image_picker",
+        fallbackMessage: "Failed to select evidence image.",
+      })
+    }
+  }
+
+  /* ---------------- UPLOAD TO SUPABASE STORAGE (RN SAFE) ---------------- */
+  const uploadImagesToStorage = async () => {
+    if (!images.length || !dispute) return []
+
+    const uploadedUrls: string[] = []
+    const role = "seller"
+
+    for (let i = 0; i < images.length; i++) {
+      const uri = images[i]
+
+      // Skip already uploaded URLs (editing case)
+      if (uri.startsWith("http")) {
+        uploadedUrls.push(uri)
+        continue
+      }
+
+      try {
+        const response = await fetch(uri)
+        const blob = await response.blob()
+
+        const fileExt = "jpg"
+        const path = `${dispute.order_id}/${role}-${Date.now()}-${i}.${fileExt}`
+
+        const { error } = await supabase.storage
+          .from("dispute-images")
+          .upload(path, blob, {
+            contentType: "image/jpeg",
+            upsert: false,
+          })
+
+        if (error) throw error
+
+        const { data: urlData } = supabase.storage
+          .from("dispute-images")
+          .getPublicUrl(path)
+
+        if (!urlData?.publicUrl) {
+          throw new Error("Failed to retrieve dispute image URL")
+        }
+
+        uploadedUrls.push(urlData.publicUrl)
+      } catch (err) {
+        handleAppError(err, {
+          context: "dispute_image_upload",
+          fallbackMessage: "Failed to upload evidence image.",
+        })
+      }
+    }
+
+    return uploadedUrls
+  }
+
+  /* ---------------- SUBMIT SELLER RESPONSE ---------------- */
+  const submitResponse = async () => {
+    if (!dispute || !response.trim() || dispute.resolved_at) return
+
+    try {
+      setSubmitting(true)
+
+      const uploadedUrls = await uploadImagesToStorage()
+
+      const { error } = await supabase
+        .from("disputes")
+        .update({
+          seller_response: response.trim(),
+          seller_responded_at: new Date().toISOString(),
+          seller_evidence_urls: uploadedUrls,
+          status: "under_review",
+        })
+        .eq("id", dispute.id)
+        .eq("seller_id", user?.id)
+
+      if (error) throw error
+
+      await fetchDispute()
+    } catch (err) {
+      handleAppError(err, {
+        fallbackMessage: "Failed to submit dispute response.",
+      })
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -178,6 +270,16 @@ export default function SellerDisputeDetailPage() {
 
   const statusMeta = getStatusMeta(dispute.status, dispute.opened_by)
 
+  const sellerNeedsToRespond =
+    dispute.opened_by === "buyer" &&
+    !dispute.seller_responded_at &&
+    !dispute.resolved_at
+
+  const showUnderReview =
+    dispute.seller_responded_at && !dispute.resolved_at
+
+  const isResolved = !!dispute.resolved_at
+
   return (
     <View style={styles.screen}>
       <AppHeader title="Dispute Details" backRoute="/seller-hub/orders" />
@@ -187,7 +289,6 @@ export default function SellerDisputeDetailPage() {
           Order #{dispute.order_id.slice(0, 8)}
         </Text>
 
-        {/* STATUS BADGE */}
         <View
           style={[
             styles.statusBadge,
@@ -199,30 +300,16 @@ export default function SellerDisputeDetailPage() {
 
         <Text style={styles.statusSubtext}>{statusMeta.subtext}</Text>
 
-        {/* WHO OPENED DISPUTE */}
-        <Text style={styles.sectionTitle}>Dispute Opened By</Text>
-        <View style={styles.card}>
-          <Text style={styles.infoStrong}>
-            {dispute.opened_by === "seller" ? "You (Seller)" : "Buyer"}
-          </Text>
-        </View>
-
-        {/* ORIGINAL DISPUTE REASON */}
-        <Text style={styles.sectionTitle}>
-          {dispute.opened_by === "seller"
-            ? "Seller Dispute Reason"
-            : "Buyer Dispute Reason"}
-        </Text>
+        <Text style={styles.sectionTitle}>Buyer Dispute Reason</Text>
         <View style={styles.card}>
           <Text style={styles.reason}>{dispute.reason}</Text>
           <Text style={styles.description}>{dispute.description}</Text>
         </View>
 
-        {/* ORIGINAL EVIDENCE */}
         {dispute.evidence_urls?.length ? (
           <>
-            <Text style={styles.sectionTitle}>Submitted Evidence</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <Text style={styles.sectionTitle}>Buyer Evidence</Text>
+            <ScrollView horizontal>
               {dispute.evidence_urls.map((url) => (
                 <Image key={url} source={{ uri: url }} style={styles.image} />
               ))}
@@ -230,82 +317,70 @@ export default function SellerDisputeDetailPage() {
           </>
         ) : null}
 
-        {/* BUYER RESPONSE (NEW DB SUPPORT) */}
-        {dispute.buyer_response && (
-          <>
-            <Text style={styles.sectionTitle}>Buyer Response</Text>
-            <View style={styles.card}>
-              <Text style={styles.description}>
-                {dispute.buyer_response}
-              </Text>
-            </View>
-          </>
-        )}
-
-        {/* TIMESTAMPS */}
-        <Text style={styles.sectionTitle}>Dispute Submitted</Text>
-        <Text style={styles.info}>
-          {new Date(dispute.created_at).toLocaleString()}
-        </Text>
-
-        {dispute.buyer_responded_at && (
+        {sellerNeedsToRespond && (
           <>
             <Text style={styles.sectionTitle}>
-              Buyer Responded At
+              Your Response & Evidence
             </Text>
-            <Text style={styles.info}>
-              {new Date(
-                dispute.buyer_responded_at
-              ).toLocaleString()}
-            </Text>
+
+            <TextInput
+              style={styles.input}
+              placeholder="Enter your response to the dispute..."
+              value={response}
+              onChangeText={setResponse}
+              multiline
+            />
+
+            <TouchableOpacity style={styles.uploadBtn} onPress={pickImage}>
+              <Text style={styles.uploadText}>
+                Upload Evidence Images
+              </Text>
+            </TouchableOpacity>
+
+            <ScrollView horizontal>
+              {images.map((uri, index) => (
+                <Image key={index} source={{ uri }} style={styles.image} />
+              ))}
+            </ScrollView>
+
+            <TouchableOpacity
+              style={styles.submitBtn}
+              onPress={submitResponse}
+              disabled={submitting}
+            >
+              <Text style={styles.submitText}>
+                {submitting ? "Submitting..." : "Submit Response"}
+              </Text>
+            </TouchableOpacity>
           </>
         )}
 
-        {dispute.resolution && (
-          <>
-            <Text style={styles.sectionTitle}>Final Resolution</Text>
-            <Text style={styles.info}>
-              {dispute.resolution.replace("_", " ")}
+        {showUnderReview && (
+          <View style={styles.reviewBox}>
+            <Text style={styles.reviewText}>
+              Both the buyer and you have sent in your evidence. This dispute is under review.
             </Text>
-          </>
+          </View>
         )}
 
-        {dispute.admin_notes && (
-          <>
-            <Text style={styles.sectionTitle}>Admin Notes</Text>
-            <Text style={styles.info}>{dispute.admin_notes}</Text>
-          </>
-        )}
-
-        {dispute.resolved_at && (
-          <>
-            <Text style={styles.sectionTitle}>Resolved At</Text>
-            <Text style={styles.info}>
-              {new Date(dispute.resolved_at).toLocaleString()}
+        {isResolved && (
+          <View style={styles.resolvedBox}>
+            <Text style={styles.resolvedText}>
+              {dispute.status === "resolved_seller"
+                ? "This dispute has been resolved in your favor. The order has been completed."
+                : "This dispute has been resolved in favor of the buyer. A refund has been issued."}
             </Text>
-          </>
+          </View>
         )}
       </ScrollView>
     </View>
   )
 }
 
-/* ---------------- STYLES ---------------- */
-
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#F6F7F8" },
-
-  container: {
-    padding: 16,
-    paddingBottom: 80,
-  },
-
-  orderText: {
-    fontSize: 14,
-    fontWeight: "800",
-    marginBottom: 10,
-  },
-
+  container: { padding: 16, paddingBottom: 80 },
+  orderText: { fontSize: 14, fontWeight: "800", marginBottom: 10 },
   statusBadge: {
     alignSelf: "flex-start",
     paddingHorizontal: 14,
@@ -313,72 +388,77 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     marginBottom: 6,
   },
-
-  statusText: {
-    color: "#fff",
-    fontSize: 12,
-    fontWeight: "900",
-    textTransform: "capitalize",
-  },
-
+  statusText: { color: "#fff", fontSize: 12, fontWeight: "900" },
   statusSubtext: {
     marginBottom: 16,
     color: "#6B7280",
     fontSize: 13,
     fontWeight: "600",
-    lineHeight: 18,
   },
-
   sectionTitle: {
     fontWeight: "900",
     fontSize: 15,
     marginTop: 18,
     marginBottom: 8,
-    color: "#111827",
   },
-
   card: {
     backgroundColor: "#fff",
     padding: 14,
     borderRadius: 12,
   },
-
-  reason: {
+  reason: { fontWeight: "800", fontSize: 14, marginBottom: 6 },
+  description: { color: "#444", fontSize: 14, lineHeight: 20 },
+  input: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 14,
+    minHeight: 120,
+    textAlignVertical: "top",
+  },
+  uploadBtn: {
+    marginTop: 12,
+    backgroundColor: "#2F80ED",
+    padding: 12,
+    borderRadius: 10,
+    alignItems: "center",
+  },
+  uploadText: { color: "#fff", fontWeight: "800" },
+  submitBtn: {
+    marginTop: 16,
+    backgroundColor: "#27AE60",
+    padding: 14,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  submitText: { color: "#fff", fontWeight: "900", fontSize: 15 },
+  reviewBox: {
+    marginTop: 20,
+    backgroundColor: "#E3F2FD",
+    padding: 18,
+    borderRadius: 12,
+  },
+  reviewText: {
     fontWeight: "800",
-    fontSize: 14,
-    marginBottom: 6,
+    color: "#1E3A8A",
+    textAlign: "center",
   },
-
-  description: {
-    color: "#444",
-    fontSize: 14,
-    lineHeight: 20,
+  resolvedBox: {
+    marginTop: 20,
+    backgroundColor: "#E8F5E9",
+    padding: 18,
+    borderRadius: 12,
   },
-
+  resolvedText: {
+    fontWeight: "900",
+    color: "#1B5E20",
+    textAlign: "center",
+  },
   image: {
     width: 120,
     height: 120,
     borderRadius: 12,
     marginRight: 10,
+    marginTop: 10,
   },
-
-  info: {
-    backgroundColor: "#fff",
-    padding: 12,
-    borderRadius: 10,
-    fontSize: 13,
-    color: "#374151",
-  },
-
-  infoStrong: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: "#111827",
-  },
-
-  center: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
+  center: { flex: 1, justifyContent: "center", alignItems: "center" },
 })

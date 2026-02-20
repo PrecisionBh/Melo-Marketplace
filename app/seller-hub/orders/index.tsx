@@ -72,6 +72,7 @@ export default function SellerOrdersHubScreen() {
     }
   }
 
+  /* ✅ FIXED: TRUE OPEN DISPUTES (ANY UNRESOLVED) */
   const loadOpenDisputesCount = async () => {
     try {
       if (!sellerId) return
@@ -79,8 +80,8 @@ export default function SellerOrdersHubScreen() {
       const { count, error } = await supabase
         .from("disputes")
         .select("id", { count: "exact", head: true })
-        .eq("status", "open")
         .eq("seller_id", sellerId)
+        .is("resolved_at", null) // ← CORRECT for your schema
 
       if (error) throw error
 

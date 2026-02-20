@@ -51,10 +51,12 @@ export default function SellerDisputesPage() {
 
       setLoading(true)
 
+      // 🔥 ONLY PULL ACTIVE (OPEN) DISPUTES
       const { data, error } = await supabase
         .from("disputes")
         .select("id, order_id, status, reason, created_at")
         .eq("seller_id", sellerId)
+        .in("status", ["return_processing", "under_review"])
         .order("created_at", { ascending: false })
 
       if (error) throw error
@@ -72,17 +74,31 @@ export default function SellerDisputesPage() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "issue_open":
-        return "#EB5757"
-      case "seller_responded":
-        return "#F2C94C"
+      case "return_processing":
+        return "#EB5757" // 🔴 Active dispute / frozen escrow
       case "under_review":
-        return "#2F80ED"
+        return "#2F80ED" // 🔵 Admin review
       case "resolved_buyer":
+        return "#27AE60"
       case "resolved_seller":
         return "#27AE60"
       default:
         return "#999"
+    }
+  }
+
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case "return_processing":
+        return "Active Dispute"
+      case "under_review":
+        return "Under Review"
+      case "resolved_buyer":
+        return "Resolved (Buyer)"
+      case "resolved_seller":
+        return "Resolved (Seller)"
+      default:
+        return status.replace(/_/g, " ")
     }
   }
 
@@ -95,7 +111,7 @@ export default function SellerDisputesPage() {
     >
       <View style={styles.row}>
         <Text style={styles.orderText}>
-          Order #{item.order_id?.slice(0, 8) ?? "N/A"}
+          Order #{item.order_id ? item.order_id.slice(0, 8) : "N/A"}
         </Text>
 
         <View
@@ -105,7 +121,7 @@ export default function SellerDisputesPage() {
           ]}
         >
           <Text style={styles.statusText}>
-            {item.status?.replace("_", " ") ?? "unknown"}
+            {getStatusLabel(item.status)}
           </Text>
         </View>
       </View>
@@ -132,16 +148,17 @@ export default function SellerDisputesPage() {
 
   return (
     <View style={styles.screen}>
-      {/* STANDARD MELO HEADER */}
       <AppHeader
-        title="Disputes"
+        title="Active Disputes"
         backLabel="Orders"
         backRoute="/seller-hub/orders"
       />
 
       {disputes.length === 0 ? (
         <View style={styles.center}>
-          <Text style={styles.emptyText}>No disputes found.</Text>
+          <Text style={styles.emptyText}>
+            No active disputes.
+          </Text>
         </View>
       ) : (
         <FlatList
@@ -149,6 +166,7 @@ export default function SellerDisputesPage() {
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
           contentContainerStyle={{ padding: 16, paddingBottom: 120 }}
+          showsVerticalScrollIndicator={false}
         />
       )}
     </View>
@@ -160,7 +178,7 @@ export default function SellerDisputesPage() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#EAF4EF", // 🌿 Melo global background
+    backgroundColor: "#EAF4EF",
   },
 
   card: {
