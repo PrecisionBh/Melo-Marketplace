@@ -149,38 +149,106 @@ export default function DisputeIssuePage() {
       }
 
       /* 3️⃣ Insert dispute (aligned with your schema + flow) */
-      const { data: dispute, error: disputeError } = await supabase
-        .from("disputes")
-        .insert({
-          order_id: id,
-          buyer_id: user.id,
-          seller_id: order.seller_id,
-          opened_by: "buyer",
-          reason,
-          description: description.trim(),
-          status: "open", // ✅ consistent with review flow
-          created_at: new Date().toISOString(),
+const { data: dispute, error: disputeError } = await supabase
+  .from("disputes")
+  .insert({
+    order_id: id,
+    buyer_id: user.id,
+    seller_id: order.seller_id,
+    opened_by: "buyer",
+    reason,
+    description: description.trim(),
+    status: "issue_open",
+    created_at: new Date().toISOString(),
+  })
+  .select()
+  .single()
+
+if (disputeError || !dispute) throw disputeError
+
+/* 4️⃣ Upload buyer evidence (FORMDATA — MATCHES LISTING UPLOAD + ROLLBACK SAFE) */
+if (images.length > 0) {
+  try {
+    const evidenceUrls: string[] = []
+
+    for (let i = 0; i < images.length; i++) {
+      const uri = images[i]
+      const ext = uri.split(".").pop() || "jpg"
+      const path = `${dispute.id}/buyer-${i}.${ext}`
+
+      const formData = new FormData()
+      formData.append("file", {
+        uri,
+        name: path,
+        type: `image/${ext === "jpg" ? "jpeg" : ext}`,
+      } as any)
+
+      const { error: uploadError } = await supabase.storage
+        .from("dispute-images")
+        .upload(path, formData, { upsert: false })
+
+      if (uploadError) {
+        // 🚨 CRITICAL: DELETE DISPUTE IF EVIDENCE FAILS (NO PARTIAL ROWS)
+        await supabase
+          .from("disputes")
+          .delete()
+          .eq("id", dispute.id)
+          .eq("buyer_id", user.id)
+
+        handleAppError(uploadError, {
+          context: "dispute_storage_upload",
+          fallbackMessage:
+            "Failed to upload dispute evidence. Dispute was not created.",
         })
-        .select()
-        .single()
-
-      if (disputeError || !dispute) throw disputeError
-
-      /* 4️⃣ Upload buyer evidence (correct column) */
-      if (images.length > 0) {
-        const evidenceUrls = await uploadEvidenceImages(dispute.id)
-
-        if (evidenceUrls.length > 0) {
-          const { error: updateEvidenceError } = await supabase
-            .from("disputes")
-            .update({
-              buyer_evidence_urls: evidenceUrls,
-            })
-            .eq("id", dispute.id)
-
-          if (updateEvidenceError) throw updateEvidenceError
-        }
+        throw uploadError
       }
+
+      const { data } = supabase.storage
+        .from("dispute-images")
+        .getPublicUrl(path)
+
+      if (data?.publicUrl) {
+        evidenceUrls.push(data.publicUrl)
+      }
+    }
+
+    // 🔥 SAVE URLs TO DISPUTE (FIXES NULL EVIDENCE ISSUE)
+    if (evidenceUrls.length > 0) {
+      const { error: updateEvidenceError } = await supabase
+        .from("disputes")
+        .update({
+          buyer_evidence_urls: evidenceUrls,
+        })
+        .eq("id", dispute.id)
+        .eq("buyer_id", user.id) // RLS safe
+
+      if (updateEvidenceError) {
+        // 🚨 CRITICAL: ROLLBACK DISPUTE IF DB UPDATE FAILS
+        await supabase
+          .from("disputes")
+          .delete()
+          .eq("id", dispute.id)
+          .eq("buyer_id", user.id)
+
+        handleAppError(updateEvidenceError, {
+          context: "dispute_update_evidence",
+          fallbackMessage:
+            "Failed to attach evidence. Dispute was not created.",
+        })
+        throw updateEvidenceError
+      }
+    }
+  } catch (err) {
+    // Extra safety rollback (network / storage / unknown errors)
+    await supabase
+      .from("disputes")
+      .delete()
+      .eq("id", dispute.id)
+      .eq("buyer_id", user.id)
+
+    throw err
+  }
+}
 
       /* 5️⃣ Flag order as disputed (TRIGGERS ESCROW FREEZE) */
       const { error: orderUpdateError } = await supabase

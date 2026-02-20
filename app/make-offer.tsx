@@ -123,100 +123,109 @@ export default function MakeOfferScreen() {
 
   /* ---------------- SUBMIT ---------------- */
 
-  const submitOffer = async () => {
-    if (submittingRef.current) return
-    if (!session?.user || !listing) return
+const submitOffer = async () => {
+  if (submittingRef.current) return
+  if (!session?.user || !listing) return
 
-    if (!numericOffer || numericOffer <= 0) {
-      Alert.alert("Invalid offer", "Enter a valid offer amount.")
-      return
-    }
-
-    if (
-      typeof listing.min_offer === "number" &&
-      numericOffer < listing.min_offer
-    ) {
-      setMinError(`Minimum offer is $${listing.min_offer.toFixed(2)}`)
-      return
-    }
-
-    try {
-      submittingRef.current = true
-      setLoading(true)
-
-      const { data: newOffer, error } = await supabase
-        .from("offers")
-        .insert({
-          listing_id: listing.id,
-          buyer_id: session.user.id,
-          seller_id: listing.user_id,
-
-          offer_amount: numericOffer,
-          original_offer: numericOffer,
-          current_amount: numericOffer,
-
-          buyer_fee: buyerFee,
-          total_due: totalDue,
-
-          status: "pending",
-          last_action: "buyer",
-          last_actor: "buyer",
-          counter_count: 0,
-
-          expires_at: new Date(
-            Date.now() + 24 * 60 * 60 * 1000
-          ).toISOString(),
-        })
-        .select("id")
-        .single()
-
-      if (error) {
-        if (error.code === "23505") {
-          Alert.alert(
-            "Offer already sent",
-            "You already have an active offer on this item."
-          )
-          return
-        }
-        throw error
-      }
-
-      /* ✅ NOTIFY AFTER SUCCESS (non-blocking safe) */
-      try {
-        await notify({
-          userId: listing.user_id,
-          type: "offer",
-          title: "New offer received",
-          body: `You received a new offer on "${listing.title}"`,
-          data: {
-            route: "/seller-hub/offers/[id]",
-            params: {
-              id: newOffer.id,
-            },
-          },
-        })
-      } catch (notifyErr) {
-        console.warn("Notify failed:", notifyErr)
-      }
-
-      Alert.alert(
-        "Offer Sent",
-        "The seller has been notified. You’ll be able to respond if they counter."
-      )
-
-      router.back()
-    } catch (err) {
-      console.error("Offer submit error:", err)
-      handleAppError(err, {
-        fallbackMessage: "Failed to submit offer. Please try again.",
-      })
-    } finally {
-      submittingRef.current = false
-      setLoading(false)
-    }
+  // 🚫 BLOCK SELF-OFFERS (CRITICAL MARKETPLACE GUARD)
+  if (listing.user_id === session.user.id) {
+    Alert.alert(
+      "Invalid Action",
+      "You cannot make an offer on your own listing."
+    )
+    return
   }
 
-  if (!listing) return null
+  if (!numericOffer || numericOffer <= 0) {
+    Alert.alert("Invalid offer", "Enter a valid offer amount.")
+    return
+  }
+
+  if (
+    typeof listing.min_offer === "number" &&
+    numericOffer < listing.min_offer
+  ) {
+    setMinError(`Minimum offer is $${listing.min_offer.toFixed(2)}`)
+    return
+  }
+
+  try {
+    submittingRef.current = true
+    setLoading(true)
+
+    const { data: newOffer, error } = await supabase
+      .from("offers")
+      .insert({
+        listing_id: listing.id,
+        buyer_id: session.user.id,
+        seller_id: listing.user_id,
+
+        offer_amount: numericOffer,
+        original_offer: numericOffer,
+        current_amount: numericOffer,
+
+        buyer_fee: buyerFee,
+        total_due: totalDue,
+
+        status: "pending",
+        last_action: "buyer",
+        last_actor: "buyer",
+        counter_count: 0,
+
+        expires_at: new Date(
+          Date.now() + 24 * 60 * 60 * 1000
+        ).toISOString(),
+      })
+      .select("id")
+      .single()
+
+    if (error) {
+      if (error.code === "23505") {
+        Alert.alert(
+          "Offer already sent",
+          "You already have an active offer on this item."
+        )
+        return
+      }
+      throw error
+    }
+
+    /* ✅ NOTIFY AFTER SUCCESS (non-blocking safe) */
+    try {
+      await notify({
+        userId: listing.user_id,
+        type: "offer",
+        title: "New offer received",
+        body: `You received a new offer on "${listing.title}"`,
+        data: {
+          route: "/seller-hub/offers/[id]",
+          params: {
+            id: newOffer.id,
+          },
+        },
+      })
+    } catch (notifyErr) {
+      console.warn("Notify failed:", notifyErr)
+    }
+
+    Alert.alert(
+      "Offer Sent",
+      "The seller has been notified. You’ll be able to respond if they counter."
+    )
+
+    router.back()
+  } catch (err) {
+    console.error("Offer submit error:", err)
+    handleAppError(err, {
+      fallbackMessage: "Failed to submit offer. Please try again.",
+    })
+  } finally {
+    submittingRef.current = false
+    setLoading(false)
+  }
+}
+
+if (!listing) return null
 
 
   /* ---------------- UI ---------------- */

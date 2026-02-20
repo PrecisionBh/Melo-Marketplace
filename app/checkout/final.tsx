@@ -300,6 +300,17 @@ setDisplayTotalCents(escrow + buyerFee + taxCents)
         throw new Error("Missing listing pricing data")
       }
 
+      // 🚫 BLOCK BUYING YOUR OWN LISTING (CRITICAL MARKETPLACE GUARD)
+if (sellerId === session.user.id) {
+  Alert.alert(
+    "Invalid Purchase",
+    "You cannot buy your own listing."
+  )
+  setPaying(false)
+  return
+}
+
+
       /* ---------- PRICING (SINGLE SOURCE OF TRUTH) ---------- */
 
       const shippingCents =

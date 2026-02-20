@@ -17,7 +17,6 @@ export default function SellerHubScreen() {
   const [ordersInProgressCount, setOrdersInProgressCount] = useState(0)
   const [unreadMessagesCount, setUnreadMessagesCount] = useState(0)
   const [offersActionCount, setOffersActionCount] = useState(0)
-  const [disputesActionCount, setDisputesActionCount] = useState(0)
 
   /* ---------------- LOAD COUNTS ---------------- */
 
@@ -35,7 +34,6 @@ export default function SellerHubScreen() {
       loadOrdersInProgressCount()
       loadUnreadMessagesCount()
       loadOffersActionCount()
-      loadDisputesActionCount()
     }, [sellerId])
   )
 
@@ -126,8 +124,7 @@ export default function SellerHubScreen() {
     }
   }
 
-  /* ---------------- OFFERS: NEEDING SELLER ACTION ---------------- */
-
+  /* ---------------- OFFERS: TRUE ACTIONABLE (NOT CONVERTED TO ORDERS) ---------------- */
   const loadOffersActionCount = async () => {
     if (!sellerId) return
 
@@ -136,7 +133,8 @@ export default function SellerHubScreen() {
         .from("offers")
         .select("id", { count: "exact", head: true })
         .eq("seller_id", sellerId)
-        .in("status", ["pending", "countered"])
+        .in("status", ["pending", "countered"]) // only active offers
+        .neq("last_actor", "seller") // seller still needs to respond
 
       if (error) {
         handleAppError(error, {
@@ -150,36 +148,6 @@ export default function SellerHubScreen() {
     } catch (err) {
       handleAppError(err, {
         context: "seller_hub_load_offers_action_catch",
-        silent: true,
-      })
-    }
-  }
-
-  /* ---------------- DISPUTES: NEEDING SELLER RESPONSE (SCHEMA-ACCURATE) ---------------- */
-
-  const loadDisputesActionCount = async () => {
-    if (!sellerId) return
-
-    try {
-      const { count, error } = await supabase
-        .from("disputes")
-        .select("id", { count: "exact", head: true })
-        .eq("seller_id", sellerId)
-        .is("resolved_at", null) // still active dispute
-        .is("seller_responded_at", null) // seller has not responded yet (true action needed)
-
-      if (error) {
-        handleAppError(error, {
-          context: "seller_hub_load_disputes_action",
-          silent: true,
-        })
-        return
-      }
-
-      setDisputesActionCount(count ?? 0)
-    } catch (err) {
-      handleAppError(err, {
-        context: "seller_hub_load_disputes_action_catch",
         silent: true,
       })
     }
@@ -214,16 +182,11 @@ export default function SellerHubScreen() {
         <MenuItem
           icon="pricetags-outline"
           label="Offers"
-          badgeCount={offersActionCount}
+          badgeCount={offersActionCount} // 🔥 Now only actionable offers
           onPress={() => router.push("/seller-hub/offers")}
         />
 
-        <MenuItem
-          icon="alert-circle-outline"
-          label="Disputes"
-          badgeCount={disputesActionCount}
-          onPress={() => router.push("/seller-hub/orders/disputes")}
-        />
+        {/* ❌ DISPUTES REMOVED (handled inside Orders to avoid UX confusion) */}
 
         <MenuItem
           icon="wallet-outline"

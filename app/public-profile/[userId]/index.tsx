@@ -346,7 +346,9 @@ export default function PublicProfileScreen() {
       <AppHeader
   title="Profile"
   backLabel="Back"
- />
+  backRoute="/"
+/>
+
 
 
       <FlatList

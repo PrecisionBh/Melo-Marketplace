@@ -31,42 +31,52 @@ export default function BuyerOrdersHubScreen() {
     if (!buyerId) return
 
     const { count, error } = await supabase
-  .from("orders")
-  .select("id", { count: "exact", head: true })
-  .eq("buyer_id", buyerId)
-  .in("status", ["paid", "shipped", "delivered"])
+      .from("orders")
+      .select("id", { count: "exact", head: true })
+      .eq("buyer_id", buyerId)
+      .in("status", [
+        "paid",
+        "shipped",
+        "delivered",
+        "return_started",
+        "return_processing",
+        "in_dispute",
+        "pending_payment",
+      ])
 
-if (error) {
-  handleAppError(error, {
-    fallbackMessage: "Failed to load order counts.",
-  })
-  setInProgressCount(0)
-  return
-}
+    if (error) {
+      handleAppError(error, {
+        fallbackMessage: "Failed to load order counts.",
+        context: "BuyerOrdersHubScreen.loadInProgressCount",
+        silent: true,
+      })
+      setInProgressCount(0)
+      return
+    }
 
-setInProgressCount(count ?? 0)
-
+    setInProgressCount(count ?? 0)
   }
 
   const loadOpenDisputesCount = async () => {
     if (!buyerId) return
 
     const { count, error } = await supabase
-  .from("disputes")
-  .select("id", { count: "exact", head: true })
-  .eq("buyer_id", buyerId)
-  .eq("status", "open")
+      .from("disputes")
+      .select("id", { count: "exact", head: true })
+      .eq("buyer_id", buyerId)
+      .eq("status", "open")
 
-if (error) {
-  handleAppError(error, {
-    fallbackMessage: "Failed to load dispute counts.",
-  })
-  setOpenDisputesCount(0)
-  return
-}
+    if (error) {
+      handleAppError(error, {
+        fallbackMessage: "Failed to load dispute counts.",
+        context: "BuyerOrdersHubScreen.loadOpenDisputesCount",
+        silent: true,
+      })
+      setOpenDisputesCount(count ?? 0)
+      return
+    }
 
-setOpenDisputesCount(count ?? 0)
-
+    setOpenDisputesCount(count ?? 0)
   }
 
   return (

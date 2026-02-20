@@ -414,9 +414,11 @@ const styles = StyleSheet.create({
     backgroundColor: "#EAF4EF",
   },
   headerBlock: {
-    backgroundColor: "#7FAF9B",
-    paddingBottom: 10,
-  },
+  backgroundColor: "#7FAF9B",
+  paddingBottom: 10,
+  zIndex: 999,        // 🔥 CRITICAL
+  elevation: 10,      // 🔥 ANDROID FIX
+},
   fab: {
     position: "absolute",
     bottom: 55,

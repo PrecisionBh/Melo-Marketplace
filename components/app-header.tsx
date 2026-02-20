@@ -25,6 +25,11 @@ export default function AppHeader({
     }
   }
 
+  // 🏠 HOME BUTTON (instant jump to root without stacking history)
+  const handleHome = () => {
+    router.replace("/")
+  }
+
   return (
     <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
       {/* BACK BUTTON */}
@@ -39,6 +44,15 @@ export default function AppHeader({
 
       {/* TITLE */}
       <Text style={styles.headerTitle}>{title}</Text>
+
+      {/* 🏠 HOME BUTTON (RIGHT SIDE) */}
+      <TouchableOpacity
+        style={styles.homeBtn}
+        onPress={handleHome}
+        activeOpacity={0.7}
+      >
+        <Ionicons name="home" size={22} color="#E8F5EE" />
+      </TouchableOpacity>
     </View>
   )
 }
@@ -57,6 +71,15 @@ const styles = StyleSheet.create({
     bottom: 14,
     flexDirection: "row",
     alignItems: "center",
+  },
+
+  // 🆕 RIGHT SIDE HOME BUTTON (mirrors back button positioning)
+  homeBtn: {
+    position: "absolute",
+    right: 16,
+    bottom: 14,
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   backText: {

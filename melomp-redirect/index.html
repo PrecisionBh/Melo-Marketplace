@@ -4,49 +4,84 @@
     <meta charset="utf-8" />
     <title>Returning to Melo</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        margin: 0;
+        background: #0F1E17;
+        color: white;
+      }
+      .box {
+        text-align: center;
+        padding: 24px;
+      }
+      a {
+        color: #7FAF9B;
+        font-size: 18px;
+        text-decoration: none;
+        font-weight: 700;
+      }
+    </style>
   </head>
 
   <body>
-    <p>Returning to Melo…</p>
+    <div class="box">
+      <h2>Redirecting back to Melo…</h2>
+      <p>Please wait while we finish payout setup.</p>
+    </div>
 
     <script>
-      const params = new URLSearchParams(window.location.search)
+      console.log("🔁 Melo redirect page loaded");
 
-      const mode = params.get("mode")        // onboarding | checkout
-      const status = params.get("status")    // success | cancel
+      const ts = Date.now();
 
-      const ts = Date.now()
+      /**
+       * CRITICAL:
+       * We now deep link to melomp://wallet (NOT seller-hub/wallet)
+       * because you created:
+       * app/wallet.tsx (redirect shim)
+       *
+       * This prevents:
+       * - unmatched route
+       * - //wallet bug
+       * - Stripe deep link inconsistencies
+       */
+      const deepLink = "melomp://wallet?from=stripe&ts=" + ts;
 
-      console.log("Redirect mode:", mode)
-      console.log("Redirect status:", status)
+      console.log("🚀 Redirecting to:", deepLink);
 
-      // ---------------- SELLER ONBOARDING ----------------
-      if (mode === "onboarding") {
-        window.location.replace(
-          "melomp://seller-hub/wallet?ts=" + ts
-        )
-      }
-
-      // ---------------- CHECKOUT ----------------
-      else if (mode === "checkout") {
-        if (status === "success") {
-          window.location.replace(
-            "melomp://checkout/success?ts=" + ts
-          )
-        } else {
-          window.location.replace(
-            "melomp://checkout/cancel?ts=" + ts
-          )
+      // Attempt automatic deep link (primary)
+      setTimeout(() => {
+        try {
+          window.location.replace(deepLink);
+        } catch (e) {
+          console.error("Deep link failed:", e);
         }
-      }
+      }, 600);
 
-      // ---------------- FALLBACK ----------------
-      else {
-        // safety net so we never dead-end
-        window.location.replace(
-          "melomp://?ts=" + ts
-        )
-      }
+      // Strong fallback for mobile browsers (Safari/Chrome)
+      setTimeout(() => {
+        document.body.innerHTML = `
+          <div class="box">
+            <h2>Almost there!</h2>
+            <p>Tap below if the app did not open automatically:</p>
+            <br/>
+            <a href="${deepLink}">
+              Open Melo App
+            </a>
+          </div>
+        `;
+      }, 2200);
+
+      // Final safety fallback (prevents 404 dead-end)
+      setTimeout(() => {
+        console.warn("⚠️ Final fallback triggered");
+        window.location.href = deepLink;
+      }, 4000);
     </script>
   </body>
 </html>

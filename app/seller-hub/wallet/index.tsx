@@ -43,6 +43,7 @@ export default function SellerWalletScreen() {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [redirecting, setRedirecting] = useState(false) // ✅ ADDED ONLY
 
   /* ---------------- LOAD DATA ---------------- */
 
@@ -127,13 +128,15 @@ export default function SellerWalletScreen() {
 
   const handlePayoutSetup = async () => {
     try {
+      setRedirecting(true) // ✅ ADDED ONLY (show loading message)
+
       const { data, error } = await supabase.functions.invoke(
         "create-connect-account-link",
         {
           body: {
-            email: session?.user?.email,
-            stripe_account_id: profile?.stripe_account_id,
-          },
+  user_id: session?.user?.id,
+  email: session?.user?.email,
+},
         }
       )
 
@@ -144,6 +147,7 @@ export default function SellerWalletScreen() {
         data?.stripe_account_id ?? data?.data?.stripe_account_id
 
       if (!onboardingUrl) {
+        setRedirecting(false) // ✅ ADDED ONLY
         Alert.alert("Error", "Failed to open Stripe onboarding")
         return
       }
@@ -159,6 +163,7 @@ export default function SellerWalletScreen() {
 
       await Linking.openURL(onboardingUrl)
     } catch (err) {
+      setRedirecting(false) // ✅ ADDED ONLY
       handleAppError(err, {
         fallbackMessage: "Unexpected error opening Stripe onboarding.",
       })
@@ -229,6 +234,16 @@ export default function SellerWalletScreen() {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {/* ✅ ADDED ONLY: Loading overlay when redirecting to Stripe */}
+      {redirecting && (
+        <View style={styles.redirectOverlay}>
+          <ActivityIndicator size="large" color="#ffffff" />
+          <Text style={styles.redirectText}>
+            Redirecting to Stripe for payout setup...
+          </Text>
+        </View>
+      )}
     </View>
   )
 }
@@ -287,4 +302,22 @@ const styles = StyleSheet.create({
   },
 
   payoutText: { textAlign: "center", fontWeight: "900", color: "#1F7A63" },
+
+  /* ✅ ADDED ONLY */
+  redirectOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(15, 30, 23, 0.85)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+  },
+
+  /* ✅ ADDED ONLY */
+  redirectText: {
+    marginTop: 16,
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#ffffff",
+    textAlign: "center",
+  },
 })

@@ -19,12 +19,12 @@ import { supabase } from "@/lib/supabase"
 
 /* ---------------- TYPES ---------------- */
 
-type OrderStatus = "completed" | "cancelled" | "refunded"
+type OrderStatus = "completed" | "cancelled" | "refunded" | "returned"
 
 type Order = {
   id: string
   amount_cents: number
-  completed_at: string
+  completed_at: string | null
   status: OrderStatus
   image_url: string | null
   listing_snapshot: {
@@ -66,18 +66,17 @@ export default function BuyerCompletedOrdersScreen() {
       `
       )
       .eq("buyer_id", session!.user.id)
-      .in("status", ["completed", "cancelled", "refunded"])
-      .order("completed_at", { ascending: false })
+      .in("status", ["completed", "cancelled", "refunded", "returned"])
+      .order("completed_at", { ascending: false, nullsFirst: false })
 
     if (error) {
-  handleAppError(error, {
-    fallbackMessage: "Failed to load completed orders.",
-  })
-  setOrders([])
-} else {
-  setOrders((data as Order[]) ?? [])
-}
-
+      handleAppError(error, {
+        fallbackMessage: "Failed to load completed orders.",
+      })
+      setOrders([])
+    } else {
+      setOrders((data as Order[]) ?? [])
+    }
 
     setLoading(false)
   }
@@ -124,6 +123,11 @@ export default function BuyerCompletedOrdersScreen() {
           active={filter === "refunded"}
           onPress={() => setFilter("refunded")}
         />
+        <FilterPill
+          label="Returned"
+          active={filter === "returned"}
+          onPress={() => setFilter("returned")}
+        />
       </View>
 
       {/* CONTENT */}
@@ -147,6 +151,10 @@ export default function BuyerCompletedOrdersScreen() {
               item.listing_snapshot?.image_url ||
               "https://via.placeholder.com/150"
 
+            const dateLabel = item.completed_at
+              ? new Date(item.completed_at).toLocaleDateString()
+              : "—"
+
             return (
               <TouchableOpacity
                 style={styles.card}
@@ -166,8 +174,7 @@ export default function BuyerCompletedOrdersScreen() {
                   </Text>
 
                   <Text style={styles.sub}>
-                    {item.status.toUpperCase()} ·{" "}
-                    {new Date(item.completed_at).toLocaleDateString()}
+                    {item.status.toUpperCase()} · {dateLabel}
                   </Text>
                 </View>
 
@@ -182,6 +189,9 @@ export default function BuyerCompletedOrdersScreen() {
                     },
                     item.status === "refunded" && {
                       backgroundColor: "#EB5757",
+                    },
+                    item.status === "returned" && {
+                      backgroundColor: "#2F80ED",
                     },
                   ]}
                 >
@@ -236,7 +246,7 @@ const styles = StyleSheet.create({
 
   filterRow: {
     flexDirection: "row",
-    gap: 8,
+    gap: 2,
     marginTop: 12,
     paddingHorizontal: 14,
   },
