@@ -26,7 +26,7 @@ import { supabase } from "@/lib/supabase"
 type OrderStatus =
   | "paid"
   | "shipped"
-  | "delivered"
+  | "return_started"
   | "return_processing"
   | "completed"
 
@@ -313,7 +313,8 @@ const handleCompleteReturn = async () => {
 
   if (!order) return null
 
-  const isReturnProcessing = order.status === "return_processing"
+  const isReturnStarted = order.status === "return_started"
+
 
   /* ---------------- MONEY (CORRECT LEDGER LOGIC) ---------------- */
 
@@ -357,58 +358,89 @@ const handleCompleteReturn = async () => {
           </View>
         </View>
 
-        {/* RETURN STATUS CARD (SELLER VIEW) */}
-        {order.status === "return_processing" && (
-          <View style={styles.returnCard}>
-            <Text style={styles.returnTitle}>
-              Return in Progress
-            </Text>
+       {/* RETURN STATUS CARD (SELLER VIEW) */}
+{(order.status === "return_started" || order.status === "return_processing") && (
+  <View style={styles.returnCard}>
+    <Text style={styles.returnTitle}>
+      {order.status === "return_processing"
+        ? "Return Disputed"
+        : "Return Started"}
+    </Text>
 
-            {!order.return_tracking_number ? (
-              <>
-                <Text style={styles.returnText}>
-                  The buyer has initiated a return for this order.
-                </Text>
+    {order.status === "return_processing" ? (
+      <>
+        <Text style={styles.returnText}>
+          You have filed a dispute on this return.
+        </Text>
 
-                <Text style={styles.returnSubText}>
-                  You are currently waiting for the buyer to ship the item back and upload return tracking. The buyer has 72 hours to provide return shipment details. Once tracking has been submitted, please allow up to 5 days for the item to arrive. If the item is not received within that timeframe, you should file a dispute to pause the refund.
-                </Text>
+        <Text style={styles.returnSubText}>
+          This return is currently paused while the dispute is under review.
+          Escrow is frozen until a resolution is completed.
+        </Text>
 
-                <View style={styles.returnBadge}>
-                  <Text style={styles.returnBadgeText}>
-                    Waiting for Buyer Shipment
-                  </Text>
-                </View>
-              </>
-            ) : (
-              <>
-                <Text style={styles.returnText}>
-                  The buyer has shipped the return.
-                </Text>
+        <View style={styles.returnBadge}>
+          <Text style={styles.returnBadgeText}>
+            Seller Filed Dispute – Under Review
+          </Text>
+        </View>
+      </>
+    ) : !order.return_tracking_number ? (
+      <>
+        <Text style={styles.returnText}>
+          The buyer has started a return for this order.
+        </Text>
 
-                <Text style={styles.returnSubText}>
-                  Please track the package and confirm once the item is received to issue the refund.
-                </Text>
+        <Text style={styles.returnSubText}>
+          You are waiting for the buyer to ship the return and upload tracking.
+          Once tracking is added, you can monitor the shipment and either
+          complete the return (issue refund) or file a dispute if there is an
+          issue.
+        </Text>
 
-                <TouchableOpacity
-                  style={styles.trackReturnBtn}
-                  onPress={() => {
-                    if (order.return_tracking_url) {
-                      Linking.openURL(order.return_tracking_url)
-                    }
-                  }}
-                >
-                  <Text style={styles.trackReturnText}>
-                    Track Return Package
-                  </Text>
-                </TouchableOpacity>
-              </>
-            )}
-          </View>
-        )}
+        <View style={styles.returnBadge}>
+          <Text style={styles.returnBadgeText}>
+            Awaiting Buyer Return Shipment
+          </Text>
+        </View>
+      </>
+    ) : (
+      <>
+        <Text style={styles.returnText}>
+          The buyer has shipped the return.
+        </Text>
+
+        <Text style={styles.returnSubText}>
+          Please track the package and confirm once the item is received to
+          issue the refund. If the item is incorrect or not received, you may
+          file a dispute to pause the refund.
+        </Text>
+
+        <TouchableOpacity
+          style={styles.trackReturnBtn}
+          onPress={() => {
+            if (order.return_tracking_url) {
+              Linking.openURL(order.return_tracking_url)
+            }
+          }}
+        >
+          <Text style={styles.trackReturnText}>
+            Track Return Package
+          </Text>
+        </TouchableOpacity>
+
+        <View style={styles.returnBadge}>
+          <Text style={styles.returnBadgeText}>
+            Return Shipped – Awaiting Inspection
+          </Text>
+        </View>
+      </>
+    )}
+  </View>
+)}
+
 
         {/* ONLY SHOW NORMAL ORDER UI IF NOT IN RETURN */}
-        {!isReturnProcessing && (
+        {order.status !== "return_started" && order.status !== "return_processing" && (
           <>
             {/* SHIPPING ADDRESS */}
             <View style={styles.section}>
@@ -513,7 +545,7 @@ const handleCompleteReturn = async () => {
       )}
 
             {/* RETURN ACTIONS (CRITICAL FOR MELO RETURN FLOW) */}
-      {order.status === "return_processing" &&
+      {order.status === "return_started" &&
   order.return_tracking_number &&
   !order.return_received && (
           <View style={styles.actionBar}>

@@ -42,13 +42,27 @@ type Dispute = {
   admin_notes: string | null
 }
 
-const getStatusMeta = (status: string, openedBy?: string | null) => {
+const getStatusMeta = (
+  status: string,
+  openedBy?: string | null,
+  isReturnDispute?: boolean
+) => {
+  // 🆕 RETURN DISPUTE (Seller disputed a return)
+  if (isReturnDispute) {
+    return {
+      label: "Return Disputed – Escrow Frozen",
+      color: "#EB5757",
+      subtext:
+        "The seller has disputed this return. The refund is paused and escrow is frozen until review is completed.",
+    }
+  }
+
   if (status === "under_review") {
     return {
       label: "Under Review",
       color: "#2F80ED",
       subtext:
-        "Both the buyer and you have submitted evidence. This dispute is under review.",
+        "Both the buyer and seller have submitted evidence. This dispute is under review.",
     }
   }
 
@@ -57,7 +71,7 @@ const getStatusMeta = (status: string, openedBy?: string | null) => {
       label: "Resolved With Seller",
       color: "#27AE60",
       subtext:
-        "This dispute was resolved in your favor. The order has been completed.",
+        "This dispute was resolved in the seller's favor. The order has been completed and funds released.",
     }
   }
 
@@ -79,6 +93,15 @@ const getStatusMeta = (status: string, openedBy?: string | null) => {
     }
   }
 
+  if (openedBy === "seller") {
+    return {
+      label: "Seller Dispute Open",
+      color: "#F2994A",
+      subtext:
+        "You have opened a dispute on this order. Escrow is frozen until review is completed.",
+    }
+  }
+
   return {
     label: "Dispute Active",
     color: "#F2994A",
@@ -86,7 +109,6 @@ const getStatusMeta = (status: string, openedBy?: string | null) => {
       "This dispute is currently active and pending further review.",
   }
 }
-
 export default function SellerDisputeDetailPage() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const router = useRouter()
@@ -268,7 +290,14 @@ export default function SellerDisputeDetailPage() {
     )
   }
 
-  const statusMeta = getStatusMeta(dispute.status, dispute.opened_by)
+  const isReturnDispute = dispute.opened_by === "seller"
+
+const statusMeta = getStatusMeta(
+  dispute.status,
+  dispute.opened_by,
+  isReturnDispute
+)
+
 
   const sellerNeedsToRespond =
     dispute.opened_by === "buyer" &&
