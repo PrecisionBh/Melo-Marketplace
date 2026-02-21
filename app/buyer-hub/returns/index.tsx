@@ -103,15 +103,31 @@ export default function ReturnInitiateScreen() {
         return
       }
 
-      // Prevent duplicate return requests
-      // Prevent duplicate return requests
-if (
-  safeOrder.status === "return_started" ||
-  safeOrder.status === "return_processing"
-) {
+      // 🚫 Block invalid lifecycle states (final, return, dispute, cancelled)
+      if (
+        [
+          "return_started",
+          "return_processing",
+          "disputed",
+          "completed", // 🔒 FINAL state - protects seller
+          "cancelled",
+        ].includes(safeOrder.status)
+      ) {
+        const message =
+          safeOrder.status === "completed"
+            ? "This order has been completed and is no longer eligible for returns."
+            : "This order is already in a return or dispute process."
+
+        Alert.alert("Return Not Available", message)
+        router.back()
+        return
+      }
+
+      // ✅ Only allow returns after shipment and before completion
+      if (safeOrder.status !== "shipped") {
         Alert.alert(
-          "Return Already Started",
-          "A return has already been initiated for this order."
+          "Return Not Available",
+          "Returns can only be initiated after the item has been shipped and before the order is completed."
         )
         router.back()
         return
@@ -150,38 +166,39 @@ if (
       const { error: updateError } = await supabase
         .from("orders")
         .update({
-  status: "return_started",
-  return_reason: reason,
-  return_notes: notes.trim() || null,
-  return_requested_at: new Date().toISOString(),
-  return_deadline: new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString(), // ⏰ 72 hour buyer timer
-})
-
+          status: "return_started",
+          return_reason: reason,
+          return_notes: notes.trim() || null,
+          return_requested_at: new Date().toISOString(),
+          return_deadline: new Date(
+            Date.now() + 72 * 60 * 60 * 1000
+          ).toISOString(), // ⏰ 72 hour buyer timer
+        })
         .eq("id", order.id)
         .eq("buyer_id", user.id)
+        .eq("status", "shipped") // 🛡️ prevents race conditions & stale UI updates
 
       if (updateError) throw updateError
 
-// 🔔 Notify seller (use unified Melo notification system)
-try {
-  await notify({
-    userId: order.seller_id,
-    type: "order",
-    title: "Return Initiated",
-    body:
-      "The buyer has initiated a return. Please await the return shipment.",
-    data: {
-      route: "/seller-hub/orders/[id]",
-      params: { id: order.id },
-    },
-  })
-} catch (notifyErr) {
-  console.warn(
-    "Return notification failed (non-blocking):",
-    notifyErr
-  )
-}
-
+      // 🔔 Notify seller (use unified Melo notification system)
+      try {
+        await notify({
+          userId: order.seller_id,
+          type: "order",
+          title: "Return Initiated",
+          body:
+            "The buyer has initiated a return. Please await the return shipment.",
+          data: {
+            route: "/seller-hub/orders/[id]",
+            params: { id: order.id },
+          },
+        })
+      } catch (notifyErr) {
+        console.warn(
+          "Return notification failed (non-blocking):",
+          notifyErr
+        )
+      }
 
       const redirectId = order.id
 
@@ -295,9 +312,7 @@ try {
               Important
             </Text>
             <Text style={{ fontSize: 13, lineHeight: 18, color: "#5A4A2F" }}>
-              Starting a return will freeze escrow and notify the seller.
-              Please ensure the item is packaged securely and returned
-              in the same condition it was received.
+              Starting a return will freeze the escrow and notify the seller. Please ensure the item is securely packaged and returned in the same condition it was received. You must upload a valid return tracking number within 72 hours of submitting the return request, or the escrowed payment will be released to the seller.
             </Text>
           </View>
 

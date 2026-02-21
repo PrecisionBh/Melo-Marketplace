@@ -14,6 +14,7 @@ import {
 } from "react-native"
 
 import AppHeader from "@/components/app-header"
+import ReturnAddressForm from "@/components/return-address/ReturnAddressForm"
 import { useAuth } from "../../context/AuthContext"
 import { handleAppError } from "../../lib/errors/appError"
 import { supabase } from "../../lib/supabase"
@@ -70,7 +71,7 @@ export default function EditProfileScreen() {
   const pickImage = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ["images"],
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.9,
@@ -139,7 +140,7 @@ export default function EditProfileScreen() {
 
   const saveProfile = async () => {
     if (!userId) {
-      handleAppError(new Error("Missing user session"), {
+      handleAppError(new Error("�erMissing user session"), {
         context: "edit_profile_save_no_user",
         silent: true,
       })
@@ -179,9 +180,10 @@ export default function EditProfileScreen() {
       />
 
       <ScrollView
-        contentContainerStyle={{ paddingBottom: 40 }}
+        contentContainerStyle={{ paddingBottom: 60 }}
         showsVerticalScrollIndicator={false}
       >
+        {/* PROFILE PHOTO */}
         <View style={styles.avatarSection}>
           <TouchableOpacity onPress={pickImage} disabled={uploading}>
             <View style={styles.avatarWrap}>
@@ -197,7 +199,10 @@ export default function EditProfileScreen() {
           </Text>
         </View>
 
+        {/* PROFILE INFO */}
         <View style={styles.form}>
+          <Text style={styles.sectionTitle}>Profile Information</Text>
+
           <Text style={styles.label}>Display Name</Text>
           <TextInput
             value={displayName}
@@ -215,6 +220,11 @@ export default function EditProfileScreen() {
           />
         </View>
 
+        {/* RETURN ADDRESS (CLEAN — NO EXTRA DESCRIPTION) */}
+        <View style={styles.form}>
+          <ReturnAddressForm />
+        </View>
+
         <TouchableOpacity style={styles.saveBtn} onPress={saveProfile}>
           <Text style={styles.saveText}>Save Changes</Text>
         </TouchableOpacity>
@@ -228,39 +238,7 @@ export default function EditProfileScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#EAF4EF",
-  },
-
-  /* (Old header styles kept but unused during polish phase) */
-  headerWrap: {
-    backgroundColor: "#7FAF9B",
-    paddingTop: 60,
-    paddingBottom: 12,
-    paddingHorizontal: 14,
-  },
-
-  headerRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#0F1E17",
-  },
-
-  headerBtn: {
-    alignItems: "center",
-    minWidth: 60,
-  },
-
-  headerSub: {
-    marginTop: 2,
-    fontSize: 11,
-    fontWeight: "600",
-    color: "#0F1E17",
+    backgroundColor: "#F7FBF9",
   },
 
   avatarSection: {
@@ -295,6 +273,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
 
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#2E5F4F",
+    marginBottom: 10,
+  },
+
   label: {
     fontSize: 13,
     fontWeight: "600",
@@ -309,6 +294,8 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     fontSize: 15,
     marginBottom: 18,
+    borderWidth: 1,
+    borderColor: "#D6E6DE",
   },
 
   bio: {
@@ -317,11 +304,11 @@ const styles = StyleSheet.create({
   },
 
   saveBtn: {
-    marginTop: 10,
+    marginTop: 20,
     marginHorizontal: 20,
     backgroundColor: "#0F1E17",
     borderRadius: 22,
-    height: 44,
+    height: 48,
     alignItems: "center",
     justifyContent: "center",
   },

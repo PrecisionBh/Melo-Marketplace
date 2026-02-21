@@ -389,7 +389,7 @@ const styles = StyleSheet.create({
     color: "#0F1E17",
   },
   tagTextSelected: {
-    color: "#0F1E17",
+    color: "#00ff88",
   },
 
   // FOLLOW UI (ADDED)
@@ -419,7 +419,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   followingButton: {
-    backgroundColor: "#2E2E2E",
+    backgroundColor: "#00ff44",
   },
   followButtonText: {
     color: "#0F1E17",
