@@ -1,25 +1,20 @@
 import { notify } from "@/lib/notifications/notify"
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { useEffect, useState } from "react"
-import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  Linking,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native"
-
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, View } from "react-native"
 
 import AppHeader from "@/components/app-header"
 import { useAuth } from "@/context/AuthContext"
 import { handleAppError } from "@/lib/errors/appError"
 import { supabase } from "@/lib/supabase"
 
+/* ✅ NEW COMPONENTS */
+import BuyerShippingAddressCard from "@/components/seller-hub/orders/BuyerShippingAddressCard"
+import ConfirmReturnReceivedModal from "@/components/seller-hub/orders/ConfirmReturnReceivedModal"
+import SellerMessage from "@/components/seller-hub/orders/SellerMessage"
+import SellerOrderActionButtons from "@/components/seller-hub/orders/SellerOrderActionButtons"
+import SellerOrderHeaderCard from "@/components/seller-hub/orders/SellerOrderHeaderCard"
+import SellerReceiptCard from "@/components/seller-hub/orders/SellerReceiptCard"
 
 /* ---------------- TYPES ---------------- */
 
@@ -30,15 +25,15 @@ type OrderStatus =
   | "return_processing"
   | "completed"
 
-
 type Order = {
   id: string
+  public_order_number?: string | null
+  escrow_status?: string | null
   seller_id: string
   buyer_id: string
   status: OrderStatus | string
 
-
-  // 💰 NEW: Proper ledger fields (source of truth)
+  // 💰 Ledger fields (source of truth)
   amount_cents: number
   item_price_cents: number | null
   shipping_amount_cents: number | null
@@ -50,6 +45,7 @@ type Order = {
 
   carrier: string | null
   tracking_number: string | null
+  tracking_url?: string | null
 
   shipping_name: string | null
   shipping_line1: string | null
@@ -68,7 +64,6 @@ type Order = {
   return_deadline: string | null
   return_received: boolean | null
 }
-
 
 /* ---------------- HELPERS ---------------- */
 
@@ -101,10 +96,11 @@ export default function SellerOrderDetailScreen() {
   const [tracking, setTracking] = useState("")
   const [saving, setSaving] = useState(false)
 
-    useEffect(() => {
-    if (id) {
-      loadOrder()
-    }
+  const [confirmReturnVisible, setConfirmReturnVisible] = useState(false)
+
+  useEffect(() => {
+    if (id) loadOrder()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
   const loadOrder = async () => {
@@ -167,78 +163,7 @@ export default function SellerOrderDetailScreen() {
     }
   }
 
-
   /* ---------------- ACTIONS ---------------- */
-
-const handleCompleteReturn = async () => {
-  if (!order || !session?.user?.id) {
-    Alert.alert("Error", "Order data is missing.")
-    return
-  }
-
-  try {
-    // 🔒 Safety: must have tracking before seller can confirm receipt
-    if (!order.return_tracking_number || !order.return_shipped_at) {
-      Alert.alert(
-        "Tracking Required",
-        "You can only complete the return after the buyer ships the item and uploads return tracking."
-      )
-      return
-    }
-
-    // 🔒 Confirm irreversible action (VERY important for refunds)
-    Alert.alert(
-      "Confirm Return Received",
-      "By confirming, you are stating that you have received the returned item. This will automatically issue a refund to the buyer and cannot be undone.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Confirm & Refund",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              setSaving(true)
-
-              const { data, error } = await supabase.functions.invoke(
-                "return-order-refund",
-                {
-                  body: { order_id: order.id },
-                }
-              )
-
-              if (error) {
-                throw error
-              }
-
-              // Optional: refresh order from DB (recommended)
-              await loadOrder()
-
-              Alert.alert(
-                "Return Completed & Refunded",
-                "The return has been confirmed and the buyer has been refunded successfully."
-              )
-
-              // Route back to seller orders list (consistent with your app)
-              router.replace("/seller-hub/orders/orders-to-ship")
-            } catch (err) {
-              handleAppError(err, {
-                fallbackMessage:
-                  "Failed to process return refund. Please try again.",
-              })
-            } finally {
-              setSaving(false)
-            }
-          },
-        },
-      ]
-    )
-  } catch (err) {
-    handleAppError(err, {
-      fallbackMessage: "Failed to complete return. Please try again.",
-    })
-  }
-}
-
 
   const submitTracking = async () => {
     if (!order) {
@@ -293,8 +218,7 @@ const handleCompleteReturn = async () => {
         [
           {
             text: "OK",
-            onPress: () =>
-              router.replace("/seller-hub/orders/orders-to-ship"),
+            onPress: () => router.replace("/seller-hub/orders/orders-to-ship"),
           },
         ]
       )
@@ -307,473 +231,246 @@ const handleCompleteReturn = async () => {
     }
   }
 
-  if (loading) {
-    return <ActivityIndicator style={{ marginTop: 80 }} />
+  const handleCompleteReturn = async () => {
+    if (!order || !session?.user?.id) {
+      Alert.alert("Error", "Order data is missing.")
+      return
+    }
+
+    // 🔒 Safety: must have tracking before seller can confirm receipt
+    if (!order.return_tracking_number || !order.return_shipped_at) {
+      Alert.alert(
+        "Tracking Required",
+        "You can only complete the return after the buyer ships the item and uploads return tracking."
+      )
+      return
+    }
+
+    // ✅ Open modal (instead of system alert)
+    setConfirmReturnVisible(true)
   }
 
+  const confirmReturnAndRefund = async () => {
+    if (!order) return
+
+    try {
+      setSaving(true)
+
+      const { error } = await supabase.functions.invoke("return-order-refund", {
+        body: { order_id: order.id },
+      })
+
+      if (error) throw error
+
+      await loadOrder()
+
+      Alert.alert(
+        "Return Completed & Refunded",
+        "The return has been confirmed and the buyer has been refunded successfully."
+      )
+
+      router.replace("/seller-hub/orders/orders-to-ship")
+    } catch (err) {
+      handleAppError(err, {
+        fallbackMessage: "Failed to process return refund. Please try again.",
+      })
+    } finally {
+      setSaving(false)
+      setConfirmReturnVisible(false)
+    }
+  }
+
+  if (loading) return <ActivityIndicator style={{ marginTop: 80 }} />
   if (!order) return null
 
-  const isReturnStarted = order.status === "return_started"
+  /* ---------------- STATE ---------------- */
 
+  /* ---------------- STATE ---------------- */
 
-  /* ---------------- MONEY (CORRECT LEDGER LOGIC) ---------------- */
+const isPaid = order.status === "paid"
+const isShipped = order.status === "shipped"
+const isCompleted = order.status === "completed"
+const isReturnStarted = order.status === "return_started"
+const isReturnProcessing = order.status === "return_processing"
+
+/* 💸 MELO CRITICAL: REFUND STATE (ESCROW SOURCE OF TRUTH) */
+const isRefunded = order.escrow_status === "refunded"
+
+const isInReturnFlow = isReturnStarted || isReturnProcessing
+const hasReturnTracking = !!order.return_tracking_url
+
+// show buyer address only for paid / shipped (not return flow, not completed, not refunded)
+const showShippingAddress =
+  (isPaid || isShipped) &&
+  !isInReturnFlow &&
+  !isCompleted &&
+  !isRefunded
+
+  /* ---------------- MONEY ---------------- */
 
   const itemPrice = (order.item_price_cents ?? 0) / 100
   const shipping = (order.shipping_amount_cents ?? 0) / 100
-  const tax = (order.tax_cents ?? 0) / 100
-  const sellerFee = (order.seller_fee_cents ?? 0) / 100
-  const sellerNet = (order.seller_net_cents ?? 0) / 100
-  const saleSubtotal = itemPrice + shipping
+
+  /* ---------------- ACTION FLAGS (SCREEN CONTROLS) ---------------- */
+
+  const showAddTracking = isPaid && !isInReturnFlow && !isCompleted
+  const showTrackShipment =
+    isShipped && !!order.tracking_url && !isInReturnFlow && !isCompleted
+
+  // seller return section shows during return states
+  const showReturnSection = isInReturnFlow && !isCompleted
+
+  // dispute action appears when return shipped and not yet received (same as original)
+  const showDispute =
+    isReturnStarted && !!order.return_tracking_number && !order.return_received
 
   /* ---------------- RENDER ---------------- */
 
-  return (
-    <View style={styles.screen}>
-      {/* HEADER */}
-      <AppHeader
-        title="Order"
-        backRoute="/seller-hub/orders/orders-to-ship"
+return (
+  <View style={styles.screen}>
+    <AppHeader title="Order" backRoute="/seller-hub/orders" />
+
+    <ScrollView contentContainerStyle={{ paddingBottom: 140 }}>
+      {/* HEADER CARD */}
+      <SellerOrderHeaderCard
+        imageUrl={order.image_url}
+        orderId={order.public_order_number ?? order.id}
+        title={"Order"} // placeholder if your SellerOrderHeaderCard expects title; update if your snapshot exists
+        status={order.status}
+        isDisputed={isReturnProcessing}
+        hasReturnTracking={hasReturnTracking}
       />
 
-      <ScrollView contentContainerStyle={styles.content}>
-        {/* PRODUCT (ALWAYS STAYS) */}
-        <View style={styles.card}>
-          {order.image_url && (
-            <Image
-              source={{ uri: encodeURI(order.image_url) }}
-              style={styles.image}
-            />
-          )}
-
-          <View style={styles.titleRow}>
-            <Text style={styles.title}>
-              Order #{order.id?.slice(0, 8) ?? "Unknown"}
-            </Text>
-
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>
-                {order.status.toUpperCase()}
-              </Text>
-            </View>
-          </View>
-        </View>
-
-       {/* RETURN STATUS CARD (SELLER VIEW) */}
-{(order.status === "return_started" || order.status === "return_processing") && (
-  <View style={styles.returnCard}>
-    <Text style={styles.returnTitle}>
-      {order.status === "return_processing"
-        ? "Return Disputed"
-        : "Return Started"}
-    </Text>
-
-    {order.status === "return_processing" ? (
-      <>
-        <Text style={styles.returnText}>
-          You have filed a dispute on this return.
-        </Text>
-
-        <Text style={styles.returnSubText}>
-          This return is currently paused while the dispute is under review.
-          Escrow is frozen until a resolution is completed.
-        </Text>
-
-        <View style={styles.returnBadge}>
-          <Text style={styles.returnBadgeText}>
-            Seller Filed Dispute – Under Review
-          </Text>
-        </View>
-      </>
-    ) : !order.return_tracking_number ? (
-      <>
-        <Text style={styles.returnText}>
-          The buyer has started a return for this order.
-        </Text>
-
-        <Text style={styles.returnSubText}>
-          You are waiting for the buyer to ship the return and upload tracking.
-          Once tracking is added, you can monitor the shipment and either
-          complete the return (issue refund) or file a dispute if there is an
-          issue.
-        </Text>
-
-        <View style={styles.returnBadge}>
-          <Text style={styles.returnBadgeText}>
-            Awaiting Buyer Return Shipment
-          </Text>
-        </View>
-      </>
-    ) : (
-      <>
-        <Text style={styles.returnText}>
-          The buyer has shipped the return.
-        </Text>
-
-        <Text style={styles.returnSubText}>
-          Please track the package and confirm once the item is received to
-          issue the refund. If the item is incorrect or not received, you may
-          file a dispute to pause the refund.
-        </Text>
-
-        <TouchableOpacity
-          style={styles.trackReturnBtn}
-          onPress={() => {
-            if (order.return_tracking_url) {
-              Linking.openURL(order.return_tracking_url)
-            }
-          }}
-        >
-          <Text style={styles.trackReturnText}>
-            Track Return Package
-          </Text>
-        </TouchableOpacity>
-
-        <View style={styles.returnBadge}>
-          <Text style={styles.returnBadgeText}>
-            Return Shipped – Awaiting Inspection
-          </Text>
-        </View>
-      </>
-    )}
-  </View>
-)}
-
-
-        {/* ONLY SHOW NORMAL ORDER UI IF NOT IN RETURN */}
-        {order.status !== "return_started" && order.status !== "return_processing" && (
-          <>
-            {/* SHIPPING ADDRESS */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Ship To</Text>
-
-              <Text style={styles.addressText}>{order.shipping_name}</Text>
-              <Text style={styles.addressText}>{order.shipping_line1}</Text>
-              {order.shipping_line2 && (
-                <Text style={styles.addressText}>
-                  {order.shipping_line2}
-                </Text>
-              )}
-              <Text style={styles.addressText}>
-                {order.shipping_city}, {order.shipping_state}{" "}
-                {order.shipping_postal_code}
-              </Text>
-              <Text style={styles.addressText}>{order.shipping_country}</Text>
-            </View>
-
-            {/* TRACKING */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Tracking</Text>
-
-              {order.status === "paid" ? (
-                <>
-                  <View style={styles.carrierRow}>
-                    {["USPS", "UPS", "FedEx", "DHL"].map((c) => (
-                      <TouchableOpacity
-                        key={c}
-                        style={[
-                          styles.carrierBtn,
-                          carrier === c && styles.carrierActive,
-                        ]}
-                        onPress={() => setCarrier(c)}
-                      >
-                        <Text
-                          style={[
-                            styles.carrierText,
-                            carrier === c &&
-                              styles.carrierTextActive,
-                          ]}
-                        >
-                          {c}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-
-                  <TextInput
-                    placeholder="Enter tracking number"
-                    value={tracking}
-                    onChangeText={setTracking}
-                    style={styles.input}
-                  />
-                </>
-              ) : (
-                <>
-                  <Text style={styles.infoText}>
-                    Carrier: {order.carrier}
-                  </Text>
-                  <Text style={styles.infoText}>
-                    Tracking: {order.tracking_number}
-                  </Text>
-                </>
-              )}
-            </View>
-
-            {/* RECEIPT */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Sale Breakdown</Text>
-
-              <Row label="Item Price" value={`$${itemPrice.toFixed(2)}`} />
-              <Row label="Shipping" value={`$${shipping.toFixed(2)}`} />
-              <Row label="Subtotal" value={`$${saleSubtotal.toFixed(2)}`} />
-              <Row label="Platform Fee (4%)" value={`-$${sellerFee.toFixed(2)}`} />
-              <Row
-                label="Your Payout"
-                value={`$${sellerNet.toFixed(2)}`}
-                bold
-              />
-            </View>
-          </>
-        )}
-      </ScrollView>
-
-      {/* ACTION BAR */}
-      {order.status === "paid" && (
-        <View style={styles.actionBar}>
-          <TouchableOpacity
-            style={[
-              styles.primaryBtn,
-              (!carrier || !tracking) && styles.primaryDisabled,
-            ]}
-            disabled={!carrier || !tracking || saving}
-            onPress={submitTracking}
-          >
-            <Text style={styles.primaryText}>
-              {saving ? "Saving…" : "Add Tracking & Mark Shipped"}
-            </Text>
-          </TouchableOpacity>
+      {/* 💸 REFUND STATUS (HIGHEST PRIORITY - ESCROW RESOLVED) */}
+      {isRefunded && (
+        <View style={styles.blockPad}>
+          <SellerMessage
+            variant="success"
+            title="Refunded"
+            message="The buyer has been refunded successfully. Escrow has been released and this order is financially closed."
+          />
         </View>
       )}
 
-            {/* RETURN ACTIONS (CRITICAL FOR MELO RETURN FLOW) */}
-      {order.status === "return_started" &&
-  order.return_tracking_number &&
-  !order.return_received && (
-          <View style={styles.actionBar}>
-            {/* COMPLETE RETURN (ISSUES REFUND AFTER RECEIPT) */}
-            <TouchableOpacity
-              style={styles.primaryBtn}
-              disabled={saving}
-              onPress={handleCompleteReturn}
-            >
-              <Text style={styles.primaryText}>
-                {saving ? "Processing…" : "Complete Return"}
-              </Text>
-            </TouchableOpacity>
+      {/* RETURN STATUS MESSAGES (HYBRID C) */}
+      {!isRefunded && isReturnProcessing && (
+        <View style={styles.blockPad}>
+          <SellerMessage
+            variant="warning"
+            title="Return Disputed"
+            message="You filed a dispute on this return. Escrow is frozen until a resolution is completed."
+          />
+        </View>
+      )}
 
-            {/* FILE DISPUTE (SELLER SIDE - PAUSES REFUND) */}
-            <TouchableOpacity
-              style={styles.disputeBtn}
-              disabled={saving}
-              onPress={() =>
-                router.push({
-                  pathname: "/seller-hub/orders/disputes/dispute-issue",
-                  params: { id: order.id },
-                })
-              }
-            >
-              <Text style={styles.disputeText}>File a Dispute</Text>
-            </TouchableOpacity>
-          </View>
+      {!isRefunded && isReturnStarted && !order.return_tracking_number && (
+        <View style={styles.blockPad}>
+          <SellerMessage
+            variant="warning"
+            title="Return Started"
+            message="The buyer initiated a return but has not uploaded tracking yet. Escrow remains frozen while you wait for the buyer to ship the item."
+          />
+        </View>
+      )}
+
+      {!isRefunded && isReturnStarted && !!order.return_tracking_number && (
+        <View style={styles.blockPad}>
+          <SellerMessage
+            variant="info"
+            title="Return In Transit"
+            message="The buyer has shipped the return. Track the package and confirm once received to issue the refund, or file a dispute if there is a problem."
+          />
+        </View>
+      )}
+
+      {/* BUYER SHIPPING ADDRESS (SELLER VIEW) */}
+      {showShippingAddress && !isRefunded && (
+        <BuyerShippingAddressCard
+          address={{
+            shipping_name: order.shipping_name,
+            shipping_line1: order.shipping_line1,
+            shipping_line2: order.shipping_line2,
+            shipping_city: order.shipping_city,
+            shipping_state: order.shipping_state,
+            shipping_postal_code: order.shipping_postal_code,
+            shipping_country: order.shipping_country,
+          }}
+        />
+      )}
+
+      <View style={styles.content}>
+        {/* RECEIPT (SELLER VIEW) */}
+        {!isInReturnFlow && !isRefunded && (
+          <SellerReceiptCard
+            itemPrice={itemPrice}
+            shipping={shipping}
+            status={order.status}
+          />
         )}
 
-    </View>
-  )
+        {/* ACTIONS (BUTTONS) */}
+        {!isRefunded && (
+          <SellerOrderActionButtons
+            showAddTracking={showAddTracking}
+            showTrackShipment={showTrackShipment}
+            showReturnSection={showReturnSection}
+            hasReturnTracking={hasReturnTracking}
+            showDispute={showDispute}
+            trackingUrl={order.tracking_url ?? null}
+            returnTrackingUrl={order.return_tracking_url ?? null}
+            processing={saving}
+            onAddTracking={submitTracking}
+            onOpenReturnDetails={() => {
+              router.push({
+                pathname: "/seller-hub/orders/returns",
+                params: { id: order.id },
+              } as any)
+            }}
+            onDispute={() =>
+              router.push({
+                pathname: "/seller-hub/orders/disputes/dispute-issue",
+                params: { id: order.id },
+              })
+            }
+          />
+        )}
+      </View>
+    </ScrollView>
+
+    {/* ORIGINAL RETURN ACTIONS (COMPLETE RETURN) */}
+    {showDispute && !isRefunded && (
+      <View style={styles.actionBar}>
+        <SellerMessage
+          variant="neutral"
+          title="Return Action Required"
+          message="Once the return is delivered to you, confirm receipt to issue the refund. If there is an issue, file a dispute."
+        />
+      </View>
+    )}
+
+    {/* MODAL: CONFIRM RETURN RECEIVED */}
+    <ConfirmReturnReceivedModal
+      visible={confirmReturnVisible}
+      processing={saving}
+      onConfirm={confirmReturnAndRefund}
+      onClose={() => setConfirmReturnVisible(false)}
+    />
+  </View>
+)
 }
-
-
-/* ---------------- COMPONENTS ---------------- */
-
-
-function Row({
-  label,
-  value,
-  bold,
-}: {
-  label: string
-  value: string
-  bold?: boolean
-}) {
-  return (
-    <View style={styles.row}>
-      <Text style={styles.rowLabel}>{label}</Text>
-      <Text
-        style={[styles.rowValue, bold && { fontWeight: "900" }]}
-      >
-        {value}
-      </Text>
-    </View>
-  )
-}
-
-/* ---------------- STYLES ---------------- */
 
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#EAF4EF", // Melo soft background
+    backgroundColor: "#EAF4EF",
   },
-
-  /* ---------- LAYOUT ---------- */
   content: {
-    padding: 18,
-    paddingBottom: 140,
-  },
-
-  card: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 18,
     padding: 16,
-    shadowColor: "#000",
-    shadowOpacity: 0.04,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
   },
-
-  image: {
-    width: "100%",
-    height: 220,
-    borderRadius: 14,
-    marginBottom: 14,
-    backgroundColor: "#F2F2F2",
+  blockPad: {
+    paddingHorizontal: 16,
+    marginTop: 8,
   },
-
-  titleRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-
-  title: {
-    fontSize: 18,
-    fontWeight: "900",
-    color: "#0F1E17",
-    flex: 1,
-    marginRight: 12,
-  },
-
-  badge: {
-    backgroundColor: "#1F7A63",
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 14,
-  },
-  badgeText: {
-    fontSize: 11,
-    fontWeight: "900",
-    color: "#FFFFFF",
-    letterSpacing: 0.5,
-  },
-
-  /* ---------- SECTIONS ---------- */
-  section: {
-    marginTop: 26,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: "#E2EFE8",
-  },
-
-  /* 🆕 RETURN CARD (for return_processing state) */
-  returnCard: {
-    marginTop: 26,
-    backgroundColor: "#FFF7F7",
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: "#F1C6C6",
-  },
-
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: "900",
-    marginBottom: 12,
-    color: "#0F1E17",
-    letterSpacing: 0.3,
-  },
-
-  /* ---------- ADDRESS ---------- */
-  addressText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#2E5F4F",
-    marginBottom: 3,
-  },
-
-  /* ---------- TRACKING ---------- */
-  carrierRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginBottom: 14,
-  },
-
-  carrierBtn: {
-    borderWidth: 1,
-    borderColor: "#CFE6DD",
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 14,
-    backgroundColor: "#F4FAF7",
-  },
-
-  carrierActive: {
-    backgroundColor: "#7FAF9B",
-    borderColor: "#7FAF9B",
-  },
-
-  carrierText: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: "#0F1E17",
-  },
-
-  carrierTextActive: {
-    color: "#FFFFFF",
-  },
-
-  input: {
-    backgroundColor: "#F4FAF7",
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderWidth: 1,
-    borderColor: "#D6E6DE",
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#0F1E17",
-  },
-
-  infoText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#2E5F4F",
-    marginBottom: 4,
-  },
-
-  /* ---------- RECEIPT / LEDGER ---------- */
-  row: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: "#EEF5F1",
-  },
-
-  rowLabel: {
-    color: "#6B8F7D",
-    fontWeight: "700",
-    fontSize: 13,
-  },
-
-  rowValue: {
-    fontWeight: "800",
-    fontSize: 13,
-    color: "#0F1E17",
-  },
-
-  /* ---------- ACTION BAR ---------- */
   actionBar: {
     position: "absolute",
     bottom: 85,
@@ -781,119 +478,4 @@ const styles = StyleSheet.create({
     right: 0,
     paddingHorizontal: 18,
   },
-
-  primaryBtn: {
-    backgroundColor: "#0F1E17",
-    paddingVertical: 16,
-    borderRadius: 18,
-    shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
-  },
-
-  primaryDisabled: {
-    backgroundColor: "#A7C8BB",
-  },
-
-  primaryText: {
-    color: "#FFFFFF",
-    fontWeight: "900",
-    fontSize: 15,
-    textAlign: "center",
-    letterSpacing: 0.3,
-  },
-
-    returnTitle: {
-    fontSize: 16,
-    fontWeight: "900",
-    color: "#B54747",
-    marginBottom: 6,
-  },
-
-  returnText: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#0F1E17",
-    marginBottom: 6,
-  },
-
-  returnSubText: {
-    fontSize: 13,
-    color: "#6B8F7D",
-    lineHeight: 18,
-    marginBottom: 14,
-  },
-
-  returnBadge: {
-    alignSelf: "flex-start",
-    backgroundColor: "#F4B4B4",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 14,
-  },
-
-  returnBadgeText: {
-    fontSize: 11,
-    fontWeight: "900",
-    color: "#7A1F1F",
-    letterSpacing: 0.4,
-  },
-
-  trackReturnBtn: {
-    marginTop: 6,
-    backgroundColor: "#7FAF9B",
-    height: 42,
-    borderRadius: 21,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  trackReturnText: {
-    color: "#fff",
-    fontWeight: "900",
-    fontSize: 13,
-  },
-
-  waitingCard: {
-  backgroundColor: "#FFFFFF",
-  borderRadius: 16,
-  padding: 16,
-  borderWidth: 1,
-  borderColor: "#E2EFE8",
-},
-
-waitingTitle: {
-  fontSize: 15,
-  fontWeight: "900",
-  color: "#0F1E17",
-  marginBottom: 6,
-},
-
-waitingText: {
-  fontSize: 13,
-  fontWeight: "600",
-  color: "#2E5F4F",
-  lineHeight: 18,
-},
-
-disputeBtn: {
-  marginTop: 12,
-  backgroundColor: "#FFF1F1",
-  borderWidth: 1,
-  borderColor: "#E5484D",
-  paddingVertical: 16,
-  borderRadius: 18,
-},
-
-disputeText: {
-  color: "#E5484D",
-  fontWeight: "900",
-  fontSize: 15,
-  textAlign: "center",
-  letterSpacing: 0.3,
-},
-
 })
-

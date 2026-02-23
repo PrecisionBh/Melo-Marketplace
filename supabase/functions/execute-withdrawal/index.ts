@@ -193,15 +193,15 @@ Deno.serve(async (req) => {
     console.log("📝 Recording payout")
 
     await supabase.from("payouts").insert({
-      user_id,
-      wallet_id: wallet.id,
-      amount_cents,
-      fee_cents,
-      net_cents,
-      method: payout_type,
-      stripe_payout_id: payout.id,
-      status: payout.status,
-    })
+  user_id,
+  wallet_id: wallet.id,
+  amount_cents,
+  fee_cents,
+  net_cents,
+  method: payout_type,
+  stripe_payout_id: payout.id,
+  status: "paid", 
+})
 
     /* ---------- Record wallet transaction (MVP withdrawal tracking) ---------- */
     try {

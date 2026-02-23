@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons"
 import { useFocusEffect, useRouter } from "expo-router"
 import { useCallback, useState } from "react"
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from "react-native"
 
 import AppHeader from "@/components/app-header"
 import { useAuth } from "@/context/AuthContext"
@@ -17,6 +17,10 @@ export default function SellerHubScreen() {
   const [ordersInProgressCount, setOrdersInProgressCount] = useState(0)
   const [unreadMessagesCount, setUnreadMessagesCount] = useState(0)
   const [offersActionCount, setOffersActionCount] = useState(0)
+
+  const [proLoading, setProLoading] = useState(true)
+  const [isPro, setIsPro] = useState(false)
+  const [boostsRemaining, setBoostsRemaining] = useState<number>(0)
 
   /* ---------------- LOAD COUNTS ---------------- */
 
@@ -34,8 +38,39 @@ export default function SellerHubScreen() {
       loadOrdersInProgressCount()
       loadUnreadMessagesCount()
       loadOffersActionCount()
+      loadProStatus()
     }, [sellerId])
   )
+
+  /* ---------------- PRO STATUS ---------------- */
+
+  const loadProStatus = async () => {
+    if (!sellerId) return
+
+    setProLoading(true)
+
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("is_pro, boosts_remaining")
+        .eq("id", sellerId)
+        .single()
+
+      if (error) throw error
+
+      setIsPro(!!data?.is_pro)
+      setBoostsRemaining(Number(data?.boosts_remaining ?? 0))
+    } catch (err) {
+      setIsPro(false)
+      setBoostsRemaining(0)
+      handleAppError(err, {
+        context: "seller_hub_load_pro_status",
+        silent: true,
+      })
+    } finally {
+      setProLoading(false)
+    }
+  }
 
   /* ---------------- ORDERS: NEED TO SHIP ---------------- */
 
@@ -124,7 +159,8 @@ export default function SellerHubScreen() {
     }
   }
 
-  /* ---------------- OFFERS: TRUE ACTIONABLE (NOT CONVERTED TO ORDERS) ---------------- */
+  /* ---------------- OFFERS: ACTIONABLE ---------------- */
+
   const loadOffersActionCount = async () => {
     if (!sellerId) return
 
@@ -133,8 +169,8 @@ export default function SellerHubScreen() {
         .from("offers")
         .select("id", { count: "exact", head: true })
         .eq("seller_id", sellerId)
-        .in("status", ["pending", "countered"]) // only active offers
-        .neq("last_actor", "seller") // seller still needs to respond
+        .in("status", ["pending", "countered"])
+        .neq("last_actor", "seller")
 
       if (error) {
         handleAppError(error, {
@@ -159,11 +195,57 @@ export default function SellerHubScreen() {
 
   return (
     <View style={styles.screen}>
-      <AppHeader
-        title="Seller Hub"
-        backLabel="Profile"
-        backRoute="/profile"
-      />
+      <AppHeader title="Seller Hub" backLabel="Profile" backRoute="/profile" />
+
+      {/* ⭐ Melo Pro Banner */}
+      <View style={styles.proWrap}>
+        <TouchableOpacity
+          style={[styles.proCard, isPro && styles.proCardPro]}
+          activeOpacity={0.9}
+          onPress={() => {
+            if (isPro) {
+              console.log("👑 Routing to Melo Pro Dashboard")
+              router.push("/melo-pro/dashboard")
+            } else {
+              console.log("🚀 Routing to Melo Pro Upgrade")
+              router.push("/melo-pro")
+            }
+          }}
+        >
+          <View style={styles.proLeft}>
+            <View style={styles.proIconPill}>
+              <Ionicons name="sparkles" size={16} color="#0F1E17" />
+            </View>
+
+            <View style={{ flex: 1 }}>
+              <Text style={styles.proTitle}>
+                {isPro ? "Melo Dashboard 👑" : "Upgrade to Melo Pro"}
+              </Text>
+
+              {proLoading ? (
+                <View style={styles.proLoadingRow}>
+                  <ActivityIndicator size="small" />
+                  <Text style={styles.proSub}>Checking status…</Text>
+                </View>
+              ) : isPro ? (
+                <Text style={styles.proSub}>
+                  Boosts remaining:{" "}
+                  <Text style={styles.proBold}>{boostsRemaining}</Text>
+                </Text>
+              ) : (
+                <Text style={styles.proSub}>
+                  Unlimited listings • 10 boosts/mo • Quantity selling
+                </Text>
+              )}
+            </View>
+          </View>
+
+          <View style={styles.proRight}>
+            {!isPro && <Text style={styles.proPrice}>$10/mo</Text>}
+            <Ionicons name="chevron-forward" size={18} color="#0F1E17" />
+          </View>
+        </TouchableOpacity>
+      </View>
 
       <View style={styles.menu}>
         <MenuItem
@@ -182,16 +264,20 @@ export default function SellerHubScreen() {
         <MenuItem
           icon="pricetags-outline"
           label="Offers"
-          badgeCount={offersActionCount} // 🔥 Now only actionable offers
+          badgeCount={offersActionCount}
           onPress={() => router.push("/seller-hub/offers")}
         />
-
-        {/* ❌ DISPUTES REMOVED (handled inside Orders to avoid UX confusion) */}
 
         <MenuItem
           icon="wallet-outline"
           label="Wallet"
           onPress={() => router.push("/seller-hub/wallet")}
+        />
+
+        <MenuItem
+          icon="document-text-outline"
+          label="Payout History"
+          onPress={() => router.push("/seller-hub/payout-history")}
         />
 
         <MenuItem
@@ -258,6 +344,78 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#EAF4EF",
   },
+
+  proWrap: {
+    marginTop: 10,
+    marginHorizontal: 12,
+  },
+  proCard: {
+    backgroundColor: "#BFE7D4",
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderWidth: 1,
+    borderColor: "#A9D7C6",
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 3,
+  },
+  proCardPro: {
+    backgroundColor: "#FFFFFF",
+    borderColor: "#E6EFEA",
+  },
+  proLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  proIconPill: {
+    width: 38,
+    height: 38,
+    borderRadius: 14,
+    backgroundColor: "#EAF4EF",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+  proTitle: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#0F1E17",
+  },
+  proSub: {
+    marginTop: 2,
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#0F1E17",
+    opacity: 0.75,
+  },
+  proBold: {
+    fontWeight: "900",
+  },
+  proLoadingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 4,
+  },
+  proRight: {
+    alignItems: "flex-end",
+    justifyContent: "center",
+    marginLeft: 10,
+  },
+  proPrice: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#0F1E17",
+    opacity: 0.85,
+    marginBottom: 2,
+  },
+
   menu: {
     marginTop: 10,
     backgroundColor: "#FFFFFF",

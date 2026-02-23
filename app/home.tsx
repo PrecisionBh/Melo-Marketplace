@@ -20,7 +20,6 @@ import { handleAppError } from "../lib/errors/appError"
 import { registerForPushNotifications } from "../lib/notifications"
 import { supabase } from "../lib/supabase"
 
-
 /* ---------------- CATEGORY MAPS ---------------- */
 
 const CUE_CATEGORIES = [
@@ -46,6 +45,8 @@ type ListingRow = {
   is_sold: boolean
   is_removed: boolean
   user_id?: string
+  is_boosted?: boolean | null
+  boost_expires_at?: string | null
 }
 
 /* ---------------- SCREEN ---------------- */
@@ -68,7 +69,6 @@ export default function HomeScreen() {
     useState(false)
 
   const [menuOpen, setMenuOpen] = useState(false)
-
 
   /* ---------------- LOAD DATA ---------------- */
 
@@ -105,21 +105,18 @@ export default function HomeScreen() {
           followsData?.map((f: any) => f.following_id) ?? []
       }
 
-      // Fetch ALL active listings (UNCHANGED behavior)
+      // Fetch ALL active listings
       const { data, error } = await supabase
         .from("listings")
         .select(
-          "id,title,price,category,condition,image_urls,allow_offers,shipping_type,is_sold,is_removed,user_id"
+          "id,title,price,category,condition,image_urls,allow_offers,shipping_type,is_sold,is_removed,user_id,is_boosted,boost_expires_at"
         )
         .eq("status", "active")
         .eq("is_sold", false)
         .eq("is_removed", false)
         .order("created_at", { ascending: false })
 
-      if (error) {
-  throw error
-}
-
+      if (error) throw error
 
       const rows = (data ?? []) as ListingRow[]
 
@@ -131,81 +128,118 @@ export default function HomeScreen() {
           Number(l.price) > 0
       )
 
-      // If user follows nobody, show ALL listings normally (NO algorithm)
-      if (!followedSellerIds.length) {
-        const normalized: Listing[] = validRows.map((l) => ({
-  id: l.id,
-  title: l.title,
-  price: Number(l.price),
-  category: l.category,
-  condition: l.condition, // 🔥 ADD THIS LINE
-  image_url: l.image_urls![0],
-  allow_offers: l.allow_offers ?? false,
-  shipping_type: l.shipping_type ?? null,
-}))
+      const now = new Date().toISOString()
 
+      // 1️⃣ Active boosted listings (not expired)
+      const boostedRows = validRows.filter(
+        (l) =>
+          l.is_boosted === true &&
+          l.boost_expires_at &&
+          l.boost_expires_at > now
+      )
 
-        setListings(normalized)
-        setLoading(false)
-        return
-      }
+      // 2️⃣ Remove boosted from main pool (prevents duplicates)
+      const nonBoostedRows = validRows.filter(
+        (l) =>
+          !l.is_boosted ||
+          !l.boost_expires_at ||
+          l.boost_expires_at <= now
+      )
 
-      // Split listings
-      const followedRows = validRows.filter((l) =>
+      // 3️⃣ Followed sellers (from non-boosted pool)
+      const followedRows = nonBoostedRows.filter((l) =>
         followedSellerIds.includes(l.user_id ?? "")
       )
 
-      const newRows = validRows.filter(
+      // 4️⃣ New listings (everything else)
+      const newRows = nonBoostedRows.filter(
         (l) => !followedSellerIds.includes(l.user_id ?? "")
       )
 
-      // Merge WITHOUT truncating (2 followed : 4 new)
+      // 5️⃣ 3 ROW BLOCK FEED (3 Boosted → 3 Followed → 3 New)
       const merged: ListingRow[] = []
+
+      let bIndex = 0
       let fIndex = 0
       let nIndex = 0
 
-      while (fIndex < followedRows.length || nIndex < newRows.length) {
-        // Add up to 2 followed listings
-        for (let i = 0; i < 2 && fIndex < followedRows.length; i++) {
-          merged.push(followedRows[fIndex])
-          fIndex++
+      while (
+        bIndex < boostedRows.length ||
+        fIndex < followedRows.length ||
+        nIndex < newRows.length
+      ) {
+        // Row 1: Boosted (fallback → followed → new)
+        for (let i = 0; i < 3; i++) {
+          if (bIndex < boostedRows.length) {
+            merged.push(boostedRows[bIndex])
+            bIndex++
+          } else if (fIndex < followedRows.length) {
+            merged.push(followedRows[fIndex])
+            fIndex++
+          } else if (nIndex < newRows.length) {
+            merged.push(newRows[nIndex])
+            nIndex++
+          }
         }
 
-        // Add up to 4 new listings
-        for (let i = 0; i < 4 && nIndex < newRows.length; i++) {
-          merged.push(newRows[nIndex])
-          nIndex++
+        // Row 2: Followed (fallback → new → boosted)
+        for (let i = 0; i < 3; i++) {
+          if (fIndex < followedRows.length) {
+            merged.push(followedRows[fIndex])
+            fIndex++
+          } else if (nIndex < newRows.length) {
+            merged.push(newRows[nIndex])
+            nIndex++
+          } else if (bIndex < boostedRows.length) {
+            merged.push(boostedRows[bIndex])
+            bIndex++
+          }
         }
 
-        // Safety fallback: if no followed left, just append remaining new listings
-        if (fIndex >= followedRows.length && nIndex < newRows.length) {
-          merged.push(...newRows.slice(nIndex))
+        // Row 3: New listings (fallback → followed → boosted)
+        for (let i = 0; i < 3; i++) {
+          if (nIndex < newRows.length) {
+            merged.push(newRows[nIndex])
+            nIndex++
+          } else if (fIndex < followedRows.length) {
+            merged.push(followedRows[fIndex])
+            fIndex++
+          } else if (bIndex < boostedRows.length) {
+            merged.push(boostedRows[bIndex])
+            bIndex++
+          }
+        }
+
+        // Safety break to avoid infinite loops
+        if (
+          bIndex >= boostedRows.length &&
+          fIndex >= followedRows.length &&
+          nIndex >= newRows.length
+        ) {
           break
         }
       }
 
       const normalized: Listing[] = merged.map((l) => ({
-  id: l.id,
-  title: l.title,
-  price: Number(l.price),
-  category: l.category,
-  condition: l.condition, // 🔥 ADD THIS LINE
-  image_url: l.image_urls![0],
-  allow_offers: l.allow_offers ?? false,
-  shipping_type: l.shipping_type ?? null,
-}))
-
+        id: l.id,
+        title: l.title,
+        price: Number(l.price),
+        category: l.category,
+        condition: l.condition,
+        image_url: l.image_urls![0],
+        allow_offers: l.allow_offers ?? false,
+        shipping_type: l.shipping_type ?? null,
+      }))
 
       setListings(normalized)
     } catch (err) {
-  handleAppError(err, {
-    fallbackMessage:
-      "Failed to load listings. Please refresh and try again.",
-  })
-} finally {
-  setLoading(false)
-}
-
+      handleAppError(err, {
+        fallbackMessage:
+          "Failed to load listings. Please refresh and try again.",
+      })
+    } finally {
+      setLoading(false)
+    }
   }
 
   const refreshListings = async () => {

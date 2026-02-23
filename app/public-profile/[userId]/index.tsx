@@ -12,6 +12,7 @@ import {
 
 import AppHeader from "@/components/app-header"
 import ListingCard from "@/components/home/ListingCard"
+import ProProfileHero from "@/components/prodashboard/ProProfileHero"
 import { useAuth } from "@/context/AuthContext"
 import { handleAppError } from "@/lib/errors/appError"
 import { supabase } from "@/lib/supabase"
@@ -26,6 +27,7 @@ type Profile = {
   display_name: string | null
   bio: string | null
   avatar_url: string | null
+  is_pro?: boolean
 }
 
 type Listing = {
@@ -214,7 +216,7 @@ export default function PublicProfileScreen() {
 
     const { data, error } = await supabase
       .from("profiles")
-      .select("id, display_name, bio, avatar_url")
+      .select("id, display_name, bio, avatar_url, is_pro")
       .eq("id", userId)
       .single()
 
@@ -341,136 +343,158 @@ export default function PublicProfileScreen() {
   const isOwnProfile = currentUser?.id === userId
 
   return (
-    <View style={styles.screen}>
-      {/* HEADER */}
-      <AppHeader
-  title="Profile"
-  backLabel="Back"
-  backRoute="/"
-/>
+  <View style={styles.screen}>
+    {/* HEADER */}
+    <AppHeader
+      title="Profile"
+      backLabel="Back"
+      backRoute="/"
+    />
 
+    <FlatList
+      data={listings}
+      keyExtractor={(item) => item.id}
+      numColumns={2}
+      contentContainerStyle={{
+        paddingHorizontal: 16,
+        paddingBottom: 120,
+      }}
+      columnWrapperStyle={{
+        justifyContent: "space-between",
+        marginBottom: 16,
+      }}
+      onEndReached={() => loadListings()}
+      onEndReachedThreshold={0.6}
+      ListHeaderComponent={
+        <>
+          {/* 👑 PRO HERO OR BASIC PROFILE */}
+          {profile.is_pro ? (
+            <ProProfileHero
+              displayName={profile.display_name}
+              avatarUrl={profile.avatar_url}
+              bio={profile.bio}
+              isOwnProfile={isOwnProfile}
+              isFollowing={isFollowing}
+              followLoading={followLoading}
+              ratingAvg={ratingAvg}
+              ratingCount={ratingCount}
+              soldCount={soldCount}
+              onFollowToggle={handleFollowToggle}
+              onMessage={handleMessageSeller}
+              onOpenReviews={handleOpenReviews}
+            />
+          ) : (
+            <>
+              {/* BASIC PROFILE (UNCHANGED) */}
+              <View style={styles.identity}>
+                <Image
+                  source={
+                    profile.avatar_url
+                      ? { uri: profile.avatar_url }
+                      : require("../../../assets/images/avatar-placeholder.png")
+                  }
+                  style={styles.avatar}
+                />
 
+                <Text style={styles.name}>
+                  {profile.display_name ?? "User"}
+                </Text>
 
-      <FlatList
-        data={listings}
-        keyExtractor={(item) => item.id}
-        numColumns={2}
-        contentContainerStyle={{
-          paddingHorizontal: 16,
-          paddingBottom: 120,
-        }}
-        columnWrapperStyle={{
-          justifyContent: "space-between",
-          marginBottom: 16,
-        }}
-        onEndReached={() => loadListings()}
-        onEndReachedThreshold={0.6}
-        ListHeaderComponent={
-          <>
-            {/* PROFILE INFO */}
-            <View style={styles.identity}>
-              <Image
-                source={
-                  profile.avatar_url
-                    ? { uri: profile.avatar_url }
-                    : require("../../../assets/images/avatar-placeholder.png")
-                }
-                style={styles.avatar}
-              />
+                {/* 🟢 FOLLOW + MESSAGE (TWO COLUMN PILL ROW) */}
+                {!isOwnProfile && (
+                  <View style={styles.actionRow}>
+                    <TouchableOpacity
+                      onPress={handleFollowToggle}
+                      disabled={followLoading}
+                      style={[
+                        styles.followButton,
+                        isFollowing && styles.followingButton,
+                      ]}
+                    >
+                      <Text style={styles.followButtonText}>
+                        {followLoading
+                          ? "Loading..."
+                          : isFollowing
+                          ? "Unfollow"
+                          : "Follow Seller"}
+                      </Text>
+                    </TouchableOpacity>
 
-              <Text style={styles.name}>
-                {profile.display_name ?? "User"}
-              </Text>
+                    <TouchableOpacity
+                      onPress={handleMessageSeller}
+                      style={styles.messageSellerButton}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={styles.messageSellerText}>
+                        Message Seller
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
 
-              {/* 🟢 FOLLOW + MESSAGE (TWO COLUMN PILL ROW) */}
-              {!isOwnProfile && (
-                <View style={styles.actionRow}>
+                <View style={styles.statsRow}>
                   <TouchableOpacity
-                    onPress={handleFollowToggle}
-                    disabled={followLoading}
-                    style={[
-                      styles.followButton,
-                      isFollowing && styles.followingButton,
-                    ]}
+                    onPress={handleOpenReviews}
+                    disabled={!hasReviews}
+                    activeOpacity={hasReviews ? 0.7 : 1}
                   >
-                    <Text style={styles.followButtonText}>
-                      {followLoading
-                        ? "Loading..."
-                        : isFollowing
-                        ? "Unfollow"
-                        : "Follow Seller"}
-                    </Text>
+                    <Stat
+                      label="Rating"
+                      value={hasReviews ? `${ratingAvg} ★` : "No reviews"}
+                      sub={
+                        hasReviews
+                          ? `${ratingCount} reviews`
+                          : undefined
+                      }
+                      muted={!hasReviews}
+                    />
                   </TouchableOpacity>
 
-                  <TouchableOpacity
-                    onPress={handleMessageSeller}
-                    style={styles.messageSellerButton}
-                    activeOpacity={0.85}
-                  >
-                    <Text style={styles.messageSellerText}>
-                      Message Seller
-                    </Text>
-                  </TouchableOpacity>
+                  <Stat
+                    label="Sold"
+                    value={`${soldCount}`}
+                    sub="completed"
+                  />
+                </View>
+              </View>
+
+              {profile.bio && (
+                <View style={styles.bioCard}>
+                  <Text style={styles.bioText}>
+                    {profile.bio}
+                  </Text>
                 </View>
               )}
+            </>
+          )}
 
-              <View style={styles.statsRow}>
-                <TouchableOpacity
-                  onPress={handleOpenReviews}
-                  disabled={!hasReviews}
-                  activeOpacity={hasReviews ? 0.7 : 1}
-                >
-                  <Stat
-                    label="Rating"
-                    value={hasReviews ? `${ratingAvg} ★` : "No reviews"}
-                    sub={hasReviews ? `${ratingCount} reviews` : undefined}
-                    muted={!hasReviews}
-                  />
-                </TouchableOpacity>
-
-                <Stat
-                  label="Sold"
-                  value={`${soldCount}`}
-                  sub="completed"
-                />
-              </View>
-            </View>
-
-            {profile.bio && (
-              <View style={styles.bioCard}>
-                <Text style={styles.bioText}>{profile.bio}</Text>
-              </View>
-            )}
-
-            {/* GREEN DIVIDER */}
-            <View style={styles.dividerWrap}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>LISTINGS</Text>
-            </View>
-          </>
-        }
-        renderItem={({ item }) => (
-          <View style={{ width: "48%" }}>
-            <ListingCard
-              listing={{
-                ...item,
-                image_url: item.image_urls?.[0] ?? null,
-              }}
-              onPress={() =>
-                router.push({
-                  pathname: "/listing/[id]",
-                  params: { id: item.id },
-                })
-              }
-            />
+          {/* GREEN DIVIDER (UNCHANGED) */}
+          <View style={styles.dividerWrap}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>LISTINGS</Text>
           </View>
-        )}
-      />
-    </View>
-  )
+        </>
+      }
+      renderItem={({ item }) => (
+        <View style={{ width: "48%" }}>
+          <ListingCard
+            listing={{
+              ...item,
+              image_url: item.image_urls?.[0] ?? null,
+            }}
+            onPress={() =>
+              router.push({
+                pathname: "/listing/[id]",
+                params: { id: item.id },
+              })
+            }
+          />
+        </View>
+      )}
+    />
+  </View>
+)
 }
-
-/* ---------------- COMPONENTS ---------------- */
 
 function Stat({
   label,

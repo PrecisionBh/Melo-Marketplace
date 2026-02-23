@@ -9,7 +9,7 @@ type Props = {
   hasReturnTracking?: boolean
 }
 
-export default function BuyerOrderHeaderCard({
+export default function SellerOrderHeaderCard({
   imageUrl,
   orderId,
   title,
@@ -17,58 +17,49 @@ export default function BuyerOrderHeaderCard({
   isDisputed,
   hasReturnTracking = false,
 }: Props) {
-  /**
-   * 🔥 FIXED MELO ORDER NUMBER LOGIC
-   * Priority:
-   * 1. If already formatted (Melo123456) → use as-is
-   * 2. If DB gives clean public number (194253) → prefix Melo
-   * 3. If UUID → generate Melo + first 6 chars (stable fallback)
-   */
-  const formatMeloOrderNumber = (id?: string) => {
-    if (!id) return "Melo------"
-
-    // If already starts with Melo (from DB public_order_number)
-    if (id.startsWith("Melo")) {
-      return id
-    }
-
-    // If it's a numeric/public style ID (like 194253)
-    const isNumeric = /^[0-9]+$/.test(id)
-    if (isNumeric) {
-      return `Melo${id}`
-    }
-
-    // UUID fallback (remove dashes and slice)
-    const clean = id.replace(/-/g, "")
-    return `Melo${clean.slice(0, 6)}`
-  }
-
-  const displayOrderNumber = formatMeloOrderNumber(orderId)
+  // 🔥 GLOBAL MELO ORDER NUMBER STANDARD (NO DOUBLE PREFIX BUG)
+  const displayOrderNumber =
+    orderId?.startsWith("Melo")
+      ? orderId // already formatted from DB (CORRECT)
+      : orderId
+      ? `Melo${orderId.replace(/-/g, "").slice(0, 6)}`
+      : "Melo------"
 
   const getBadgeText = () => {
     if (!status) return ""
 
-    if (status === "completed") return "COMPLETED"
+    // 🟢 HIGHEST PRIORITY — REFUND STATE (ESCROW FINAL)
+    if (status === "refunded") return "REFUND PAID"
 
-    if (status === "refunded") return "REFUNDED"
+    // 💰 COMPLETED = payout released to seller
+    if (status === "completed") return "COMPLETED (PAID OUT)"
 
-    if (status === "paid") return "AWAITING SELLER SHIPMENT"
+    // 📦 NORMAL ORDER FLOW
+    if (status === "paid") return "AWAITING YOUR SHIPMENT"
 
-    if (status === "shipped") return "SHIPPED"
+    if (status === "shipped") return "SHIPPED TO BUYER"
 
-    if (status === "return_started" || status === "return_processing") {
-      if (isDisputed) return "RETURN DISPUTED BY SELLER"
+    // 🔁 RETURN FLOW (CRITICAL FOR MELO ESCROW LOGIC)
+    if (status === "return_processing") {
+      if (isDisputed) return "RETURN DISPUTED – UNDER REVIEW"
+      return "RETURN UNDER REVIEW"
+    }
+
+    if (status === "return_started") {
       if (hasReturnTracking)
-        return "RETURN SHIPPED (AWAITING SELLER)"
+        return "RETURN IN TRANSIT (BACK TO YOU)"
       return "RETURN STARTED (AWAITING BUYER SHIPMENT)"
     }
 
-    if (status === "disputed") return "DISPUTED"
+    // ⚠️ DISPUTE STATE
+    if (status === "disputed") return "ORDER DISPUTED"
 
+    // 🔤 FALLBACK (SAFETY)
     return status.replace(/_/g, " ").toUpperCase()
   }
 
   const isCompleted = status === "completed"
+  const isRefunded = status === "refunded"
   const badgeText = getBadgeText()
 
   return (
@@ -79,7 +70,7 @@ export default function BuyerOrderHeaderCard({
       />
 
       <View style={styles.content}>
-        {/* 🔥 TITLE + BADGE (PRIMARY ROW) */}
+        {/* 🔥 TITLE + BADGE ROW */}
         <View style={styles.topRow}>
           <Text
             style={styles.title}
@@ -94,6 +85,7 @@ export default function BuyerOrderHeaderCard({
               style={[
                 styles.badge,
                 isCompleted && styles.completedBadge,
+                isRefunded && styles.refundedBadge,
               ]}
             >
               <Text style={styles.badgeText}>
@@ -103,7 +95,7 @@ export default function BuyerOrderHeaderCard({
           ) : null}
         </View>
 
-        {/* 🔽 MELO ORDER NUMBER (FIXED — NO MORE MELOMELO BUG) */}
+        {/* 🔽 MELO ORDER NUMBER (CONSISTENT ACROSS BUYER + SELLER) */}
         <Text style={styles.orderNumber}>
           Order #{displayOrderNumber}
         </Text>
@@ -147,6 +139,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 
+  /* 🟩 DEFAULT BADGE (Melo Theme) */
   badge: {
     backgroundColor: "#7FAF9B",
     paddingHorizontal: 10,
@@ -155,8 +148,14 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
 
+  /* 💰 PAID OUT (SUCCESS) */
   completedBadge: {
     backgroundColor: "#27AE60",
+  },
+
+  /* 🧾 REFUND PAID (ESCROW CLOSED – DIFFERENT SUCCESS STATE) */
+  refundedBadge: {
+    backgroundColor: "#1F7A63", // deeper Melo green for refunds
   },
 
   badgeText: {

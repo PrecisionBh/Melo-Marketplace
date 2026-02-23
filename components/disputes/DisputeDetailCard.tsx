@@ -1,12 +1,12 @@
-import * as ImagePicker from "expo-image-picker"
 import { useFocusEffect } from "expo-router"
 import { useCallback, useState } from "react"
 import {
     ActivityIndicator,
+    Image,
     ScrollView,
     StyleSheet,
     Text,
-    View
+    View,
 } from "react-native"
 
 import { useAuth } from "@/context/AuthContext"
@@ -127,9 +127,6 @@ export default function DisputeDetailCard({
 
   const [dispute, setDispute] = useState<Dispute | null>(null)
   const [loading, setLoading] = useState(true)
-  const [submitting, setSubmitting] = useState(false)
-  const [response, setResponse] = useState("")
-  const [images, setImages] = useState<string[]>([])
 
   useFocusEffect(
     useCallback(() => {
@@ -153,7 +150,7 @@ export default function DisputeDetailCard({
 
       if (error) throw error
 
-      // 🔒 Security gate (role-based)
+      // 🔒 Role security gate (MELO CRITICAL)
       if (
         (role === "buyer" && data.buyer_id !== user.id) ||
         (role === "seller" && data.seller_id !== user.id)
@@ -162,122 +159,12 @@ export default function DisputeDetailCard({
       }
 
       setDispute(data)
-
-      // 🔥 CORRECT MELO SCHEMA
-      if (role === "buyer") {
-        setResponse(data.buyer_response || "")
-        setImages(data.buyer_evidence_urls || [])
-      } else {
-        setResponse(data.seller_response || "")
-        setImages(data.seller_evidence_urls || [])
-      }
     } catch (err) {
       handleAppError(err, {
         fallbackMessage: "Failed to load dispute details.",
       })
     } finally {
       setLoading(false)
-    }
-  }
-
-  const pickImage = async () => {
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: false,
-        quality: 0.8,
-        allowsMultipleSelection: true,
-      })
-
-      if (result.canceled) return
-
-      const uris = result.assets.map((asset) => asset.uri)
-      setImages((prev) => [...prev, ...uris])
-    } catch (err) {
-      handleAppError(err, {
-        context: "dispute_image_picker",
-      })
-    }
-  }
-
-  const uploadImagesToStorage = async () => {
-    if (!images.length || !dispute) return []
-
-    const uploadedUrls: string[] = []
-
-    for (let i = 0; i < images.length; i++) {
-      const uri = images[i]
-
-      if (uri.startsWith("http")) {
-        uploadedUrls.push(uri)
-        continue
-      }
-
-      const ext = uri.split(".").pop() || "jpg"
-      const path = `${dispute.order_id}/${role}-${i}.${ext}`
-
-      const formData = new FormData()
-      formData.append("file", {
-        uri,
-        name: path,
-        type: `image/${ext === "jpg" ? "jpeg" : ext}`,
-      } as any)
-
-      const { error } = await supabase.storage
-        .from("dispute-images")
-        .upload(path, formData, { upsert: false })
-
-      if (error) throw error
-
-      const { data } = supabase.storage
-        .from("dispute-images")
-        .getPublicUrl(path)
-
-      if (data?.publicUrl) {
-        uploadedUrls.push(data.publicUrl)
-      }
-    }
-
-    return uploadedUrls
-  }
-
-  const submitResponse = async () => {
-    if (!dispute || !response.trim() || dispute.resolved_at) return
-
-    try {
-      setSubmitting(true)
-
-      const urls = await uploadImagesToStorage()
-
-      const payload =
-        role === "buyer"
-          ? {
-              buyer_response: response.trim(),
-              buyer_responded_at: new Date().toISOString(),
-              buyer_evidence_urls: urls,
-              status: "under_review",
-            }
-          : {
-              seller_response: response.trim(),
-              seller_responded_at: new Date().toISOString(),
-              seller_evidence_urls: urls,
-              status: "under_review",
-            }
-
-      const { error } = await supabase
-        .from("disputes")
-        .update(payload)
-        .eq("id", dispute.id)
-
-      if (error) throw error
-
-      await fetchDispute()
-    } catch (err) {
-      handleAppError(err, {
-        fallbackMessage: "Failed to submit response.",
-      })
-    } finally {
-      setSubmitting(false)
     }
   }
 
@@ -297,7 +184,7 @@ export default function DisputeDetailCard({
     )
   }
 
-  const isReturnDispute = dispute.opened_by === "seller"
+  const isReturnDispute = (dispute as any).dispute_type === "return"
 
   const statusMeta = getStatusMeta(
     dispute.status,
@@ -306,22 +193,50 @@ export default function DisputeDetailCard({
     role
   )
 
+  /* 🧠 MELO ASYMMETRICAL RESPONSE LOGIC (CRITICAL FIX) */
+  const otherPartyResponded =
+    dispute.opened_by === "buyer"
+      ? !!dispute.seller_responded_at
+      : dispute.opened_by === "seller"
+      ? !!dispute.buyer_responded_at
+      : false
+
   const needsToRespond =
-    role === "buyer"
-      ? dispute.opened_by === "seller" &&
-        !dispute.buyer_responded_at &&
-        !dispute.resolved_at
-      : dispute.opened_by === "buyer" &&
-        !dispute.seller_responded_at &&
-        !dispute.resolved_at
+    !dispute.resolved_at &&
+    (
+      (role === "buyer" &&
+        dispute.opened_by === "seller" &&
+        !dispute.buyer_responded_at) ||
+      (role === "seller" &&
+        dispute.opened_by === "buyer" &&
+        !dispute.seller_responded_at)
+    )
+
+  const showUnderReviewMessage =
+    dispute.status === "under_review" && otherPartyResponded
+
+  let guidanceMessage: string | null = null
+
+  if (needsToRespond) {
+    guidanceMessage =
+      role === "buyer"
+        ? "The seller has opened this dispute. Please submit your response and evidence. If no response is provided in a timely manner, a decision may be made based on the available evidence."
+        : "The buyer has opened this dispute. Please submit your response and evidence. If no response is provided in a timely manner, a decision may be made based on the available evidence."
+  } else if (showUnderReviewMessage) {
+    guidanceMessage =
+      "Both parties have submitted their evidence. Our admins will now review the case. If no further responses are required, a final decision will be made based on the evidence gathered. Escrow will remain frozen during this process."
+  }
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
+      {/* 🔥 SUMMARY CARD */}
       <View style={styles.card}>
-        <Text style={styles.order}>
-          Order #{dispute.order_id.slice(0, 8)}
+        {/* 🧾 MELO ORDER NUMBER */}
+        <Text style={styles.orderRef}>
+          Order #{`Melo${dispute.order_id.slice(0, 6)}`}
         </Text>
 
+        {/* STATUS BADGE */}
         <View
           style={[
             styles.badge,
@@ -333,16 +248,75 @@ export default function DisputeDetailCard({
 
         <Text style={styles.subtext}>{statusMeta.subtext}</Text>
 
-        <Text style={styles.section}>Dispute Reason</Text>
-        <Text style={styles.reason}>{dispute.reason}</Text>
-        <Text style={styles.desc}>{dispute.description}</Text>
+        {/* 🧭 GUIDANCE MESSAGE */}
+        {guidanceMessage ? (
+          <View style={styles.guidanceBox}>
+            <Text style={styles.guidanceText}>
+              {guidanceMessage}
+            </Text>
+          </View>
+        ) : null}
+
+        {/* ---------- CLEAN DISPUTE DETAILS ---------- */}
+        <View style={styles.detailsCard}>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Dispute Reason</Text>
+            <Text style={styles.detailValue}>
+              {dispute.reason}
+            </Text>
+          </View>
+
+          <View style={styles.rowDivider} />
+
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Description</Text>
+            <Text style={styles.detailDescription}>
+              {dispute.description}
+            </Text>
+          </View>
+        </View>
       </View>
+
+      {/* 📸 BUYER EVIDENCE */}
+      {dispute.buyer_evidence_urls?.length ? (
+        <View style={styles.evidenceSection}>
+          <Text style={styles.sectionTitle}>Buyer Evidence</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            {dispute.buyer_evidence_urls.map((url) => (
+              <Image
+                key={url}
+                source={{ uri: url }}
+                style={styles.evidenceImage}
+              />
+            ))}
+          </ScrollView>
+        </View>
+      ) : null}
+
+      {/* 📸 SELLER EVIDENCE */}
+      {dispute.seller_evidence_urls?.length ? (
+        <View style={styles.evidenceSection}>
+          <Text style={styles.sectionTitle}>Seller Evidence</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            {dispute.seller_evidence_urls.map((url) => (
+              <Image
+                key={url}
+                source={{ uri: url }}
+                style={styles.evidenceImage}
+              />
+            ))}
+          </ScrollView>
+        </View>
+      ) : null}
     </ScrollView>
   )
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 16, paddingBottom: 120 },
+  container: {
+    padding: 16,
+    paddingBottom: 120,
+  },
   card: {
     backgroundColor: "#FFFFFF",
     borderRadius: 16,
@@ -350,7 +324,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#DDEDE6",
   },
-  order: { fontWeight: "900", fontSize: 14, marginBottom: 10 },
+  orderRef: {
+    fontWeight: "900",
+    fontSize: 13,
+    color: "#6B8F7D",
+    marginBottom: 10,
+  },
   badge: {
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -358,10 +337,85 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
     marginBottom: 8,
   },
-  badgeText: { color: "#fff", fontWeight: "900", fontSize: 12 },
-  subtext: { color: "#6B8F7D", fontWeight: "600", marginBottom: 12 },
-  section: { fontWeight: "900", marginTop: 10 },
-  reason: { fontWeight: "800", marginTop: 6 },
-  desc: { marginTop: 4, fontWeight: "600", color: "#0F1E17" },
-  center: { flex: 1, justifyContent: "center", alignItems: "center" },
+  badgeText: {
+    color: "#fff",
+    fontWeight: "900",
+    fontSize: 12,
+  },
+  subtext: {
+    color: "#6B8F7D",
+    fontWeight: "600",
+    marginBottom: 12,
+  },
+  guidanceBox: {
+    backgroundColor: "#F4FAF7",
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#DDEDE6",
+    marginBottom: 12,
+  },
+  guidanceText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#0F1E17",
+    lineHeight: 18,
+  },
+  detailsCard: {
+    marginTop: 12,
+    backgroundColor: "#F8FBF9",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#E3EFEA",
+    overflow: "hidden",
+  },
+  detailRow: {
+    padding: 14,
+  },
+  detailLabel: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#6B8F7D",
+    marginBottom: 6,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  detailValue: {
+    fontSize: 15,
+    fontWeight: "900",
+    color: "#0F1E17",
+  },
+  detailDescription: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#0F1E17",
+    lineHeight: 20,
+  },
+  rowDivider: {
+    height: 1,
+    backgroundColor: "#E3EFEA",
+    marginHorizontal: 12,
+  },
+  sectionTitle: {
+    fontWeight: "900",
+    fontSize: 15,
+    marginTop: 18,
+    marginBottom: 10,
+    color: "#0F1E17",
+  },
+  evidenceSection: {
+    marginTop: 18,
+  },
+  evidenceImage: {
+    width: 120,
+    height: 120,
+    borderRadius: 12,
+    marginRight: 10,
+    backgroundColor: "#D6E6DE",
+  },
+  center: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
 })
