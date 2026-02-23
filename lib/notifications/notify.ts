@@ -2,7 +2,7 @@ import { supabase } from "@/lib/supabase"
 
 type NotifyArgs = {
   userId: string
-  type: "order" | "offer" | "message"
+  type: "order" | "offer" | "message" | "dispute"
   title: string
   body: string
   data?: Record<string, any>

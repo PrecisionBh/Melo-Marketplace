@@ -100,10 +100,11 @@ serve(async (req) => {
 
     /* ---------------- BUSINESS RULES (RETURN FLOW) ---------------- */
 
-    // Must be in active return state
-    if (order.status !== "return_processing") {
+    // ✅ UPDATED: Active return state is now "return_started"
+    // ❄️ "return_processing" is reserved for disputed/paused returns
+    if (order.status !== "return_started") {
       return json(400, {
-        error: "Order is not in return processing state",
+        error: "Order is not in return started state",
       })
     }
 

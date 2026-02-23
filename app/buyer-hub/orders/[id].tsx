@@ -1,18 +1,12 @@
 import { notify } from "@/lib/notifications/notify"
-import { Ionicons } from "@expo/vector-icons"
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { useEffect, useState } from "react"
 import {
   ActivityIndicator,
   Alert,
-  Image,
-  Linking,
-  Modal,
   ScrollView,
   StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+  View
 } from "react-native"
 
 import AppHeader from "@/components/app-header"
@@ -20,6 +14,15 @@ import { useAuth } from "@/context/AuthContext"
 import { handleAppError } from "@/lib/errors/appError"
 import { supabase } from "@/lib/supabase"
 
+import BuyerOrderHeaderCard from "@/components/buyer-hub/orders/BuyerOrderHeaderCard"
+import BuyerReceiptCard from "@/components/buyer-hub/orders/BuyerReceiptCard"
+import ConfirmDeliveryModal from "@/components/buyer-hub/orders/ConfirmDeliveryModal"
+import OrderActionButtons from "@/components/buyer-hub/orders/OrderActionButtons"
+import ReturnWarning from "@/components/buyer-hub/orders/ReturnWarning"
+import ShippersAddress from "@/components/buyer-hub/orders/ShippersAddress"; // 🔥 ADDED
+
+
+/* ---------------- TYPES ---------------- */
 
 /* ---------------- TYPES ---------------- */
 
@@ -33,9 +36,9 @@ type OrderStatus =
   | "disputed"
   | "completed"
 
-
 type Order = {
   id: string
+  public_order_number?: string | null 
   buyer_id: string
   seller_id: string
   status: OrderStatus
@@ -46,12 +49,26 @@ type Order = {
   buyer_fee_cents: number | null
   image_url: string | null
   tracking_url: string | null
+  return_tracking_url: string | null
   carrier: string | null
   completed_at: string | null
   is_disputed: boolean | null
   listing_snapshot: {
     title?: string | null
   } | null
+}
+
+type SellerReturnAddress = {
+  id: string
+  user_id: string
+  full_name: string
+  address_line1: string
+  address_line2: string | null
+  city: string
+  state: string
+  postal_code: string
+  country: string
+  is_default?: boolean | null
 }
 
 /* ---------------- SCREEN ---------------- */
@@ -62,6 +79,7 @@ export default function BuyerOrderDetailScreen() {
   const { session } = useAuth()
 
   const [order, setOrder] = useState<Order | null>(null)
+  const [returnAddress, setReturnAddress] = useState<SellerReturnAddress | null>(null)
   const [loading, setLoading] = useState(true)
   const [confirmVisible, setConfirmVisible] = useState(false)
   const [processing, setProcessing] = useState(false)
@@ -94,6 +112,7 @@ export default function BuyerOrderDetailScreen() {
         .from("orders")
         .select(`
           id,
+          public_order_number, 
           buyer_id,
           seller_id,
           status,
@@ -104,6 +123,7 @@ export default function BuyerOrderDetailScreen() {
           buyer_fee_cents,
           image_url,
           tracking_url,
+          return_tracking_url,
           carrier,
           completed_at,
           is_disputed,
@@ -132,6 +152,16 @@ export default function BuyerOrderDetailScreen() {
       }
 
       setOrder(data)
+
+      // 🔥 NEW: fetch seller return shipping address (MANDATORY FOR RETURN FLOW)
+      const { data: addressData } = await supabase
+  .from("seller_return_addresses")
+  .select("*")
+  .eq("user_id", data.seller_id)
+  .maybeSingle()
+
+      setReturnAddress(addressData ?? null)
+
     } catch (err) {
       handleAppError(err, {
         fallbackMessage: "Unexpected error loading order details.",
@@ -293,463 +323,165 @@ export default function BuyerOrderDetailScreen() {
     return <ActivityIndicator style={{ marginTop: 60 }} />
   }
 
-  const isCompleted = order.status === "completed"
+ const isCompleted = order.status === "completed"
 const isReturnStarted = order.status === "return_started"
+const isReturnProcessing = order.status === "return_processing"
 const isShipped = order.status === "shipped"
 const isPaid = order.status === "paid"
 
-// 🔥 THIS WAS MISSING (causing errors)
-const isInReturnFlow = isReturnStarted
+// 🔥 TRUE RETURN FLOW (handles BOTH statuses)
+const isInReturnFlow = isReturnStarted || isReturnProcessing
 
-// Return tracking only matters during return flow
-const hasReturnTracking = isReturnStarted && !!order.tracking_url
+// 🚨 CRITICAL FIX: use RETURN tracking, NOT seller shipment tracking
+const hasReturnTracking =
+  isInReturnFlow && !!order.return_tracking_url
 
-// Track when shipped, in return flow, or completed
+// Seller shipment tracking (separate system)
+const hasShipmentTracking = !!order.tracking_url
+
+// 🚚 Track Package logic (ONLY for seller shipment, never during return flow)
 const canTrack =
-  !!order.tracking_url && (isShipped || isReturnStarted || isCompleted)
+  hasShipmentTracking && isShipped && !isInReturnFlow && !isCompleted
 
-// Confirm delivery ONLY if shipped and NOT in return
-const canConfirmDelivery = isShipped && !isReturnStarted && !isCompleted
+// Confirm delivery ONLY if shipped and NOT in return flow
+const canConfirmDelivery = isShipped && !isInReturnFlow && !isCompleted
 
-// Cancel only before seller ships
-const canCancel = isPaid && !isCompleted
+// Cancel only before seller ships and not in return flow
+const canCancel = isPaid && !isShipped && !isInReturnFlow && !isCompleted
 
 // Buyer disputes allowed ONLY before return starts
-// (Once return_started, seller either completes return or disputes it)
+// (Once return_started, seller handles return OR disputes it)
 const canDispute =
-  !isCompleted && !isReturnStarted && !order.is_disputed && isShipped
+  !isCompleted &&
+  !isInReturnFlow &&
+  !order.is_disputed &&
+  isShipped
 
+// 🚨 72-HOUR ANTI-SCAM WARNING
+// MUST show immediately when status = return_started AND no return tracking uploaded
+const showReturnWarning =
+  isReturnStarted &&
+  !order.return_tracking_url &&
+  !order.is_disputed
 
-  const itemPrice = (order.item_price_cents ?? 0) / 100
+// 🔁 IMPORTANT: correct tracking URL passed to component
+// - During return flow → use return tracking
+// - Otherwise → use seller shipment tracking
+const activeTrackingUrl = isInReturnFlow
+  ? order.return_tracking_url
+  : order.tracking_url
+
+const itemPrice = (order.item_price_cents ?? 0) / 100
 const shipping = (order.shipping_amount_cents ?? 0) / 100
-const tax = (order.tax_cents ?? 0) / 100 
+const tax = (order.tax_cents ?? 0) / 100
 const buyerFee = (order.buyer_fee_cents ?? 0) / 100
 const totalPaid = (order.amount_cents ?? 0) / 100
 
+return (
+  <View style={styles.screen}>
+    <AppHeader title="Order" backRoute="/buyer-hub/orders" />
 
-  return (
-    <View style={styles.screen}>
-      <AppHeader
-  title="Order"
-  backRoute="/buyer-hub/orders"
-/>
-
-
-      <ScrollView contentContainerStyle={{ paddingBottom: 140 }}>
-        <Image
-          source={{ uri: order.image_url ?? undefined }}
-          style={styles.image}
-        />
-
-        <View style={styles.content}>
-          <Text style={styles.orderNumber}>
-            Order #{order.id.slice(0, 8)}
-          </Text>
-
-          {order.listing_snapshot?.title && (
-            <Text style={styles.title}>
-              {order.listing_snapshot.title}
-            </Text>
-          )}
-
-          <View
-            style={[
-              styles.badge,
-              isCompleted && { backgroundColor: "#27AE60" },
-            ]}
-          >
-            <Text style={styles.badgeText}>
-  {isCompleted
-    ? "COMPLETED"
-    : order.status === "paid"
-    ? "AWAITING SELLER SHIPMENT"
-    : order.status === "shipped"
-    ? "SHIPPED"
-    : order.status === "return_started"
-    ? order.is_disputed
-      ? "RETURN DISPUTED BY SELLER"
-      : hasReturnTracking
-      ? "RETURN SHIPPED (AWAITING SELLER)"
-      : "RETURN STARTED (AWAITING BUYER SHIPMENT)"
-    : order.status === "disputed"
-    ? "DISPUTED"
-    : order.status.replace("_", " ").toUpperCase()}
-</Text>
-</View>
-
-
-          <View style={styles.receipt}>
-  <ReceiptRow label="Item price" value={`$${itemPrice.toFixed(2)}`} />
-  <ReceiptRow label="Shipping" value={`$${shipping.toFixed(2)}`} />
-  <ReceiptRow
-    label="Sales tax (FL)"
-    value={`$${tax.toFixed(2)}`}
-    subtle
-  />
-  <ReceiptRow
-    label="Buyer protection & processing"
-    value={`$${buyerFee.toFixed(2)}`}
-    subtle
-  />
-  <View style={styles.receiptDivider} />
-  <ReceiptRow
-    label="Total paid"
-    value={`$${totalPaid.toFixed(2)}`}
-    bold
-  />
-</View>
-
-
-          {/* TRACK PACKAGE BUTTON */}
-          {canTrack && (
-            <TouchableOpacity
-              style={styles.trackBtn}
-              onPress={() =>
-                order.tracking_url &&
-                Linking.openURL(order.tracking_url)
-              }
-            >
-              <Ionicons name="car-outline" size={18} color="#fff" />
-              <Text style={styles.trackText}>Track Package</Text>
-            </TouchableOpacity>
-          )}
-
-          {/* CONFIRM DELIVERY */}
-          {!isCompleted && canConfirmDelivery && (
-            <TouchableOpacity
-              style={styles.completeBtn}
-              onPress={() => setConfirmVisible(true)}
-            >
-              <Text style={styles.completeText}>
-                {processing ? "Processing…" : "Confirm Delivery"}
-              </Text>
-            </TouchableOpacity>
-          )}
-
-          {/* START RETURN — ONLY allowed if item is shipped and no return/dispute exists */}
-{!isCompleted &&
-  order.status === "shipped" &&
-  !order.is_disputed && (
-    <TouchableOpacity
-      style={styles.disputeBtn}
-      onPress={() =>
-        router.push({
-          pathname: "/buyer-hub/returns",
-          params: { orderId: order.id },
-        })
-      }
-    >
-      <Ionicons
-        name="return-down-back-outline"
-        size={18}
-        color="#fff"
+    <ScrollView contentContainerStyle={{ paddingBottom: 140 }}>
+      <BuyerOrderHeaderCard
+        imageUrl={order.image_url}
+        orderId={order.public_order_number ?? order.id}
+        title={order.listing_snapshot?.title}
+        status={order.status}
+        isDisputed={order.is_disputed}
+        hasReturnTracking={hasReturnTracking}
       />
-      <Text style={styles.disputeText}>
-        Start a Return
-      </Text>
-    </TouchableOpacity>
+
+       {/* 🚨 WARNING: Shows immediately when return_started */}
+    <ReturnWarning visible={showReturnWarning} />
+
+      {/* 🔥 NEW: Show shipper address ONLY during return flow */}
+      {isInReturnFlow && returnAddress && (
+  <ShippersAddress address={returnAddress} />
 )}
 
+      <View style={styles.content}>
+        {/* 🔥 REMOVE RECEIPT during return_started & return_processing */}
+        {!isInReturnFlow && (
+          <BuyerReceiptCard
+            itemPrice={itemPrice}
+            shipping={shipping}
+            tax={tax}
+            buyerFee={buyerFee}
+            totalPaid={totalPaid}
+            status={order.status} // 🔥 REQUIRED for refunded badge
+          />
+        )}
 
-
-                 {/* RETURN PROCESSING ACTIONS (BUYER ONLY) */}
-{!isCompleted && isReturnStarted && !order.is_disputed && (
-  <>
-    {/* IF RETURN TRACKING ALREADY ADDED */}
-    {hasReturnTracking ? (
-      <>
-        <TouchableOpacity
-          style={styles.trackBtn}
-          onPress={() =>
-            order.tracking_url && Linking.openURL(order.tracking_url)
+        {/* 🔥 LOGIC STAYS IN SCREEN (COMPONENT = UI ONLY) */}
+        <OrderActionButtons
+          showTrack={canTrack}
+          showConfirmDelivery={!isCompleted && canConfirmDelivery}
+          showStartReturn={
+            !isCompleted &&
+            isShipped &&
+            !isInReturnFlow &&
+            !order.is_disputed
           }
-        >
-          <Ionicons name="cube-outline" size={18} color="#fff" />
-          <Text style={styles.trackText}>Track Your Return</Text>
-        </TouchableOpacity>
-
-        <Text
-          style={{
-            marginTop: 10,
-            fontSize: 13,
-            color: "#6B8F7D",
-            fontWeight: "600",
-            lineHeight: 18,
-          }}
-        >
-          Once the seller has received the return, your refund will be
-          automatically processed.
-        </Text>
-      </>
-    ) : (
-      <>
-        {/* ADD RETURN TRACKING (ONLY BEFORE TRACKING EXISTS) */}
-        <TouchableOpacity
-          style={styles.trackBtn}
-          onPress={() =>
+          showReturnSection={
+            !isCompleted &&
+            isInReturnFlow &&
+            !order.is_disputed
+          }
+          hasReturnTracking={hasReturnTracking}
+          showLeaveReview={
+            isCompleted && !order.is_disputed && !hasReviewed
+          }
+          showCancelOrder={!isCompleted && canCancel}
+          showDispute={canDispute}
+          trackingUrl={activeTrackingUrl}
+          processing={processing}
+          onConfirmDelivery={() => setConfirmVisible(true)}
+          onStartReturn={() =>
+            router.push({
+              pathname: "/buyer-hub/returns",
+              params: { orderId: order.id },
+            })
+          }
+          onAddReturnTracking={() =>
             router.push({
               pathname: "/buyer-hub/returns/tracking",
               params: { orderId: order.id },
             })
           }
-        >
-          <Ionicons name="barcode-outline" size={18} color="#fff" />
-          <Text style={styles.trackText}>Add Return Tracking</Text>
-        </TouchableOpacity>
+          onCancelReturn={cancelReturn}
+          onCancelOrder={cancelOrder}
+          onDispute={() =>
+            router.push(`/buyer-hub/orders/${order.id}/dispute-issue`)
+          }
+          onLeaveReview={() =>
+            router.push(`/reviews?orderId=${order.id}`)
+          }
+        />
+      </View>
+    </ScrollView>
 
-        {/* CANCEL RETURN (HIDES AFTER TRACKING IS ADDED) */}
-        <TouchableOpacity
-          style={{
-            marginTop: 14,
-            backgroundColor: "#D64545",
-            height: 46,
-            borderRadius: 23,
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-          onPress={cancelReturn}
-          disabled={processing}
-        >
-          <Text
-            style={{
-              color: "#fff",
-              fontWeight: "900",
-              fontSize: 14,
-            }}
-          >
-            {processing ? "Processing…" : "Cancel Return"}
-          </Text>
-        </TouchableOpacity>
-      </>
-    )}
-  </>
-)}
+    <ConfirmDeliveryModal
+      visible={confirmVisible}
+      processing={processing}
+      onConfirm={confirmDelivery}
+      onClose={() => setConfirmVisible(false)}
+    />
+  </View>
+)
 
-
-          {/* LEAVE REVIEW (ADDED - COMPLETED ONLY, NOT DISPUTED, ONE PER USER) */}
-          {isCompleted && !order.is_disputed && !hasReviewed && (
-            <TouchableOpacity
-              style={styles.reviewBtn}
-              onPress={() =>
-                router.push(`/reviews?orderId=${order.id}`)
-              }
-            >
-              <Ionicons name="star" size={18} color="#0F1E17" />
-              <Text style={styles.reviewText}>Leave a Review</Text>
-            </TouchableOpacity>
-          )}
-
-          {/* CANCEL ORDER (BEFORE SHIPMENT ONLY) */}
-          {!isCompleted && canCancel && (
-            <TouchableOpacity
-              style={{
-                marginTop: 14,
-                backgroundColor: "#D64545",
-                height: 46,
-                borderRadius: 23,
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-              onPress={cancelOrder}
-              disabled={processing}
-            >
-              <Text
-                style={{
-                  color: "#fff",
-                  fontWeight: "900",
-                  fontSize: 14,
-                }}
-              >
-                {processing ? "Cancelling…" : "Cancel Order"}
-              </Text>
-            </TouchableOpacity>
-          )}
-
-          {/* DISPUTE */}
-          {canDispute && (
-            <TouchableOpacity
-              style={styles.disputeBtn}
-              onPress={() =>
-                router.push(`/buyer-hub/orders/${order.id}/dispute-issue`)
-              }
-            >
-              <Ionicons
-                name="alert-circle-outline"
-                size={18}
-                color="#fff"
-              />
-              <Text style={styles.disputeText}>
-                Report an Issue
-              </Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      </ScrollView>
-
-      {/* CONFIRM MODAL */}
-      <Modal transparent visible={confirmVisible} animationType="fade">
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modal}>
-            <Text style={styles.modalTitle}>Confirm Delivery?</Text>
-            <Text style={styles.modalText}>
-              Once confirmed, the seller will be paid and disputes will no longer
-              be available.
-            </Text>
-
-            <TouchableOpacity
-              style={styles.completeBtn}
-              onPress={confirmDelivery}
-              disabled={processing}
-            >
-              <Text style={styles.completeText}>
-                {processing ? "Processing…" : "Yes, Confirm Delivery"}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity onPress={() => setConfirmVisible(false)}>
-              <Text style={styles.modalCancel}>Go Back</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-    </View>
-  )
 }
-
-
-/* ---------------- COMPONENTS ---------------- */
-
-function ReceiptRow({
-  label,
-  value,
-  bold,
-  subtle,
-}: {
-  label: string
-  value: string
-  bold?: boolean
-  subtle?: boolean
-}) {
-  return (
-    <View style={styles.receiptRow}>
-      <Text style={[styles.receiptLabel, subtle && { color: "#6B8F7D" }]}>
-        {label}
-      </Text>
-      <Text style={[styles.receiptValue, bold && { fontWeight: "900" }]}>
-        {value}
-      </Text>
-    </View>
-  )
-}
-
-/* ---------------- STYLES ---------------- */
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#EAF4EF" },
-
-  image: {
-    width: "100%",
-    height: 260,
-    resizeMode: "cover",
+  screen: {
+    flex: 1,
+    backgroundColor: "#EAF4EF",
   },
 
-  content: { padding: 16 },
-
-  orderNumber: {
-    fontSize: 13,
-    color: "#6B8F7D",
-    fontWeight: "700",
+  content: {
+    padding: 16,
   },
 
-  title: {
-    fontSize: 18,
-    fontWeight: "900",
-    marginTop: 4,
-    color: "#0F1E17",
-  },
-
-  badge: {
-    marginTop: 10,
-    alignSelf: "flex-start",
-    backgroundColor: "#7FAF9B",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-
-  badgeText: {
-    fontSize: 11,
-    fontWeight: "900",
-    color: "#fff",
-  },
-
-  receipt: { marginTop: 20 },
-
-  receiptRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingVertical: 6,
-  },
-
-  receiptLabel: { fontSize: 14, color: "#0F1E17" },
-
-  receiptValue: { fontSize: 14, color: "#0F1E17" },
-
-  receiptDivider: {
-    height: 1,
-    backgroundColor: "#D6E6DE",
-    marginVertical: 6,
-  },
-
-  trackBtn: {
-    marginTop: 18,
-    backgroundColor: "#7FAF9B",
-    height: 46,
-    borderRadius: 23,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-  },
-
-  trackText: {
-    color: "#fff",
-    fontWeight: "800",
-    fontSize: 14,
-  },
-
-  completeBtn: {
-    marginTop: 14,
-    backgroundColor: "#27AE60",
-    height: 46,
-    borderRadius: 23,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  completeText: {
-    color: "#fff",
-    fontWeight: "900",
-    fontSize: 14,
-  },
-
-  disputeBtn: {
-    marginTop: 14,
-    backgroundColor: "#e58383",
-    height: 46,
-    borderRadius: 23,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-  },
-
-  disputeText: {
-    color: "#fff",
-    fontWeight: "800",
-    fontSize: 14,
-  },
-
+  /* --- MODAL (still used in this screen) --- */
   modalBackdrop: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
@@ -781,21 +513,5 @@ const styles = StyleSheet.create({
     color: "#7FAF9B",
     fontWeight: "700",
   },
-    reviewBtn: {
-    marginTop: 16,
-    backgroundColor: "#7FAF9B",
-    height: 48,
-    borderRadius: 24,
-    alignItems: "center",
-    justifyContent: "center",
-    flexDirection: "row",
-    gap: 8,
-  },
-
-  reviewText: {
-    color: "#0F1E17",
-    fontWeight: "900",
-    fontSize: 15,
-  },
-  
 })
+

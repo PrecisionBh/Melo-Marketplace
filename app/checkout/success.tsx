@@ -1,24 +1,112 @@
 import { Ionicons } from "@expo/vector-icons"
 import { useLocalSearchParams, useRouter } from "expo-router"
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import {
   ActivityIndicator,
+  Animated,
+  Dimensions,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native"
 
+import AppHeader from "@/components/app-header"
 import { supabase } from "@/lib/supabase"
 import { handleAppError } from "../../lib/errors/appError"
+
+type ConfettiPiece = {
+  id: number
+  left: number
+  size: number
+  rotate: Animated.Value
+  translateY: Animated.Value
+  opacity: Animated.Value
+  drift: Animated.Value
+}
 
 export default function CheckoutSuccessScreen() {
   const router = useRouter()
   const { orderId } = useLocalSearchParams<{ orderId?: string }>()
 
   const [verifying, setVerifying] = useState(true)
-  const [isPaid, setIsPaid] = useState(false)
   const [orderNotFound, setOrderNotFound] = useState(false)
+
+  // ✅ Per your request: if we are on this screen, payment is successful
+  // We still verify order existence if orderId is present (safe), but UI is always "success"
+  const isPaid = true
+
+  /* ---------------- CONFETTI ---------------- */
+  const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window")
+  const confettiCount = 26
+
+  const confetti = useMemo<ConfettiPiece[]>(() => {
+    const pieces: ConfettiPiece[] = []
+    for (let i = 0; i < confettiCount; i++) {
+      const size = 6 + Math.floor(Math.random() * 8) // 6–13
+      const left = Math.floor(Math.random() * (SCREEN_W - 20))
+      pieces.push({
+        id: i,
+        left,
+        size,
+        rotate: new Animated.Value(Math.random() * 180),
+        translateY: new Animated.Value(-40 - Math.random() * 120),
+        opacity: new Animated.Value(0),
+        drift: new Animated.Value((Math.random() - 0.5) * 30),
+      })
+    }
+    return pieces
+  }, [SCREEN_W])
+
+  const confettiRan = useRef(false)
+
+  const popConfetti = () => {
+    if (confettiRan.current) return
+    confettiRan.current = true
+
+    const animations: Animated.CompositeAnimation[] = []
+
+    confetti.forEach((p, idx) => {
+      const fallTo = SCREEN_H * 0.55 + Math.random() * (SCREEN_H * 0.25)
+      const duration = 1400 + Math.floor(Math.random() * 900)
+      const delay = idx * 18
+
+      animations.push(
+        Animated.sequence([
+          Animated.delay(delay),
+          Animated.parallel([
+            Animated.timing(p.opacity, {
+              toValue: 1,
+              duration: 120,
+              useNativeDriver: true,
+            }),
+            Animated.timing(p.translateY, {
+              toValue: fallTo,
+              duration,
+              useNativeDriver: true,
+            }),
+            Animated.timing(p.rotate, {
+              toValue: 720 + Math.random() * 360,
+              duration,
+              useNativeDriver: true,
+            }),
+            Animated.timing(p.drift, {
+              toValue: (Math.random() - 0.5) * 160,
+              duration,
+              useNativeDriver: true,
+            }),
+          ]),
+          Animated.timing(p.opacity, {
+            toValue: 0,
+            duration: 240,
+            useNativeDriver: true,
+          }),
+        ])
+      )
+    })
+
+    Animated.parallel(animations).start()
+  }
 
   useEffect(() => {
     const verifyOrder = async () => {
@@ -26,20 +114,23 @@ export default function CheckoutSuccessScreen() {
         // No orderId = still allow success UI (fallback safe)
         if (!orderId) {
           setVerifying(false)
+          popConfetti()
           return
         }
 
         const { data, error } = await supabase
           .from("orders")
-          .select("status")
+          .select("id")
           .eq("id", orderId)
           .single()
 
         if (error) {
+          // Keep success UI, but still show not found if truly missing
           handleAppError(error, {
-            fallbackMessage: "Unable to verify payment status.",
+            fallbackMessage: "Unable to verify order. Please check your orders.",
           })
           setVerifying(false)
+          popConfetti()
           return
         }
 
@@ -49,29 +140,28 @@ export default function CheckoutSuccessScreen() {
           return
         }
 
-        // Stripe webhook may mark as paid or completed
-        if (data.status === "paid" || data.status === "completed") {
-          setIsPaid(true)
-        }
-
         setVerifying(false)
+        popConfetti()
       } catch (err) {
         handleAppError(err, {
-          fallbackMessage: "Payment verification failed. Please check your orders.",
+          fallbackMessage: "Verification failed. Please check your orders.",
         })
         setVerifying(false)
+        popConfetti()
       }
     }
 
     verifyOrder()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderId])
 
   /* ---------------- LOADING (WEBHOOK SAFE) ---------------- */
   if (verifying) {
     return (
       <View style={styles.screen}>
+        <AppHeader title="Success" backRoute="/" />
         <ActivityIndicator size="large" style={{ marginTop: 120 }} />
-        <Text style={styles.verifyingText}>Verifying payment...</Text>
+        <Text style={styles.verifyingText}>Finalizing...</Text>
       </View>
     )
   }
@@ -80,6 +170,8 @@ export default function CheckoutSuccessScreen() {
   if (orderNotFound) {
     return (
       <View style={styles.screen}>
+        <AppHeader title="Checkout" backRoute="/" />
+
         <View style={styles.top}>
           <Ionicons
             name="alert-circle-outline"
@@ -90,7 +182,8 @@ export default function CheckoutSuccessScreen() {
 
           <Text style={styles.title}>Order Not Found</Text>
           <Text style={styles.subtitle}>
-            We couldn’t locate your order. If you were charged, please contact support.
+            We couldn’t locate your order. If you were charged, please contact
+            support.
           </Text>
         </View>
 
@@ -114,36 +207,56 @@ export default function CheckoutSuccessScreen() {
   }
 
   /* ---------------- SUCCESS SCREEN ---------------- */
-  return (
+return (
+  <View style={styles.root}>
+    <AppHeader title="Success" backRoute="/" />
+
     <View style={styles.screen}>
+      {/* 🎉 CONFETTI LAYER */}
+      <View pointerEvents="none" style={styles.confettiLayer}>
+        {confetti.map((p) => (
+          <Animated.View
+            key={p.id}
+            style={[
+              styles.confettiPiece,
+              {
+                width: p.size,
+                height: p.size * 1.6,
+                left: p.left,
+                opacity: p.opacity,
+                transform: [
+                  { translateX: p.drift },
+                  { translateY: p.translateY },
+                  {
+                    rotate: p.rotate.interpolate({
+                      inputRange: [0, 720],
+                      outputRange: ["0deg", "720deg"],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          />
+        ))}
+      </View>
+
       {/* TOP SECTION */}
       <View style={styles.top}>
-        <Ionicons
-          name={isPaid ? "checkmark-circle" : "time-outline"}
-          size={84}
-          color={isPaid ? "#2E5F4F" : "#F2C94C"}
-          style={{ marginBottom: 18 }}
-        />
+        <View style={styles.successIconWrap}>
+          <Ionicons name="checkmark" size={44} color="#FFFFFF" />
+        </View>
 
-        <Text style={styles.title}>
-          {isPaid ? "Order Confirmed" : "Payment Processing"}
-        </Text>
+        <Text style={styles.title}>Payment Successful</Text>
 
         <Text style={styles.subtitle}>
-          {isPaid
-            ? "Your payment is secured in escrow and the seller has been notified."
-            : "Your payment is processing. This can take a few seconds to confirm."}
+          Your payment is secured in escrow and the seller has been notified.
         </Text>
       </View>
 
       {/* RECEIPT CARD */}
       <View style={styles.card}>
         <View style={styles.row}>
-          <Ionicons
-            name="receipt-outline"
-            size={20}
-            color="#2E5F4F"
-          />
+          <Ionicons name="receipt-outline" size={20} color="#1F7A63" />
           <Text style={styles.cardTitle}>What happens next?</Text>
         </View>
 
@@ -152,7 +265,8 @@ export default function CheckoutSuccessScreen() {
         </Text>
 
         <Text style={styles.cardText}>
-          You can track shipping, delivery, and status updates from your Orders page at any time.
+          You can track shipping, delivery, and status updates from your Orders
+          page at any time.
         </Text>
 
         <Text style={styles.cardText}>
@@ -160,7 +274,7 @@ export default function CheckoutSuccessScreen() {
         </Text>
       </View>
 
-      {/* ACTIONS */}
+      {/* ACTIONS (LEAVE TWO BUTTONS) */}
       <View style={styles.actions}>
         <TouchableOpacity
           style={styles.primaryBtn}
@@ -177,30 +291,68 @@ export default function CheckoutSuccessScreen() {
         </TouchableOpacity>
       </View>
     </View>
-  )
+  </View>
+)
 }
 
 /* ---------------- STYLES ---------------- */
 
 const styles = StyleSheet.create({
-  screen: {
+  root: {
     flex: 1,
     backgroundColor: "#EAF4EF",
+  },
+
+  screen: {
+    flex: 1,
     paddingHorizontal: 24,
-    paddingTop: 80,
+    paddingTop: 18,
   },
 
   verifyingText: {
     textAlign: "center",
     marginTop: 12,
     fontSize: 14,
-    fontWeight: "600",
+    fontWeight: "700",
     color: "#2E5F4F",
+  },
+
+  confettiLayer: {
+    ...StyleSheet.absoluteFillObject,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 50,
+  },
+
+  confettiPiece: {
+    position: "absolute",
+    top: 0,
+    borderRadius: 6,
+    backgroundColor: "#7FAF9B",
   },
 
   top: {
     alignItems: "center",
-    marginBottom: 28,
+    marginBottom: 22,
+    marginTop: 18,
+  },
+
+  successIconWrap: {
+    width: 86,
+    height: 86,
+    borderRadius: 43,
+    backgroundColor: "#1F7A63",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 14,
+
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
   },
 
   title: {
@@ -222,7 +374,15 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     borderRadius: 16,
     padding: 18,
-    marginBottom: 28,
+    marginBottom: 22,
+    borderWidth: 1,
+    borderColor: "#DDEDE6",
+
+    shadowColor: "#000",
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
   },
 
   row: {
@@ -234,7 +394,7 @@ const styles = StyleSheet.create({
 
   cardTitle: {
     fontSize: 15,
-    fontWeight: "800",
+    fontWeight: "900",
     color: "#0F1E17",
   },
 
@@ -243,38 +403,50 @@ const styles = StyleSheet.create({
     color: "#6B8F7D",
     lineHeight: 18,
     marginBottom: 8,
+    fontWeight: "600",
   },
 
   actions: {
     gap: 12,
+    paddingBottom: 24,
   },
 
+  // ✅ Buttons match the app green now
   primaryBtn: {
     height: 50,
     borderRadius: 25,
-    backgroundColor: "#0F1E17",
+    backgroundColor: "#1F7A63",
     alignItems: "center",
     justifyContent: "center",
+
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
   },
 
   primaryText: {
     color: "#FFFFFF",
     fontWeight: "900",
     fontSize: 14,
+    letterSpacing: 0.3,
   },
 
   secondaryBtn: {
     height: 46,
     borderRadius: 23,
     borderWidth: 2,
-    borderColor: "#0F1E17",
+    borderColor: "#7FAF9B",
+    backgroundColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
   },
 
   secondaryText: {
-    color: "#0F1E17",
-    fontWeight: "800",
+    color: "#1F7A63",
+    fontWeight: "900",
     fontSize: 14,
+    letterSpacing: 0.2,
   },
 })

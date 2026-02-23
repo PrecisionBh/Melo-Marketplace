@@ -16,25 +16,24 @@ import { useAuth } from "@/context/AuthContext"
 import { handleAppError } from "@/lib/errors/appError"
 import { supabase } from "@/lib/supabase"
 
-
-/* ---------------- TYPES ---------------- */
-
-/* ---------------- TYPES ---------------- */
+/* ---------------- TYPES (ALIGNED WITH DB CONSTRAINT) ---------------- */
 
 type OrderStatus =
-  | "created"
+  | "pending_payment"
   | "paid"
   | "shipped"
   | "delivered"
+  | "return_started"
+  | "return_processing"
+  | "returned"
   | "issue_open"
   | "disputed"
-  | "return_processing" // ADDED
   | "completed"
-  | "cancelled" // added support (future safe)
-
+  | "cancelled"
 
 type Order = {
   id: string
+  public_order_number: string | null // 👈 ADD THIS
   buyer_id: string
   status: OrderStatus
   amount_cents: number
@@ -62,33 +61,44 @@ export default function BuyerInProgressOrdersScreen() {
   }, [session?.user?.id])
 
   const loadOrders = async () => {
+    if (!session?.user?.id) return
+
     setLoading(true)
 
     const { data, error } = await supabase
       .from("orders")
       .select(`
-        id,
-        buyer_id,
-        status,
-        amount_cents,
-        created_at,
-        image_url,
-        listing_snapshot
-      `)
-      .eq("buyer_id", session!.user.id)
-      .in("status", ["paid", "shipped", "delivered", "disputed", "return_processing"])
+  id,
+  public_order_number,
+  buyer_id,
+  status,
+  amount_cents,
+  created_at,
+  image_url,
+  listing_snapshot
+`)
+      .eq("buyer_id", session.user.id)
+      .in("status", [
+        "paid",
+        "shipped",
+        "delivered",
+        "return_started",
+        "return_processing",
+        "issue_open",
+        "disputed",
+      ])
       .order("created_at", { ascending: false })
 
     if (error) {
-  handleAppError(error, {
-    fallbackMessage: "Failed to load active orders.",
-  })
-  setOrders([])
-} else {
-  setOrders((data as Order[]) ?? [])
-}
-setLoading(false)
+      handleAppError(error, {
+        fallbackMessage: "Failed to load active orders.",
+      })
+      setOrders([])
+    } else {
+      setOrders((data as Order[]) ?? [])
+    }
 
+    setLoading(false)
   }
 
   if (loading) {
@@ -97,10 +107,7 @@ setLoading(false)
 
   return (
     <View style={styles.screen}>
-      <AppHeader
-        title="In-Progress"
-        backRoute="/buyer-hub/orders"
-      />
+      <AppHeader title="In-Progress" backRoute="/buyer-hub/orders" />
 
       {/* CONTENT */}
       {orders.length === 0 ? (
@@ -127,6 +134,12 @@ setLoading(false)
               item.listing_snapshot?.image_url ||
               null
 
+            // 🔥 Melo Order Number (clean + consistent)
+            // 🔥 REAL Melo Order Number (from DB, with safe fallback)
+const meloOrderNumber =
+  item.public_order_number ??
+  `Melo${item.id.replace(/-/g, "").slice(0, 6)}`
+
             return (
               <TouchableOpacity
                 style={styles.card}
@@ -139,10 +152,7 @@ setLoading(false)
               >
                 {/* IMAGE */}
                 {imageUri ? (
-                  <Image
-                    source={{ uri: imageUri }}
-                    style={styles.image}
-                  />
+                  <Image source={{ uri: imageUri }} style={styles.image} />
                 ) : (
                   <View style={styles.imagePlaceholder}>
                     <Ionicons
@@ -155,9 +165,15 @@ setLoading(false)
 
                 {/* INFO */}
                 <View style={{ flex: 1 }}>
+                  {/* Listing Title */}
                   <Text style={styles.title} numberOfLines={2}>
                     {item.listing_snapshot?.title ??
-                      `Order #${item.id.slice(0, 8)}`}
+                      "Untitled Listing"}
+                  </Text>
+
+                  {/* 🔥 ADDED: Clean Melo Order Number */}
+                  <Text style={styles.orderNumber}>
+                    Order #{meloOrderNumber}
                   </Text>
 
                   <Text style={styles.price}>
@@ -175,15 +191,15 @@ setLoading(false)
   )
 }
 
-/* ---------------- STATUS BADGE (UPGRADED) ---------------- */
+/* ---------------- STATUS BADGE (FULLY ALIGNED WITH MELO FLOW) ---------------- */
 
 function StatusBadge({ status }: { status: OrderStatus }) {
   const config: Record<
     OrderStatus,
     { label: string; color: string }
   > = {
-    created: {
-      label: "CREATED",
+    pending_payment: {
+      label: "AWAITING PAYMENT",
       color: "#BDBDBD",
     },
     paid: {
@@ -198,6 +214,18 @@ function StatusBadge({ status }: { status: OrderStatus }) {
       label: "DELIVERED",
       color: "#27AE60",
     },
+    return_started: {
+      label: "RETURN STARTED",
+      color: "#F2994A",
+    },
+    return_processing: {
+      label: "RETURN IN PROGRESS",
+      color: "#F2C94C",
+    },
+    returned: {
+      label: "RETURNED",
+      color: "#6FCF97",
+    },
     issue_open: {
       label: "ISSUE OPEN",
       color: "#F2C94C",
@@ -206,11 +234,6 @@ function StatusBadge({ status }: { status: OrderStatus }) {
       label: "IN DISPUTE",
       color: "#EB5757",
     },
-
-    return_processing: {
-    label: "RETURN IN PROGRESS", // NEW (clear for buyers)
-    color: "#F2994A", // orange = action state (good UX)
-  },
     completed: {
       label: "COMPLETED",
       color: "#6FCF97",
@@ -239,37 +262,6 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: "#EAF4EF",
-  },
-
-  headerWrap: {
-    backgroundColor: "#7FAF9B",
-    paddingTop: 50,
-    paddingBottom: 12,
-    paddingHorizontal: 14,
-  },
-
-  headerRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#ffffff",
-  },
-
-  headerBtn: {
-    alignItems: "center",
-    minWidth: 60,
-  },
-
-  headerSub: {
-    marginTop: 2,
-    fontSize: 11,
-    fontWeight: "600",
-    color: "#0F1E17",
   },
 
   empty: {
@@ -329,6 +321,13 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "800",
     color: "#0F1E17",
+  },
+
+  orderNumber: {
+    fontSize: 12,
+    color: "#6B8F7D",
+    fontWeight: "700",
+    marginTop: 2,
   },
 
   price: {

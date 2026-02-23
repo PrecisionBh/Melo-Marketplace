@@ -16,7 +16,6 @@ export default function SellerOrdersHubScreen() {
   const [ordersToShipCount, setOrdersToShipCount] = useState(0)
   const [inProgressCount, setInProgressCount] = useState(0)
   const [openDisputesCount, setOpenDisputesCount] = useState(0)
-  const [offersCount, setOffersCount] = useState(0)
 
   /* ---------------- LOAD COUNTS ---------------- */
 
@@ -26,7 +25,6 @@ export default function SellerOrdersHubScreen() {
       loadOrdersToShipCount()
       loadInProgressCount()
       loadOpenDisputesCount()
-      loadOffersCount()
     }, [sellerId])
   )
 
@@ -72,7 +70,7 @@ export default function SellerOrdersHubScreen() {
     }
   }
 
-  /* ✅ FIXED: TRUE OPEN DISPUTES (ANY UNRESOLVED) */
+  /* ✅ TRUE OPEN DISPUTES (ANY UNRESOLVED) */
   const loadOpenDisputesCount = async () => {
     try {
       if (!sellerId) return
@@ -81,7 +79,7 @@ export default function SellerOrdersHubScreen() {
         .from("disputes")
         .select("id", { count: "exact", head: true })
         .eq("seller_id", sellerId)
-        .is("resolved_at", null) // ← CORRECT for your schema
+        .is("resolved_at", null)
 
       if (error) throw error
 
@@ -91,28 +89,6 @@ export default function SellerOrdersHubScreen() {
         fallbackMessage: "Failed to load disputes count.",
       })
       setOpenDisputesCount(0)
-    }
-  }
-
-  const loadOffersCount = async () => {
-    try {
-      if (!sellerId) return
-
-      const { count, error } = await supabase
-        .from("offers")
-        .select("id", { count: "exact", head: true })
-        .eq("seller_id", sellerId)
-        .in("status", ["pending", "countered"])
-        .neq("last_actor", "seller")
-
-      if (error) throw error
-
-      setOffersCount(count ?? 0)
-    } catch (err) {
-      handleAppError(err, {
-        fallbackMessage: "Failed to load offers count.",
-      })
-      setOffersCount(0)
     }
   }
 
@@ -144,16 +120,6 @@ export default function SellerOrdersHubScreen() {
           badgeColor="blue"
           onPress={() =>
             router.push("/seller-hub/orders/in-progress")
-          }
-        />
-
-        <MenuItem
-          icon="pricetag-outline"
-          label="Offers"
-          badgeCount={offersCount}
-          badgeColor="red"
-          onPress={() =>
-            router.push("/seller-hub/offers")
           }
         />
 
