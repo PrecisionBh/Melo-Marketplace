@@ -1,20 +1,21 @@
 import { Ionicons } from "@expo/vector-icons"
 import * as ImagePicker from "expo-image-picker"
 import { useRouter } from "expo-router"
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
   Alert,
   Image,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native"
 
 import AppHeader from "@/components/app-header"
-import ReturnAddressForm from "@/components/return-address/ReturnAddressForm"
+import UpgradeToProButton from "@/components/pro/UpgradeToProButton"
+import ProfileInfoCard from "@/components/profile/ProfileInfoCard"
+import ReturnAddressCard from "@/components/profile/ReturnAddressCard"
 import { useAuth } from "../../context/AuthContext"
 import { handleAppError } from "../../lib/errors/appError"
 import { supabase } from "../../lib/supabase"
@@ -28,6 +29,10 @@ export default function EditProfileScreen() {
   const [bio, setBio] = useState("")
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
+
+  // ✅ PRO STATE
+  const [loadingPro, setLoadingPro] = useState(true)
+  const [isPro, setIsPro] = useState(false)
 
   /* ---------------- LOAD PROFILE ---------------- */
 
@@ -65,6 +70,43 @@ export default function EditProfileScreen() {
 
     loadProfile()
   }, [userId])
+
+  /* ---------------- LOAD PRO STATUS ---------------- */
+
+  useEffect(() => {
+    if (!userId) return
+
+    const loadPro = async () => {
+      setLoadingPro(true)
+
+      try {
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("is_pro")
+          .eq("id", userId)
+          .single()
+
+        if (error) throw error
+
+        setIsPro(Boolean((data as any)?.is_pro))
+      } catch (err) {
+        handleAppError(err, {
+          context: "edit_profile_load_pro",
+          silent: true,
+        })
+        setIsPro(false)
+      } finally {
+        setLoadingPro(false)
+      }
+    }
+
+    loadPro()
+  }, [userId])
+
+  const proLabel = useMemo(() => {
+    if (loadingPro) return "Checking Melo Pro…"
+    return isPro ? "Melo Pro Active" : "Upgrade to Melo Pro"
+  }, [loadingPro, isPro])
 
   /* ---------------- IMAGE PICK ---------------- */
 
@@ -140,7 +182,7 @@ export default function EditProfileScreen() {
 
   const saveProfile = async () => {
     if (!userId) {
-      handleAppError(new Error("�erMissing user session"), {
+      handleAppError(new Error("Missing user session"), {
         context: "edit_profile_save_no_user",
         silent: true,
       })
@@ -183,6 +225,28 @@ export default function EditProfileScreen() {
         contentContainerStyle={{ paddingBottom: 60 }}
         showsVerticalScrollIndicator={false}
       >
+        {/* ✅ MELO PRO */}
+        <View style={styles.proWrap}>
+          <View style={styles.proHeaderRow}>
+            <Text style={styles.proTitle}>Melo Pro</Text>
+
+            {isPro ? (
+              <View style={styles.proBadge}>
+                <Ionicons name="checkmark-circle" size={16} color="#0F1E17" />
+                <Text style={styles.proBadgeText}>Active</Text>
+              </View>
+            ) : null}
+          </View>
+
+          <Text style={styles.proSub}>{proLabel}</Text>
+
+          {!loadingPro && !isPro ? (
+            <View style={{ marginTop: 12 }}>
+              <UpgradeToProButton />
+            </View>
+          ) : null}
+        </View>
+
         {/* PROFILE PHOTO */}
         <View style={styles.avatarSection}>
           <TouchableOpacity onPress={pickImage} disabled={uploading}>
@@ -199,31 +263,16 @@ export default function EditProfileScreen() {
           </Text>
         </View>
 
-        {/* PROFILE INFO */}
-        <View style={styles.form}>
-          <Text style={styles.sectionTitle}>Profile Information</Text>
+        {/* 🧾 PROFILE INFO CARD (WHITE SHADOW BOX) */}
+        <ProfileInfoCard
+          displayName={displayName}
+          setDisplayName={setDisplayName}
+          bio={bio}
+          setBio={setBio}
+        />
 
-          <Text style={styles.label}>Display Name</Text>
-          <TextInput
-            value={displayName}
-            onChangeText={setDisplayName}
-            style={styles.input}
-          />
-
-          <Text style={styles.label}>Bio</Text>
-          <TextInput
-            value={bio}
-            onChangeText={setBio}
-            style={[styles.input, styles.bio]}
-            multiline
-            maxLength={200}
-          />
-        </View>
-
-        {/* RETURN ADDRESS (CLEAN — NO EXTRA DESCRIPTION) */}
-        <View style={styles.form}>
-          <ReturnAddressForm />
-        </View>
+        {/* 📦 RETURN ADDRESS CARD (MATCHING STYLE BOX) */}
+        <ReturnAddressCard />
 
         <TouchableOpacity style={styles.saveBtn} onPress={saveProfile}>
           <Text style={styles.saveText}>Save Changes</Text>
@@ -239,6 +288,53 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: "#F7FBF9",
+  },
+
+  proWrap: {
+    marginTop: 16,
+    marginHorizontal: 20,
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#D6E6DE",
+  },
+
+  proHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+
+  proTitle: {
+    fontSize: 15,
+    fontWeight: "900",
+    color: "#0F1E17",
+  },
+
+  proSub: {
+    marginTop: 6,
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#6B8F7D",
+  },
+
+  proBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "#EAF4EF",
+    borderWidth: 1,
+    borderColor: "#CFE5DB",
+  },
+
+  proBadgeText: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#0F1E17",
   },
 
   avatarSection: {
@@ -268,43 +364,8 @@ const styles = StyleSheet.create({
     color: "#7FAF9B",
   },
 
-  form: {
-    marginTop: 30,
-    paddingHorizontal: 20,
-  },
-
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: "#2E5F4F",
-    marginBottom: 10,
-  },
-
-  label: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#6B8F7D",
-    marginBottom: 6,
-  },
-
-  input: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    fontSize: 15,
-    marginBottom: 18,
-    borderWidth: 1,
-    borderColor: "#D6E6DE",
-  },
-
-  bio: {
-    height: 100,
-    textAlignVertical: "top",
-  },
-
   saveBtn: {
-    marginTop: 20,
+    marginTop: 24,
     marginHorizontal: 20,
     backgroundColor: "#0F1E17",
     borderRadius: 22,

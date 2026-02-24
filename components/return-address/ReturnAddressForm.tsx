@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react"
 import {
-    ActivityIndicator,
-    Alert,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native"
 
 import { useAuth } from "@/context/AuthContext"
@@ -79,17 +79,22 @@ export default function ReturnAddressForm({ onSaved, showTitle = true }: Props) 
 
       const { error } = await supabase
         .from("seller_return_addresses")
-        .upsert({
-          user_id: session.user.id,
-          full_name: fullName,
-          address_line1: address1,
-          address_line2: address2,
-          city,
-          state,
-          postal_code: postalCode,
-          country,
-          updated_at: new Date().toISOString(),
-        })
+        .upsert(
+          {
+            user_id: session.user.id,
+            full_name: fullName,
+            address_line1: address1,
+            address_line2: address2,
+            city,
+            state,
+            postal_code: postalCode,
+            country,
+            updated_at: new Date().toISOString(),
+          },
+          {
+            onConflict: "user_id", // 🔥 CRITICAL FIX FOR 23505
+          }
+        )
 
       if (error) throw error
 
@@ -129,7 +134,9 @@ export default function ReturnAddressForm({ onSaved, showTitle = true }: Props) 
       <Field label="Country" value={country} onChange={setCountry} />
 
       <TouchableOpacity style={styles.saveBtn} onPress={saveAddress} disabled={saving}>
-        <Text style={styles.saveText}>{saving ? "Saving..." : "Save Address"}</Text>
+        <Text style={styles.saveText}>
+          {saving ? "Saving..." : "Save Address"}
+        </Text>
       </TouchableOpacity>
     </View>
   )

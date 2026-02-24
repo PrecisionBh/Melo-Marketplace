@@ -84,8 +84,7 @@ export default function ListingDetailScreen() {
 
       const { data, error } = await supabase
         .from("listings")
-        .select(
-          `
+        .select(`
           id,
           user_id,
           title,
@@ -98,8 +97,7 @@ export default function ListingDetailScreen() {
           allow_offers,
           shipping_type,
           shipping_price
-        `
-        )
+        `)
         .eq("id", id)
         .single()
 
@@ -114,7 +112,7 @@ export default function ListingDetailScreen() {
     }
   }
 
-  /* ---------------- LOAD SELLER (WITH MELO PRO + RATINGS) ---------------- */
+  /* ---------------- LOAD SELLER ---------------- */
 
   const loadSeller = async () => {
     try {
@@ -155,7 +153,7 @@ export default function ListingDetailScreen() {
     }
   }
 
-  /* ---------------- MESSAGE SELLER (UNCHANGED) ---------------- */
+  /* ---------------- MESSAGE SELLER ---------------- */
 
   const handleMessageSeller = async () => {
     try {
@@ -224,7 +222,7 @@ export default function ListingDetailScreen() {
     }
   }
 
-  /* ---------------- WATCHLIST (UNCHANGED) ---------------- */
+  /* ---------------- WATCHLIST ---------------- */
 
   const loadWatchData = async () => {
     try {
@@ -328,7 +326,7 @@ export default function ListingDetailScreen() {
           </ScrollView>
         )}
 
-        {/* HEADER CARD (MOVED DOWN — NO IMAGE OVERLAP) */}
+        {/* HEADER CARD */}
         <ListingHeaderCard
           sellerName={sellerName}
           isSellerPro={isSellerPro}
@@ -356,7 +354,15 @@ export default function ListingDetailScreen() {
           }
         />
 
-        {/* OPTIONAL: MESSAGE SELLER BUTTON ROW (ONLY IF NOT SELLER) */}
+        {/* DETAILS + DESCRIPTION */}
+        <ListingDetailsSection
+          condition={listing.condition}
+          category={listing.category}
+          brand={listing.brand}
+          description={listing.description}
+        />
+
+        {/* ✅ MOVED: MESSAGE SELLER BUTTON (NOW BELOW DETAILS) */}
         {!isSeller && (
           <View style={styles.messageRow}>
             <TouchableOpacity
@@ -369,14 +375,6 @@ export default function ListingDetailScreen() {
             </TouchableOpacity>
           </View>
         )}
-
-        {/* DETAILS + DESCRIPTION */}
-        <ListingDetailsSection
-          condition={listing.condition}
-          category={listing.category}
-          brand={listing.brand}
-          description={listing.description}
-        />
       </ScrollView>
 
       {/* FULLSCREEN IMAGE */}
@@ -423,12 +421,11 @@ const styles = StyleSheet.create({
     height: "100%",
     resizeMode: "contain",
   },
-
   messageRow: {
     marginHorizontal: 16,
-    marginTop: 12,
+    marginTop: 16,
+    marginBottom: 8,
   },
-
   messageSellerButton: {
     height: 44,
     borderRadius: 22,
@@ -438,13 +435,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-
   messageSellerText: {
     fontSize: 13,
     fontWeight: "900",
     color: "#0F1E17",
   },
-
   modal: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.95)",

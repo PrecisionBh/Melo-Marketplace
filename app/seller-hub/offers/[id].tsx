@@ -81,6 +81,7 @@ export default function SellerOfferDetailScreen() {
         status,
         created_at,
         listings (
+  id,
   title,
   image_urls,
   shipping_type,
@@ -203,17 +204,40 @@ const renderStatusBadge = () => {
 
 const acceptOffer = async () => {
   try {
-    // 🔒 HARD GUARDS (sold + expired + saving)
-    if (saving || isExpired || isSold) {
+    if (!offer || saving || isExpired || isSold) {
       if (isSold) {
         Alert.alert("Item Sold", "This item has already been purchased.")
+      } else if (isExpired) {
+        Alert.alert("Offer Expired", "This offer is no longer valid.")
       }
+      return
+    }
+
+    const listingId = (offer as any)?.listings?.id
+    if (!listingId) {
+      Alert.alert("Error", "Listing reference missing.")
       return
     }
 
     setSaving(true)
 
-    const { error } = await supabase
+    // 🔥 STEP 1: HARD RE-CHECK listing state (race condition protection)
+    const { data: listingCheck, error: listingError } = await supabase
+      .from("listings")
+      .select("is_sold")
+      .eq("id", listingId)
+      .single()
+
+    if (listingError) throw listingError
+
+    if (listingCheck?.is_sold) {
+      Alert.alert("Item Already Sold", "This item has already been sold.")
+      setSaving(false)
+      return
+    }
+
+    // 🔥 STEP 2: Accept the offer (snapshot critical data for checkout escrow)
+    const { error: offerError } = await supabase
       .from("offers")
       .update({
         status: "accepted",
@@ -231,8 +255,21 @@ const acceptOffer = async () => {
       })
       .eq("id", offer.id)
 
-    if (error) throw error
+    if (offerError) throw offerError
 
+    // 🔒 STEP 3: LOCK THE LISTING (CRITICAL FOR DOUBLE-SALE PREVENTION)
+    const { error: listingUpdateError } = await supabase
+      .from("listings")
+      .update({
+        is_sold: true,
+        sold_via_offer_id: offer.id,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", listingId)
+
+    if (listingUpdateError) throw listingUpdateError
+
+    // 🔔 Notify buyer to complete checkout
     await notify({
       userId: offer.buyer_id,
       type: "offer",
@@ -256,8 +293,7 @@ const acceptOffer = async () => {
 
 const declineOffer = async () => {
   try {
-    // 🔒 HARD GUARD (sold + saving)
-    if (saving || isSold) {
+    if (!offer || saving || isSold) {
       if (isSold) {
         Alert.alert("Item Sold", "This item has already been purchased.")
       }
@@ -299,17 +335,25 @@ const declineOffer = async () => {
 }
 
 const submitCounter = async () => {
-  // 🔒 HARD GUARD (sold + saving)
-  if (!offer || saving || isSold) {
+  if (!offer || saving || isSold || isExpired) {
     if (isSold) {
       Alert.alert("Item Sold", "This item has already been purchased.")
+    } else if (isExpired) {
+      Alert.alert("Offer Expired", "You can no longer counter this offer.")
     }
     return
   }
 
   const amount = Number(counterAmount)
+
   if (!amount || amount <= 0) {
     Alert.alert("Enter a valid counter amount")
+    return
+  }
+
+  // 🔒 Optional safety: prevent insane counters
+  if (amount > 100000) {
+    Alert.alert("Invalid Amount", "Counter amount looks incorrect.")
     return
   }
 
