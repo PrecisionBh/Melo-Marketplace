@@ -2,8 +2,12 @@ import { Ionicons } from "@expo/vector-icons"
 import { useRouter } from "expo-router"
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native"
 
+import { useAuth } from "@/context/AuthContext"
+
 export default function ProQuickActions() {
   const router = useRouter()
+  const { session } = useAuth()
+  const userId = session?.user?.id
 
   return (
     <View style={styles.container}>
@@ -13,7 +17,13 @@ export default function ProQuickActions() {
       <TouchableOpacity
         style={styles.row}
         activeOpacity={0.7}
-        onPress={() => router.push("/profile")}
+        onPress={() => {
+          if (!userId) return
+          router.push({
+            pathname: "/public-profile/[userId]",
+            params: { userId },
+          })
+        }}
       >
         <View style={styles.left}>
           <View style={styles.iconWrap}>

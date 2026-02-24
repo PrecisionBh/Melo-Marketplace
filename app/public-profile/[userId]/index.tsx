@@ -365,116 +365,115 @@ export default function PublicProfileScreen() {
       }}
       onEndReached={() => loadListings()}
       onEndReachedThreshold={0.6}
+      
       ListHeaderComponent={
-        <>
-          {/* 👑 PRO HERO OR BASIC PROFILE */}
-          {profile.is_pro ? (
-            <ProProfileHero
-              displayName={profile.display_name}
-              avatarUrl={profile.avatar_url}
-              bio={profile.bio}
-              isOwnProfile={isOwnProfile}
-              isFollowing={isFollowing}
-              followLoading={followLoading}
-              ratingAvg={ratingAvg}
-              ratingCount={ratingCount}
-              soldCount={soldCount}
-              onFollowToggle={handleFollowToggle}
-              onMessage={handleMessageSeller}
-              onOpenReviews={handleOpenReviews}
-            />
-          ) : (
-            <>
-              {/* BASIC PROFILE (UNCHANGED) */}
-              <View style={styles.identity}>
-                <Image
-                  source={
-                    profile.avatar_url
-                      ? { uri: profile.avatar_url }
-                      : require("../../../assets/images/avatar-placeholder.png")
-                  }
-                  style={styles.avatar}
-                />
+  <>
+    {/* 👑 PRO HERO OR BASIC PROFILE */}
+    {profile.is_pro ? (
+      <View style={{ marginHorizontal: -16 }}>
+        <ProProfileHero
+          displayName={profile.display_name}
+          avatarUrl={profile.avatar_url}
+          bio={profile.bio}
+          isOwnProfile={isOwnProfile}
+          isFollowing={isFollowing}
+          followLoading={followLoading}
+          ratingAvg={ratingAvg}
+          ratingCount={ratingCount}
+          soldCount={soldCount}
+          onFollowToggle={handleFollowToggle}
+          onMessage={handleMessageSeller}
+          onOpenReviews={handleOpenReviews}
+        />
+      </View>
+    ) : (
+      <>
+        {/* BASIC PROFILE (UNCHANGED) */}
+        <View style={styles.identity}>
+          <Image
+            source={
+              profile.avatar_url
+                ? { uri: profile.avatar_url }
+                : require("../../../assets/images/avatar-placeholder.png")
+            }
+            style={styles.avatar}
+          />
 
-                <Text style={styles.name}>
-                  {profile.display_name ?? "User"}
+          <Text style={styles.name}>
+            {profile.display_name ?? "User"}
+          </Text>
+
+          {!isOwnProfile && (
+            <View style={styles.actionRow}>
+              <TouchableOpacity
+                onPress={handleFollowToggle}
+                disabled={followLoading}
+                style={[
+                  styles.followButton,
+                  isFollowing && styles.followingButton,
+                ]}
+              >
+                <Text style={styles.followButtonText}>
+                  {followLoading
+                    ? "Loading..."
+                    : isFollowing
+                    ? "Unfollow"
+                    : "Follow Seller"}
                 </Text>
+              </TouchableOpacity>
 
-                {/* 🟢 FOLLOW + MESSAGE (TWO COLUMN PILL ROW) */}
-                {!isOwnProfile && (
-                  <View style={styles.actionRow}>
-                    <TouchableOpacity
-                      onPress={handleFollowToggle}
-                      disabled={followLoading}
-                      style={[
-                        styles.followButton,
-                        isFollowing && styles.followingButton,
-                      ]}
-                    >
-                      <Text style={styles.followButtonText}>
-                        {followLoading
-                          ? "Loading..."
-                          : isFollowing
-                          ? "Unfollow"
-                          : "Follow Seller"}
-                      </Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      onPress={handleMessageSeller}
-                      style={styles.messageSellerButton}
-                      activeOpacity={0.85}
-                    >
-                      <Text style={styles.messageSellerText}>
-                        Message Seller
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-
-                <View style={styles.statsRow}>
-                  <TouchableOpacity
-                    onPress={handleOpenReviews}
-                    disabled={!hasReviews}
-                    activeOpacity={hasReviews ? 0.7 : 1}
-                  >
-                    <Stat
-                      label="Rating"
-                      value={hasReviews ? `${ratingAvg} ★` : "No reviews"}
-                      sub={
-                        hasReviews
-                          ? `${ratingCount} reviews`
-                          : undefined
-                      }
-                      muted={!hasReviews}
-                    />
-                  </TouchableOpacity>
-
-                  <Stat
-                    label="Sold"
-                    value={`${soldCount}`}
-                    sub="completed"
-                  />
-                </View>
-              </View>
-
-              {profile.bio && (
-                <View style={styles.bioCard}>
-                  <Text style={styles.bioText}>
-                    {profile.bio}
-                  </Text>
-                </View>
-              )}
-            </>
+              <TouchableOpacity
+                onPress={handleMessageSeller}
+                style={styles.messageSellerButton}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.messageSellerText}>
+                  Message Seller
+                </Text>
+              </TouchableOpacity>
+            </View>
           )}
 
-          {/* GREEN DIVIDER (UNCHANGED) */}
-          <View style={styles.dividerWrap}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>LISTINGS</Text>
+          <View style={styles.statsRow}>
+            <TouchableOpacity
+              onPress={handleOpenReviews}
+              disabled={!hasReviews}
+              activeOpacity={hasReviews ? 0.7 : 1}
+            >
+              <Stat
+                label="Rating"
+                value={hasReviews ? `${ratingAvg} ★` : "No reviews"}
+                sub={hasReviews ? `${ratingCount} reviews` : undefined}
+                muted={!hasReviews}
+              />
+            </TouchableOpacity>
+
+            <Stat
+              label="Sold"
+              value={`${soldCount}`}
+              sub="completed"
+            />
           </View>
-        </>
-      }
+        </View>
+
+        {profile.bio && (
+          <View style={styles.bioCard}>
+            <Text style={styles.bioText}>
+              {profile.bio}
+            </Text>
+          </View>
+        )}
+      </>
+    )}
+
+    {/* GREEN DIVIDER (UNCHANGED) */}
+    <View style={styles.dividerWrap}>
+      <View style={styles.dividerLine} />
+      <Text style={styles.dividerText}>LISTINGS</Text>
+    </View>
+  </>
+}
+
       renderItem={({ item }) => (
         <View style={{ width: "48%" }}>
           <ListingCard

@@ -4,6 +4,8 @@ import { useCallback, useState } from "react"
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from "react-native"
 
 import AppHeader from "@/components/app-header"
+import IsProButton from "@/components/pro/isprobutton"
+import UpgradeToProButton from "@/components/pro/UpgradeToProButton"
 import { useAuth } from "@/context/AuthContext"
 import { handleAppError } from "@/lib/errors/appError"
 import { supabase } from "@/lib/supabase"
@@ -197,54 +199,15 @@ export default function SellerHubScreen() {
     <View style={styles.screen}>
       <AppHeader title="Seller Hub" backLabel="Profile" backRoute="/profile" />
 
-      {/* ⭐ Melo Pro Banner */}
+      {/* 👑 MELO PRO CTA (SMART SWITCH) */}
       <View style={styles.proWrap}>
-        <TouchableOpacity
-          style={[styles.proCard, isPro && styles.proCardPro]}
-          activeOpacity={0.9}
-          onPress={() => {
-            if (isPro) {
-              console.log("👑 Routing to Melo Pro Dashboard")
-              router.push("/melo-pro/dashboard")
-            } else {
-              console.log("🚀 Routing to Melo Pro Upgrade")
-              router.push("/melo-pro")
-            }
-          }}
-        >
-          <View style={styles.proLeft}>
-            <View style={styles.proIconPill}>
-              <Ionicons name="sparkles" size={16} color="#0F1E17" />
-            </View>
-
-            <View style={{ flex: 1 }}>
-              <Text style={styles.proTitle}>
-                {isPro ? "Melo Dashboard 👑" : "Upgrade to Melo Pro"}
-              </Text>
-
-              {proLoading ? (
-                <View style={styles.proLoadingRow}>
-                  <ActivityIndicator size="small" />
-                  <Text style={styles.proSub}>Checking status…</Text>
-                </View>
-              ) : isPro ? (
-                <Text style={styles.proSub}>
-                  Boosts remaining:{" "}
-                  <Text style={styles.proBold}>{boostsRemaining}</Text>
-                </Text>
-              ) : (
-                <Text style={styles.proSub}>
-                  Unlimited listings • 10 boosts/mo • Quantity selling
-                </Text>
-              )}
-            </View>
-          </View>
-
-          <View style={styles.proRight}>
-            {!isPro && <Text style={styles.proPrice}>$10/mo</Text>}
-            <Ionicons name="chevron-forward" size={18} color="#0F1E17" />
-          </View>
-        </TouchableOpacity>
+        {proLoading ? (
+          <ActivityIndicator style={{ marginVertical: 10 }} />
+        ) : isPro ? (
+          <IsProButton />
+        ) : (
+          <UpgradeToProButton />
+        )}
       </View>
 
       <View style={styles.menu}>
@@ -344,78 +307,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#EAF4EF",
   },
-
   proWrap: {
     marginTop: 10,
     marginHorizontal: 12,
   },
-  proCard: {
-    backgroundColor: "#BFE7D4",
-    borderRadius: 18,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    borderWidth: 1,
-    borderColor: "#A9D7C6",
-    shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 3,
-  },
-  proCardPro: {
-    backgroundColor: "#FFFFFF",
-    borderColor: "#E6EFEA",
-  },
-  proLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
-  },
-  proIconPill: {
-    width: 38,
-    height: 38,
-    borderRadius: 14,
-    backgroundColor: "#EAF4EF",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
-  },
-  proTitle: {
-    fontSize: 14,
-    fontWeight: "900",
-    color: "#0F1E17",
-  },
-  proSub: {
-    marginTop: 2,
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#0F1E17",
-    opacity: 0.75,
-  },
-  proBold: {
-    fontWeight: "900",
-  },
-  proLoadingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 4,
-  },
-  proRight: {
-    alignItems: "flex-end",
-    justifyContent: "center",
-    marginLeft: 10,
-  },
-  proPrice: {
-    fontSize: 12,
-    fontWeight: "900",
-    color: "#0F1E17",
-    opacity: 0.85,
-    marginBottom: 2,
-  },
-
   menu: {
     marginTop: 10,
     backgroundColor: "#FFFFFF",

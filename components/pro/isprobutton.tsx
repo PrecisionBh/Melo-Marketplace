@@ -1,17 +1,23 @@
 import { Ionicons } from "@expo/vector-icons"
 import { useRouter } from "expo-router"
 import { useEffect, useState } from "react"
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import {
+    ActivityIndicator,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from "react-native"
 
 import { useAuth } from "@/context/AuthContext"
 import { supabase } from "@/lib/supabase"
 
 type Props = {
-  variant?: "full" | "compact"
   style?: any
+  variant?: "full" | "compact"
 }
 
-export default function UpgradeToProButton({ variant = "full", style }: Props) {
+export default function IsProButton({ style, variant = "full" }: Props) {
   const router = useRouter()
   const { session } = useAuth()
   const userId = session?.user?.id
@@ -46,7 +52,6 @@ export default function UpgradeToProButton({ variant = "full", style }: Props) {
     checkPro()
   }, [userId])
 
-  // If already Pro, hide button completely (clean UX)
   if (loading) {
     return (
       <View style={[styles.loadingWrap, style]}>
@@ -55,16 +60,12 @@ export default function UpgradeToProButton({ variant = "full", style }: Props) {
     )
   }
 
-  if (isPro) return null
+  // Hide completely if NOT Pro (important for clean UX)
+  if (!isPro) return null
 
   const onPress = () => {
-    if (!userId) {
-      router.push("/login")
-      return
-    }
-
-    router.push("/melo-pro")
-  }
+  router.push("/melo-pro/dashboard")
+}
 
   if (variant === "compact") {
     return (
@@ -73,8 +74,8 @@ export default function UpgradeToProButton({ variant = "full", style }: Props) {
         onPress={onPress}
         activeOpacity={0.85}
       >
-        <Ionicons name="diamond-outline" size={14} color="#FFD700" />
-        <Text style={styles.compactText}>Melo Pro</Text>
+        <Ionicons name="trophy" size={14} color="#FFD700" />
+        <Text style={styles.compactText}>Pro Dashboard</Text>
       </TouchableOpacity>
     )
   }
@@ -85,26 +86,26 @@ export default function UpgradeToProButton({ variant = "full", style }: Props) {
       onPress={onPress}
       activeOpacity={0.9}
     >
-      {/* Subtle Gold Glow */}
+      {/* Subtle Gold Aura */}
       <View style={styles.glow} />
 
       <View style={styles.row}>
-        {/* Icon */}
+        {/* Icon (filled for owned status) */}
         <View style={styles.iconWrap}>
-          <Ionicons name="diamond-outline" size={20} color="#FFD700" />
+          <Ionicons name="trophy" size={20} color="#FFD700" />
         </View>
 
-        {/* Text Content */}
+        {/* Text */}
         <View style={{ flex: 1 }}>
-          <Text style={styles.title}>Upgrade to Melo Pro</Text>
+          <Text style={styles.title}>Melo Pro Dashboard</Text>
           <Text style={styles.subtitle}>
-            Unlimited listings • 10 boosts/month • Quantity selling
+            Manage boosts • Listings • Pro benefits
           </Text>
         </View>
 
-        {/* Gold Pill CTA */}
-        <View style={styles.pill}>
-          <Text style={styles.pillText}>GO PRO</Text>
+        {/* Status Pill */}
+        <View style={styles.activePill}>
+          <Text style={styles.activePillText}>ACTIVE</Text>
         </View>
       </View>
     </TouchableOpacity>
@@ -118,7 +119,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
-  /* 🔥 MAIN LUXURY PRO CARD (MATCHES SELLER HUB) */
+  /* SAME LUXURY CARD SYSTEM AS UPGRADE BUTTON */
   proCard: {
     borderRadius: 18,
     padding: 16,
@@ -173,21 +174,21 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
-  pill: {
+  activePill: {
     backgroundColor: "#FFD700",
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 999,
   },
 
-  pillText: {
+  activePillText: {
     fontSize: 11,
     fontWeight: "900",
     color: "#0B1511",
     letterSpacing: 1,
   },
 
-  /* COMPACT VERSION (MATCHES DARK THEME) */
+  /* COMPACT (HEADER / SMALL AREAS) */
   compactBtn: {
     flexDirection: "row",
     alignItems: "center",

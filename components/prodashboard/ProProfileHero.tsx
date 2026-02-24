@@ -1,5 +1,13 @@
 import { Ionicons } from "@expo/vector-icons"
-import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import { useEffect, useRef } from "react"
+import {
+    Animated,
+    Image,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from "react-native"
 
 type Props = {
   displayName: string | null
@@ -32,21 +40,75 @@ export default function ProProfileHero({
 }: Props) {
   const hasReviews = ratingCount > 0
 
+  // ✨ Faint gold star twinkle animation (subtle luxury)
+  const starOpacity1 = useRef(new Animated.Value(0.2)).current
+  const starOpacity2 = useRef(new Animated.Value(0.1)).current
+  const starOpacity3 = useRef(new Animated.Value(0.15)).current
+
+  useEffect(() => {
+    const twinkle = (anim: Animated.Value, delay: number) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(delay),
+          Animated.timing(anim, {
+            toValue: 0.6,
+            duration: 1200,
+            useNativeDriver: true,
+          }),
+          Animated.timing(anim, {
+            toValue: 0.15,
+            duration: 1400,
+            useNativeDriver: true,
+          }),
+        ])
+      )
+
+    const a1 = twinkle(starOpacity1, 0)
+    const a2 = twinkle(starOpacity2, 600)
+    const a3 = twinkle(starOpacity3, 1200)
+
+    a1.start()
+    a2.start()
+    a3.start()
+
+    return () => {
+      a1.stop()
+      a2.stop()
+      a3.stop()
+    }
+  }, [starOpacity1, starOpacity2, starOpacity3])
+
   return (
     <View style={styles.wrapper}>
-      {/* 👑 FULL WIDTH PREMIUM HERO */}
       <View style={styles.hero}>
-        {/* Glow Accent */}
+        {/* Soft green cinematic glow */}
         <View style={styles.glow} />
 
-        {/* 👑 Crown Top Right */}
-        <View style={styles.crownWrap}>
-  <Ionicons name="trophy-outline" size={20} color="#FFD700" />
-</View>
+        {/* ✨ GOLD TWINKLE STARS (VERY FAINT) */}
+        <Animated.Text
+          style={[styles.star, styles.starOne, { opacity: starOpacity1 }]}
+        >
+          ✦
+        </Animated.Text>
+        <Animated.Text
+          style={[styles.star, styles.starTwo, { opacity: starOpacity2 }]}
+        >
+          ✧
+        </Animated.Text>
+        <Animated.Text
+          style={[styles.star, styles.starThree, { opacity: starOpacity3 }]}
+        >
+          ✦
+        </Animated.Text>
 
-        {/* PRO SELLER TITLE */}
+        {/* Trophy Icon */}
+        <View style={styles.crownWrap}>
+          <Ionicons name="trophy-outline" size={20} color="#FFD700" />
+        </View>
+
+        {/* MELO PRO BADGE */}
         <View style={styles.proBadge}>
-          <Text style={styles.proBadgeText}>PRO SELLER</Text>
+          <Text style={styles.proBadgeText}>MELO PRO</Text>
         </View>
 
         {/* AVATAR */}
@@ -64,7 +126,7 @@ export default function ProProfileHero({
           {displayName ?? "User"}
         </Text>
 
-        {/* ⭐ GOLD RATING + STATS */}
+        {/* STATS */}
         <View style={styles.statsRow}>
           <TouchableOpacity
             onPress={onOpenReviews}
@@ -73,7 +135,7 @@ export default function ProProfileHero({
           >
             <View style={styles.stat}>
               <Text style={styles.statValue}>
-                {hasReviews ? `${ratingAvg} ★` : "No reviews"}
+                {hasReviews ? `${ratingAvg} ★` : "—"}
               </Text>
               <Text style={styles.statLabel}>Rating</Text>
               {hasReviews && (
@@ -84,6 +146,8 @@ export default function ProProfileHero({
             </View>
           </TouchableOpacity>
 
+          <View style={styles.statDivider} />
+
           <View style={styles.stat}>
             <Text style={styles.statValue}>{soldCount}</Text>
             <Text style={styles.statLabel}>Sold</Text>
@@ -91,10 +155,8 @@ export default function ProProfileHero({
           </View>
         </View>
 
-        {/* BIO INSIDE HERO (PREMIUM FEEL) */}
-        {bio ? (
-          <Text style={styles.bio}>{bio}</Text>
-        ) : null}
+        {/* BIO */}
+        {bio ? <Text style={styles.bio}>{bio}</Text> : null}
 
         {/* ACTION BUTTONS */}
         {!isOwnProfile && (
@@ -134,137 +196,173 @@ export default function ProProfileHero({
 
 const styles = StyleSheet.create({
   wrapper: {
-    marginBottom: 16,
+    marginBottom: 18,
   },
 
   hero: {
-    width: "100%", // FULL WIDTH (not card)
-    paddingTop: 22,
-    paddingBottom: 24,
+    width: "100%",
+    paddingTop: 30,
+    paddingBottom: 30,
     paddingHorizontal: 18,
-    backgroundColor: "#0F1E17",
+    backgroundColor: "#0B1511",
     alignItems: "center",
     overflow: "hidden",
   },
 
   glow: {
     position: "absolute",
-    top: -80,
-    right: -80,
-    width: 260,
-    height: 260,
-    borderRadius: 130,
+    top: -120,
+    right: -100,
+    width: 320,
+    height: 320,
+    borderRadius: 160,
     backgroundColor: "#7FAF9B",
-    opacity: 0.25,
+    opacity: 0.18,
+  },
+
+  /* ✨ STAR POSITIONS (VERY SUBTLE) */
+  star: {
+    position: "absolute",
+    color: "#FFD700",
+    fontSize: 16,
+  },
+  starOne: {
+    top: 40,
+    left: 30,
+  },
+  starTwo: {
+    top: 90,
+    right: 50,
+  },
+  starThree: {
+    top: 150,
+    left: 70,
   },
 
   crownWrap: {
     position: "absolute",
-    top: 16,
-    right: 16,
+    top: 18,
+    right: 18,
     backgroundColor: "rgba(0,0,0,0.35)",
     padding: 8,
     borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,215,0,0.25)",
   },
 
   proBadge: {
-    backgroundColor: "#BFE7D4",
-    paddingHorizontal: 14,
+    backgroundColor: "rgba(255,215,0,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(255,215,0,0.45)",
+    paddingHorizontal: 16,
     paddingVertical: 6,
     borderRadius: 999,
-    marginBottom: 10,
+    marginBottom: 12,
   },
 
   proBadgeText: {
     fontSize: 11,
     fontWeight: "900",
-    color: "#0F1E17",
-    letterSpacing: 1.2,
+    color: "#FFD700",
+    letterSpacing: 1.6,
   },
 
   avatar: {
-    width: 104,
-    height: 104,
-    borderRadius: 52,
+    width: 112,
+    height: 112,
+    borderRadius: 56,
     borderWidth: 3,
-    borderColor: "#7FAF9B",
-    marginBottom: 10,
+    borderColor: "#FFD700",
+    marginBottom: 12,
   },
 
   name: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: "900",
     color: "#FFFFFF",
+    letterSpacing: 0.3,
+    marginTop: 4,
   },
 
   statsRow: {
     flexDirection: "row",
-    marginTop: 16,
+    alignItems: "center",
+    marginTop: 18,
+  },
+
+  statDivider: {
+    width: 1,
+    height: 34,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    marginHorizontal: 22,
   },
 
   stat: {
     alignItems: "center",
-    marginHorizontal: 18,
   },
 
   statValue: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: "900",
-    color: "#FFD700", // ⭐ GOLD RATING STYLE
+    color: "#FFD700",
   },
 
   statLabel: {
     fontSize: 12,
     color: "rgba(255,255,255,0.75)",
     fontWeight: "700",
+    marginTop: 2,
   },
 
   statSub: {
     fontSize: 11,
-    color: "rgba(255,255,255,0.55)",
+    color: "rgba(255,255,255,0.5)",
     marginTop: 2,
   },
 
   bio: {
-    marginTop: 14,
+    marginTop: 18,
     fontSize: 13,
-    fontWeight: "600",
-    color: "rgba(255,255,255,0.85)",
+    fontWeight: "500",
+    color: "rgba(255,255,255,0.78)",
     textAlign: "center",
-    lineHeight: 18,
-    paddingHorizontal: 6,
+    lineHeight: 20,
+    paddingHorizontal: 12,
   },
 
   actionRow: {
     flexDirection: "row",
-    gap: 10,
-    marginTop: 18,
+    gap: 12,
+    marginTop: 22,
     width: "100%",
   },
 
   followButton: {
     flex: 1,
-    paddingVertical: 12,
-    borderRadius: 18,
-    backgroundColor: "#7FAF9B",
+    paddingVertical: 13,
+    borderRadius: 20,
+    backgroundColor: "#FFD700",
     alignItems: "center",
     justifyContent: "center",
   },
 
   followingButton: {
-    backgroundColor: "#1C2E27",
+    backgroundColor: "#1A2A23",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.15)",
   },
 
   followText: {
-    color: "#0F1E17",
+    color: "#0B1511",
     fontWeight: "900",
     fontSize: 14,
+    letterSpacing: 0.4,
   },
 
   messageButton: {
     flex: 1,
-    paddingVertical: 12,
-    borderRadius: 18,
+    paddingVertical: 13,
+    borderRadius: 20,
     backgroundColor: "#121212",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.12)",
@@ -276,5 +374,6 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontWeight: "900",
     fontSize: 14,
+    letterSpacing: 0.4,
   },
 })

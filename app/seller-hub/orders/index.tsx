@@ -70,7 +70,6 @@ export default function SellerOrdersHubScreen() {
     }
   }
 
-  /* ✅ TRUE OPEN DISPUTES (ANY UNRESOLVED) */
   const loadOpenDisputesCount = async () => {
     try {
       if (!sellerId) return
@@ -100,6 +99,32 @@ export default function SellerOrdersHubScreen() {
         backLabel="Seller Hub"
         backRoute="/seller-hub"
       />
+
+      {/* 🔥 MELO PRO UPGRADE CTA (NEW – PREMIUM) */}
+      <TouchableOpacity
+        style={styles.proCard}
+        activeOpacity={0.9}
+        onPress={() => router.push("/melo-pro")}
+      >
+        <View style={styles.proGlow} />
+
+        <View style={styles.proRow}>
+          <View style={styles.proIconWrap}>
+            <Ionicons name="diamond-outline" size={22} color="#FFD700" />
+          </View>
+
+          <View style={{ flex: 1 }}>
+            <Text style={styles.proTitle}>Upgrade to Melo Pro</Text>
+            <Text style={styles.proSubtitle}>
+              Unlimited listings • 10 boosts/month • Pro badge
+            </Text>
+          </View>
+
+          <View style={styles.proPill}>
+            <Text style={styles.proPillText}>GO PRO</Text>
+          </View>
+        </View>
+      </TouchableOpacity>
 
       {/* MENU */}
       <View style={styles.menu}>
@@ -193,6 +218,72 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: "#EAF4EF",
+  },
+
+  /* 🔥 MELO PRO CARD (DARK + GOLD LUXURY) */
+  proCard: {
+    marginHorizontal: 16,
+    marginTop: 14,
+    marginBottom: 6,
+    borderRadius: 18,
+    padding: 16,
+    backgroundColor: "#0B1511",
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(255,215,0,0.25)",
+  },
+
+  proGlow: {
+    position: "absolute",
+    top: -40,
+    right: -40,
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: "#FFD700",
+    opacity: 0.08,
+  },
+
+  proRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  proIconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,215,0,0.12)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+
+  proTitle: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#FFFFFF",
+    letterSpacing: 0.3,
+  },
+
+  proSubtitle: {
+    fontSize: 12,
+    color: "rgba(255,255,255,0.65)",
+    marginTop: 2,
+  },
+
+  proPill: {
+    backgroundColor: "#FFD700",
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+
+  proPillText: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: "#0B1511",
+    letterSpacing: 1,
   },
 
   menu: {

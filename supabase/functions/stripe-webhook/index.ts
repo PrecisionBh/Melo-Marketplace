@@ -291,5 +291,27 @@ serve(async (req) => {
     })
   }
 
+  // 💸 ADDED: Handle ACH & Instant payout finalization (wallet accuracy fix)
+  if (event.type === "payout.paid") {
+    const payout = event.data.object as Stripe.Payout
+    const stripePayoutId = payout.id
+
+    console.log("💸 Payout paid webhook received", {
+      payout_id: stripePayoutId,
+      status: payout.status,
+      amount: payout.amount,
+    })
+
+    await supabase
+      .from("payouts")
+      .update({
+        status: "paid",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("stripe_payout_id", stripePayoutId)
+
+    return json(200, { received: true })
+  }
+
   return json(200, { received: true })
 })
