@@ -8,10 +8,15 @@ import {
 
 export type FilterKey =
   | "all"
-  | "cues"
-  | "cases"
-  | "new"
-  | "used"
+  | "playing_cue"
+  | "custom_cue"
+  | "break_cue"
+  | "jump_cue"
+  | "case"
+  | "shaft"
+  | "apparel"
+  | "accessories"
+  | "collectibles"
   | "other"
 
 type Props = {
@@ -21,11 +26,16 @@ type Props = {
 
 const FILTERS: { key: FilterKey; label: string }[] = [
   { key: "all", label: "All" },
-  { key: "cues", label: "Cues" },
-  { key: "cases", label: "Cases" },
-  { key: "new", label: "New" },
-  { key: "used", label: "Used" },
-  { key: "other", label: "Other" }, // 👈 far right
+  { key: "playing_cue", label: "Playing Cue" },
+  { key: "custom_cue", label: "Custom Cue" },
+  { key: "break_cue", label: "Break Cue" },
+  { key: "jump_cue", label: "Jump Cue" },
+  { key: "case", label: "Case" },
+  { key: "shaft", label: "Shaft" },
+  { key: "apparel", label: "Apparel" },
+  { key: "accessories", label: "Accessories" },
+  { key: "collectibles", label: "Collectible" },
+  { key: "other", label: "Other" },
 ]
 
 export default function FilterBar({ active, onChange }: Props) {
@@ -42,8 +52,13 @@ export default function FilterBar({ active, onChange }: Props) {
           return (
             <TouchableOpacity
               key={f.key}
-              style={[styles.pill, isActive && styles.activePill]}
+              style={[
+                styles.pill,
+                isActive && styles.activePill,
+                isActive && styles.glow,
+              ]}
               onPress={() => onChange(f.key)}
+              activeOpacity={0.85}
             >
               <Text style={[styles.text, isActive && styles.activeText]}>
                 {f.label}
@@ -58,8 +73,8 @@ export default function FilterBar({ active, onChange }: Props) {
 
 const styles = StyleSheet.create({
   wrap: {
-    backgroundColor: "#7FAF9B", // 🔥 sage green (matches header)
-    paddingVertical: 8,
+    backgroundColor: "#7FAF9B", // header sage
+    paddingVertical: 8, // 👈 smaller than before (back to sleek)
     paddingLeft: 12,
   },
 
@@ -69,23 +84,40 @@ const styles = StyleSheet.create({
   },
 
   pill: {
-    backgroundColor: "#fdfdfd", // 🔥 soft sage pill
-    paddingHorizontal: 14,
-    paddingVertical: 6,
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 14, // 👈 reduced width
+    paddingVertical: 6, // 👈 smaller height (matches your original feel)
     borderRadius: 999,
+
+    // Light depth (clean marketplace look)
+    shadowColor: "#000",
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
   },
 
+  // 🔥 MUCH clearer active state (not close to white)
   activePill: {
-    backgroundColor: "#bcf9e0", // 🔥 active sage
+    backgroundColor: "#00ff88", // lighter sage tint (distinct but on-brand)
+  },
+
+  // ✨ Real visible glow (works on Android + iOS)
+  glow: {
+    shadowColor: "#ccff00",
+    shadowOpacity: 0.9,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 5, // Android glow visibility
   },
 
   text: {
-    fontSize: 12,
+    fontSize: 12, // 👈 back to original compact size
     fontWeight: "700",
-    color: "#000000", // 🔥 calm muted green
+    color: "#1E1E1E",
   },
 
   activeText: {
-    color: "#0F1E17", // 🔥 dark contrast
+    color: "#0F1E17", // strong contrast
   },
 })

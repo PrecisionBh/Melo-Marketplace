@@ -15,6 +15,7 @@ import {
   View,
 } from "react-native"
 
+import AppHeader from "@/components/app-header"
 import { useAuth } from "../context/AuthContext"
 import { handleAppError } from "../lib/errors/appError"
 import { supabase } from "../lib/supabase"
@@ -60,9 +61,7 @@ export default function MakeOfferScreen() {
 
         if (error) throw error
 
-        if (isMounted) {
-          setListing(data)
-        }
+        if (isMounted) setListing(data)
       } catch (err) {
         console.error("Listing load error:", err)
         handleAppError(err, {
@@ -123,122 +122,127 @@ export default function MakeOfferScreen() {
 
   /* ---------------- SUBMIT ---------------- */
 
-const submitOffer = async () => {
-  if (submittingRef.current) return
-  if (!session?.user || !listing) return
+  const submitOffer = async () => {
+    if (submittingRef.current) return
+    if (!session?.user || !listing) return
 
-  // 🚫 BLOCK SELF-OFFERS (CRITICAL MARKETPLACE GUARD)
-  if (listing.user_id === session.user.id) {
-    Alert.alert(
-      "Invalid Action",
-      "You cannot make an offer on your own listing."
-    )
-    return
-  }
-
-  if (!numericOffer || numericOffer <= 0) {
-    Alert.alert("Invalid offer", "Enter a valid offer amount.")
-    return
-  }
-
-  if (
-    typeof listing.min_offer === "number" &&
-    numericOffer < listing.min_offer
-  ) {
-    setMinError(`Minimum offer is $${listing.min_offer.toFixed(2)}`)
-    return
-  }
-
-  try {
-    submittingRef.current = true
-    setLoading(true)
-
-    const { data: newOffer, error } = await supabase
-      .from("offers")
-      .insert({
-        listing_id: listing.id,
-        buyer_id: session.user.id,
-        seller_id: listing.user_id,
-
-        offer_amount: numericOffer,
-        original_offer: numericOffer,
-        current_amount: numericOffer,
-
-        buyer_fee: buyerFee,
-        total_due: totalDue,
-
-        status: "pending",
-        last_action: "buyer",
-        last_actor: "buyer",
-        counter_count: 0,
-
-        expires_at: new Date(
-          Date.now() + 24 * 60 * 60 * 1000
-        ).toISOString(),
-      })
-      .select("id")
-      .single()
-
-    if (error) {
-      if (error.code === "23505") {
-        Alert.alert(
-          "Offer already sent",
-          "You already have an active offer on this item."
-        )
-        return
-      }
-      throw error
+    // 🚫 BLOCK SELF-OFFERS (CRITICAL MARKETPLACE GUARD)
+    if (listing.user_id === session.user.id) {
+      Alert.alert(
+        "Invalid Action",
+        "You cannot make an offer on your own listing."
+      )
+      return
     }
 
-    /* ✅ NOTIFY AFTER SUCCESS (non-blocking safe) */
+    if (!numericOffer || numericOffer <= 0) {
+      Alert.alert("Invalid offer", "Enter a valid offer amount.")
+      return
+    }
+
+    if (typeof listing.min_offer === "number" && numericOffer < listing.min_offer) {
+      setMinError(`Minimum offer is $${listing.min_offer.toFixed(2)}`)
+      return
+    }
+
     try {
-      await notify({
-        userId: listing.user_id,
-        type: "offer",
-        title: "New offer received",
-        body: `You received a new offer on "${listing.title}"`,
-        data: {
-          route: "/seller-hub/offers/[id]",
-          params: {
-            id: newOffer.id,
+      submittingRef.current = true
+      setLoading(true)
+
+      const { data: newOffer, error } = await supabase
+        .from("offers")
+        .insert({
+          listing_id: listing.id,
+          buyer_id: session.user.id,
+          seller_id: listing.user_id,
+
+          offer_amount: numericOffer,
+          original_offer: numericOffer,
+          current_amount: numericOffer,
+
+          buyer_fee: buyerFee,
+          total_due: totalDue,
+
+          status: "pending",
+          last_action: "buyer",
+          last_actor: "buyer",
+          counter_count: 0,
+
+          expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        })
+        .select("id")
+        .single()
+
+      if (error) {
+        if (error.code === "23505") {
+          Alert.alert(
+            "Offer already sent",
+            "You already have an active offer on this item."
+          )
+          return
+        }
+        throw error
+      }
+
+      /* ✅ NOTIFY AFTER SUCCESS (non-blocking safe) */
+      try {
+        await notify({
+          userId: listing.user_id,
+          type: "offer",
+          title: "New offer received",
+          body: `You received a new offer on "${listing.title}"`,
+          data: {
+            route: "/seller-hub/offers/[id]",
+            params: { id: newOffer.id },
           },
-        },
+        })
+      } catch (notifyErr) {
+        console.warn("Notify failed:", notifyErr)
+      }
+
+      Alert.alert(
+        "Offer Sent",
+        "The seller has been notified. You’ll be able to respond if they counter."
+      )
+
+      // ✅ Go back to the listing detail route that launched this offer page
+      if (listingId) {
+        router.push({
+          pathname: "/listing/[id]",
+          params: { id: listingId },
+        })
+      } else {
+        router.back()
+      }
+    } catch (err) {
+      console.error("Offer submit error:", err)
+      handleAppError(err, {
+        fallbackMessage: "Failed to submit offer. Please try again.",
       })
-    } catch (notifyErr) {
-      console.warn("Notify failed:", notifyErr)
+    } finally {
+      submittingRef.current = false
+      setLoading(false)
     }
-
-    Alert.alert(
-      "Offer Sent",
-      "The seller has been notified. You’ll be able to respond if they counter."
-    )
-
-    router.back()
-  } catch (err) {
-    console.error("Offer submit error:", err)
-    handleAppError(err, {
-      fallbackMessage: "Failed to submit offer. Please try again.",
-    })
-  } finally {
-    submittingRef.current = false
-    setLoading(false)
   }
-}
 
-if (!listing) return null
-
+  if (!listing) return null
 
   /* ---------------- UI ---------------- */
 
   return (
     <View style={styles.screen}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={22} color="#0F1E17" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Make Offer</Text>
-        <View style={{ width: 22 }} />
-      </View>
+      <AppHeader
+        title="Make Offer"
+        backLabel="Back"
+        backRoute={
+          listingId
+            ? ({
+                pathname: "/listing/[id]",
+                params: { id: listingId },
+              } as any)
+            : undefined
+        }
+      />
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
@@ -247,10 +251,7 @@ if (!listing) return null
       >
         <ScrollView contentContainerStyle={styles.content}>
           {listing.image_urls?.[0] && (
-            <Image
-              source={{ uri: listing.image_urls[0] }}
-              style={styles.image}
-            />
+            <Image source={{ uri: listing.image_urls[0] }} style={styles.image} />
           )}
 
           <View style={styles.card}>
@@ -275,16 +276,10 @@ if (!listing) return null
 
             {numericOffer > 0 && (
               <View style={styles.summary}>
-                <Row
-                  label="Offer amount"
-                  value={`$${numericOffer.toFixed(2)}`}
-                />
+                <Row label="Offer amount" value={`$${numericOffer.toFixed(2)}`} />
 
                 {shippingCost > 0 && (
-                  <Row
-                    label="Shipping"
-                    value={`$${shippingCost.toFixed(2)}`}
-                  />
+                  <Row label="Shipping" value={`$${shippingCost.toFixed(2)}`} />
                 )}
 
                 <Row
@@ -292,7 +287,6 @@ if (!listing) return null
                   value={`$${buyerFee.toFixed(2)}`}
                 />
 
-                {/* 🔥 NEW DISPLAY-ONLY SALES TAX LINE */}
                 <Row
                   label="Estimated sales tax (7.5%)"
                   value={`$${salesTax.toFixed(2)}`}
@@ -322,19 +316,11 @@ if (!listing) return null
               Submitting an offer does not guarantee acceptance.
             </Text>
 
-            <Text style={styles.reassurance}>
-              Offers expire after 24 hours.
-            </Text>
+            <Text style={styles.reassurance}>Offers expire after 24 hours.</Text>
 
             <View style={styles.protectionPill}>
-              <Ionicons
-                name="shield-checkmark"
-                size={14}
-                color="#1F7A63"
-              />
-              <Text style={styles.protectionText}>
-                Buyer Protection Included
-              </Text>
+              <Ionicons name="shield-checkmark" size={14} color="#1F7A63" />
+              <Text style={styles.protectionText}>Buyer Protection Included</Text>
             </View>
           </View>
 
@@ -358,12 +344,8 @@ function Row({
 }) {
   return (
     <View style={styles.row}>
-      <Text style={[styles.rowLabel, bold && styles.boldText]}>
-        {label}
-      </Text>
-      <Text style={[styles.rowValue, bold && styles.boldText]}>
-        {value}
-      </Text>
+      <Text style={[styles.rowLabel, bold && styles.boldText]}>{label}</Text>
+      <Text style={[styles.rowValue, bold && styles.boldText]}>{value}</Text>
     </View>
   )
 }
@@ -372,22 +354,6 @@ function Row({
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#EAF4EF" },
-
-  header: {
-    paddingTop: 50,
-    paddingBottom: 12,
-    paddingHorizontal: 14,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    backgroundColor: "#7FAF9B",
-  },
-
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#0F1E17",
-  },
 
   content: {
     padding: 20,
@@ -455,7 +421,7 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingVertical: 7, // ⬅️ slightly more breathing room
+    paddingVertical: 7,
   },
 
   rowLabel: {
@@ -474,7 +440,7 @@ const styles = StyleSheet.create({
 
   divider: {
     height: 1,
-    backgroundColor: "#C6DDD2", // ⬅️ a touch darker for separation
+    backgroundColor: "#C6DDD2",
     marginVertical: 10,
   },
 

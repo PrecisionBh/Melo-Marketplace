@@ -8,14 +8,13 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
 } from "react-native"
 
 import AppHeader from "@/components/app-header"
 import { useAuth } from "../context/AuthContext"
 import { handleAppError } from "../lib/errors/appError"
 import { supabase } from "../lib/supabase"
-
 
 /* ---------------- TYPES ---------------- */
 
@@ -54,35 +53,44 @@ export default function CheckoutScreen() {
   const [item, setItem] = useState<CheckoutItem | null>(null)
   const [loading, setLoading] = useState(true)
 
+  /* ---------------- BACK ROUTE (SAME LOGIC AS MAKE OFFER) ---------------- */
+
+  const backRoute =
+    offerId
+      ? ("/buyer-hub/offers" as const)
+      : listingId
+      ? ({ pathname: "/listing/[id]", params: { id: listingId } } as any)
+      : ("/" as const)
+
   /* ---------------- LOAD DATA ---------------- */
 
   useEffect(() => {
-  if (!session?.user) {
-    handleAppError(new Error("Missing session"), {
-      context: "checkout_no_session",
-      silent: true,
-    })
-    setLoading(false)
-    return
-  }
-
-  if (offerId) loadFromOffer()
-  else if (listingId) loadFromListing()
-  else setLoading(false)
-}, [offerId, listingId, session])
-
-
-  const loadFromOffer = async () => {
-  try {
-    setLoading(true)
-
-    if (!offerId) {
-      throw new Error("Missing offerId")
+    if (!session?.user) {
+      handleAppError(new Error("Missing session"), {
+        context: "checkout_no_session",
+        silent: true,
+      })
+      setLoading(false)
+      return
     }
 
-    const { data, error } = await supabase
-      .from("offers")
-      .select(`
+    if (offerId) loadFromOffer()
+    else if (listingId) loadFromListing()
+    else setLoading(false)
+  }, [offerId, listingId, session])
+
+  const loadFromOffer = async () => {
+    try {
+      setLoading(true)
+
+      if (!offerId) {
+        throw new Error("Missing offerId")
+      }
+
+      const { data, error } = await supabase
+        .from("offers")
+        .select(
+          `
         id,
         current_amount,
         seller_id,
@@ -92,81 +100,78 @@ export default function CheckoutScreen() {
           shipping_type,
           shipping_price
         )
-      `)
-      .eq("id", offerId)
-      .single<OfferWithListing>()
+      `
+        )
+        .eq("id", offerId)
+        .single<OfferWithListing>()
 
-    if (error) throw error
-    if (!data || !data.listing) {
-      throw new Error("Offer or listing not found")
+      if (error) throw error
+      if (!data || !data.listing) {
+        throw new Error("Offer or listing not found")
+      }
+
+      setItem({
+        id: data.id,
+        title: data.listing.title,
+        price: Number(data.current_amount),
+        image_url: data.listing.image_urls?.[0] ?? null,
+        shipping_type:
+          data.listing.shipping_type === "seller_pays"
+            ? "free"
+            : "buyer_pays",
+        shipping_price: Number(data.listing.shipping_price ?? 0),
+        seller_id: data.seller_id,
+      })
+    } catch (err) {
+      handleAppError(err, {
+        context: "checkout_load_offer",
+        fallbackMessage: "Failed to load checkout data.",
+      })
+    } finally {
+      setLoading(false)
     }
-
-    setItem({
-      id: data.id,
-      title: data.listing.title,
-      price: Number(data.current_amount),
-      image_url: data.listing.image_urls?.[0] ?? null,
-      shipping_type:
-        data.listing.shipping_type === "seller_pays"
-          ? "free"
-          : "buyer_pays",
-      shipping_price: Number(data.listing.shipping_price ?? 0),
-      seller_id: data.seller_id,
-    })
-  } catch (err) {
-    handleAppError(err, {
-      context: "checkout_load_offer",
-      fallbackMessage: "Failed to load checkout data.",
-    })
-  } finally {
-    setLoading(false)
   }
-}
-
 
   const loadFromListing = async () => {
-  try {
-    setLoading(true)
+    try {
+      setLoading(true)
 
-    if (!listingId) {
-      throw new Error("Missing listingId")
+      if (!listingId) {
+        throw new Error("Missing listingId")
+      }
+
+      const { data, error } = await supabase
+        .from("listings")
+        .select("id,title,price,image_urls,shipping_type,shipping_price,user_id")
+        .eq("id", listingId)
+        .single()
+
+      if (error) throw error
+      if (!data) {
+        throw new Error("Listing not found")
+      }
+
+      setItem({
+        id: data.id,
+        title: data.title,
+        price: Number(data.price),
+        image_url: data.image_urls?.[0] ?? null,
+        shipping_type:
+          data.shipping_type === "seller_pays"
+            ? "free"
+            : "buyer_pays",
+        shipping_price: Number(data.shipping_price ?? 0),
+        seller_id: data.user_id,
+      })
+    } catch (err) {
+      handleAppError(err, {
+        context: "checkout_load_listing",
+        fallbackMessage: "Failed to load listing.",
+      })
+    } finally {
+      setLoading(false)
     }
-
-    const { data, error } = await supabase
-      .from("listings")
-      .select(
-        "id,title,price,image_urls,shipping_type,shipping_price,user_id"
-      )
-      .eq("id", listingId)
-      .single()
-
-    if (error) throw error
-    if (!data) {
-      throw new Error("Listing not found")
-    }
-
-    setItem({
-      id: data.id,
-      title: data.title,
-      price: Number(data.price),
-      image_url: data.image_urls?.[0] ?? null,
-      shipping_type:
-        data.shipping_type === "seller_pays"
-          ? "free"
-          : "buyer_pays",
-      shipping_price: Number(data.shipping_price ?? 0),
-      seller_id: data.user_id,
-    })
-  } catch (err) {
-    handleAppError(err, {
-      context: "checkout_load_listing",
-      fallbackMessage: "Failed to load listing.",
-    })
-  } finally {
-    setLoading(false)
   }
-}
-
 
   /* ---------------- RENDER ---------------- */
 
@@ -184,25 +189,20 @@ export default function CheckoutScreen() {
 
   /* ---------------- CORRECT MATH (UPDATED WITH 7.5% TAX) ---------------- */
 
-  const shipping =
-    item.shipping_type === "free" ? 0 : item.shipping_price
+  const shipping = item.shipping_type === "free" ? 0 : item.shipping_price
 
   // Seller escrow base (item + shipping)
   const escrow = item.price + shipping
 
   // Buyer fee (still ONLY based on escrow, not tax)
-  const buyerFee = +(
-    escrow * 0.03 + 0.3
-  ).toFixed(2)
+  const buyerFee = +(escrow * 0.03 + 0.3).toFixed(2)
 
   // Florida sales tax (7.5%) on item + shipping ONLY
   const taxRate = 0.075
   const tax = +(escrow * taxRate).toFixed(2)
 
   // Final total buyer pays
-  const total = +(
-    escrow + buyerFee + tax
-  ).toFixed(2)
+  const total = +(escrow + buyerFee + tax).toFixed(2)
 
   const totalCents = Math.round(total * 100)
 
@@ -210,11 +210,7 @@ export default function CheckoutScreen() {
 
   return (
     <View style={styles.screen}>
-      <AppHeader
-  title="Checkout"
-  backRoute={offerId ? "/buyer-hub/offers" : "/"}
-/>
-
+      <AppHeader title="Checkout" backRoute={backRoute} />
 
       <ScrollView
         contentContainerStyle={styles.content}
@@ -239,10 +235,7 @@ export default function CheckoutScreen() {
             label="Buyer protection & processing"
             value={`$${buyerFee.toFixed(2)}`}
           />
-          <Row
-            label="Sales tax (7.5%)"
-            value={`$${tax.toFixed(2)}`}
-          />
+          <Row label="Sales tax (7.5%)" value={`$${tax.toFixed(2)}`} />
           <View style={styles.divider} />
           <Row label="Total" value={`$${total.toFixed(2)}`} bold />
         </View>
@@ -265,15 +258,11 @@ export default function CheckoutScreen() {
           </Text>
         </TouchableOpacity>
 
-        <Text style={styles.reassurance}>
-          Secure checkout powered by Stripe
-        </Text>
+        <Text style={styles.reassurance}>Secure checkout powered by Stripe</Text>
 
         <View style={styles.protectionPill}>
           <Ionicons name="shield-checkmark" size={14} color="#1F7A63" />
-          <Text style={styles.protectionText}>
-            Buyer Protection Included
-          </Text>
+          <Text style={styles.protectionText}>Buyer Protection Included</Text>
         </View>
 
         <View style={{ height: 120 }} />
@@ -295,12 +284,8 @@ function Row({
 }) {
   return (
     <View style={styles.row}>
-      <Text style={[styles.rowLabel, bold && styles.boldText]}>
-        {label}
-      </Text>
-      <Text style={[styles.rowValue, bold && styles.boldText]}>
-        {value}
-      </Text>
+      <Text style={[styles.rowLabel, bold && styles.boldText]}>{label}</Text>
+      <Text style={[styles.rowValue, bold && styles.boldText]}>{value}</Text>
     </View>
   )
 }

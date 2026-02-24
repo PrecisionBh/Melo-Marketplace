@@ -29,16 +29,22 @@ const CUE_CATEGORIES = [
   "jump_cue",
 ]
 
-const CASE_CATEGORIES = ["hard_case", "soft_case"]
+const CASE_CATEGORIES = [
+  "case",
+  "hard_case",
+  "soft_case",
+]
 
 /* ---------------- DB ROW TYPE ---------------- */
 
 type ListingRow = {
   id: string
   title: string
+  description?: string | null
+  brand?: string | null
   price: number
   category: string
-  condition: string
+  condition?: string | null
   image_urls: string[] | null
   allow_offers?: boolean | null
   shipping_type?: "seller_pays" | "buyer_pays" | null
@@ -92,7 +98,6 @@ export default function HomeScreen() {
         data: { user },
       } = await supabase.auth.getUser()
 
-      // Get followed sellers (safe if not logged in or none followed)
       let followedSellerIds: string[] = []
 
       if (user) {
@@ -105,11 +110,10 @@ export default function HomeScreen() {
           followsData?.map((f: any) => f.following_id) ?? []
       }
 
-      // Fetch ALL active listings
       const { data, error } = await supabase
         .from("listings")
         .select(
-          "id,title,price,category,condition,image_urls,allow_offers,shipping_type,is_sold,is_removed,user_id,is_boosted,boost_expires_at"
+          "id,title,description,brand,price,category,condition,image_urls,allow_offers,shipping_type,is_sold,is_removed,user_id,is_boosted,boost_expires_at"
         )
         .eq("status", "active")
         .eq("is_sold", false)
@@ -130,7 +134,6 @@ export default function HomeScreen() {
 
       const now = new Date().toISOString()
 
-      // 1️⃣ Active boosted listings (not expired)
       const boostedRows = validRows.filter(
         (l) =>
           l.is_boosted === true &&
@@ -138,7 +141,6 @@ export default function HomeScreen() {
           l.boost_expires_at > now
       )
 
-      // 2️⃣ Remove boosted from main pool (prevents duplicates)
       const nonBoostedRows = validRows.filter(
         (l) =>
           !l.is_boosted ||
@@ -146,17 +148,14 @@ export default function HomeScreen() {
           l.boost_expires_at <= now
       )
 
-      // 3️⃣ Followed sellers (from non-boosted pool)
       const followedRows = nonBoostedRows.filter((l) =>
         followedSellerIds.includes(l.user_id ?? "")
       )
 
-      // 4️⃣ New listings (everything else)
       const newRows = nonBoostedRows.filter(
         (l) => !followedSellerIds.includes(l.user_id ?? "")
       )
 
-      // 5️⃣ 3 ROW BLOCK FEED (3 Boosted → 3 Followed → 3 New)
       const merged: ListingRow[] = []
 
       let bIndex = 0
@@ -168,49 +167,36 @@ export default function HomeScreen() {
         fIndex < followedRows.length ||
         nIndex < newRows.length
       ) {
-        // Row 1: Boosted (fallback → followed → new)
         for (let i = 0; i < 3; i++) {
           if (bIndex < boostedRows.length) {
-            merged.push(boostedRows[bIndex])
-            bIndex++
+            merged.push(boostedRows[bIndex++])
           } else if (fIndex < followedRows.length) {
-            merged.push(followedRows[fIndex])
-            fIndex++
+            merged.push(followedRows[fIndex++])
           } else if (nIndex < newRows.length) {
-            merged.push(newRows[nIndex])
-            nIndex++
+            merged.push(newRows[nIndex++])
           }
         }
 
-        // Row 2: Followed (fallback → new → boosted)
         for (let i = 0; i < 3; i++) {
           if (fIndex < followedRows.length) {
-            merged.push(followedRows[fIndex])
-            fIndex++
+            merged.push(followedRows[fIndex++])
           } else if (nIndex < newRows.length) {
-            merged.push(newRows[nIndex])
-            nIndex++
+            merged.push(newRows[nIndex++])
           } else if (bIndex < boostedRows.length) {
-            merged.push(boostedRows[bIndex])
-            bIndex++
+            merged.push(boostedRows[bIndex++])
           }
         }
 
-        // Row 3: New listings (fallback → followed → boosted)
         for (let i = 0; i < 3; i++) {
           if (nIndex < newRows.length) {
-            merged.push(newRows[nIndex])
-            nIndex++
+            merged.push(newRows[nIndex++])
           } else if (fIndex < followedRows.length) {
-            merged.push(followedRows[fIndex])
-            fIndex++
+            merged.push(followedRows[fIndex++])
           } else if (bIndex < boostedRows.length) {
-            merged.push(boostedRows[bIndex])
-            bIndex++
+            merged.push(boostedRows[bIndex++])
           }
         }
 
-        // Safety break to avoid infinite loops
         if (
           bIndex >= boostedRows.length &&
           fIndex >= followedRows.length &&
@@ -224,9 +210,10 @@ export default function HomeScreen() {
         id: l.id,
         title: l.title,
         price: Number(l.price),
-        category: l.category,
-        condition: l.condition,
-        image_url: l.image_urls![0],
+        category: l.category ?? "",
+        // IMPORTANT: do NOT pass nullable condition to Listing type
+        // ListingCard type does not include condition, so we omit it
+        image_url: l.image_urls?.[0] ?? null,
         allow_offers: l.allow_offers ?? false,
         shipping_type: l.shipping_type ?? null,
       }))
@@ -248,280 +235,295 @@ export default function HomeScreen() {
     setRefreshing(false)
   }
 
-  /* ---------------- PUSH TOKEN SETUP ---------------- */
+  /* ---------------- UNREAD COUNTS ---------------- */
 
- async function setupPushTokenIfNeeded() {
+const checkUnreadMessages = async () => {
   try {
     const {
       data: { user },
     } = await supabase.auth.getUser()
 
-    if (!user) return
-
-    const { data: profile, error: profileError } = await supabase
-      .from("profiles")
-      .select("expo_push_token")
-      .eq("id", user.id)
-      .single()
-
-    if (profileError) throw profileError
-
-    if (profile?.expo_push_token) return
-
-    const confirm = await new Promise<boolean>((resolve) => {
-      Alert.alert(
-        "Enable Notifications?",
-        "Get notified about messages, offers, and order updates.",
-        [
-          { text: "Not Now", onPress: () => resolve(false) },
-          { text: "Enable", onPress: () => resolve(true) },
-        ]
-      )
-    })
-
-    if (!confirm) return
-
-    const token = await registerForPushNotifications()
-    if (!token) return
-
-    const { error: updateError } = await supabase
-      .from("profiles")
-      .update({
-        expo_push_token: token,
-        notifications_enabled: true,
-      })
-      .eq("id", user.id)
-
-    if (updateError) throw updateError
-  } catch (err) {
-    console.error("Push setup error:", err)
-    // Silent fail on purpose (do NOT annoy user on home load)
-  }
-}
-
-
-  /* ---------------- UNREAD MESSAGES ---------------- */
-
-async function checkUnreadMessages() {
-  try {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    if (!user) {
+    if (!user?.id) {
       setHasUnreadMessages(false)
       return
     }
 
-    const { count, error } = await supabase
+    const { data, error } = await supabase
       .from("messages")
-      .select("id", { count: "exact", head: true })
-      .neq("sender_id", user.id)
-      .is("read_at", null)
+      .select("id")
+      .eq("receiver_id", user.id) // ✅ CORRECT COLUMN
+      .eq("is_read", false)       // ✅ MATCHES YOUR SCHEMA
+      .limit(1)
 
     if (error) throw error
 
-    setHasUnreadMessages(!!count && count > 0)
+    setHasUnreadMessages((data?.length ?? 0) > 0)
   } catch (err) {
-    console.error("Unread messages check error:", err)
-    setHasUnreadMessages(false) // Fail safe UI
+    console.error("checkUnreadMessages error:", err)
+    setHasUnreadMessages(false)
   }
 }
 
-async function checkUnreadNotifications() {
+const checkUnreadNotifications = async () => {
   try {
     const {
       data: { user },
     } = await supabase.auth.getUser()
 
-    if (!user) {
+    if (!user?.id) {
       setHasUnreadNotifications(false)
       return
     }
 
-    const { count, error } = await supabase
+    const { data, error } = await supabase
       .from("notifications")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", user.id)
-      .eq("read", false)
+      .select("id")
+      .eq("user_id", user.id) // ✅ CORRECT
+      .eq("read", false)      // ✅ MATCHES YOUR TABLE
+      .limit(1)
 
     if (error) throw error
 
-    setHasUnreadNotifications(!!count && count > 0)
+    setHasUnreadNotifications((data?.length ?? 0) > 0)
   } catch (err) {
-    console.error("Unread notifications error:", err)
-    setHasUnreadNotifications(false) // Never break header UI
+    console.error("checkUnreadNotifications error:", err)
+    setHasUnreadNotifications(false)
   }
 }
 
+  /* ---------------- PUSH TOKEN SETUP ---------------- */
 
-  /* ---------------- FILTERING ---------------- */
+  async function setupPushTokenIfNeeded() {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!user) return
+
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("expo_push_token")
+        .eq("id", user.id)
+        .single()
+
+      if (profileError) throw profileError
+
+      if (profile?.expo_push_token) return
+
+      const confirm = await new Promise<boolean>((resolve) => {
+        Alert.alert(
+          "Enable Notifications?",
+          "Get notified about messages, offers, and order updates.",
+          [
+            { text: "Not Now", onPress: () => resolve(false) },
+            { text: "Enable", onPress: () => resolve(true) },
+          ]
+        )
+      })
+
+      if (!confirm) return
+
+      const token = await registerForPushNotifications()
+      if (!token) return
+
+      const { error: updateError } = await supabase
+        .from("profiles")
+        .update({
+          expo_push_token: token,
+          notifications_enabled: true,
+        })
+        .eq("id", user.id)
+
+      if (updateError) throw updateError
+    } catch (err) {
+      console.error("Push setup error:", err)
+    }
+  }
+
+   /* ---------------- FILTERING (FIXED & STABLE) ---------------- */
 
   const filteredListings = useMemo(() => {
     let result = [...listings]
 
+    /* 🔎 GLOBAL SEARCH (TITLE + CATEGORY — SAFE FOR CURRENT LISTING TYPE) */
     if (search.trim()) {
-      const q = search.toLowerCase()
-      result = result.filter((l) =>
-        l.title.toLowerCase().includes(q)
-      )
+      const q = search.toLowerCase().trim()
+
+      result = result.filter((l) => {
+        const title = (l.title ?? "").toLowerCase()
+        const category = (l.category ?? "").toLowerCase()
+
+        return (
+          title.includes(q) ||
+          category.includes(q)
+        )
+      })
     }
 
-    switch (activeCategory) {
-  case "cues":
-    return result.filter((l) =>
-      CUE_CATEGORIES.includes(l.category)
-    )
+    /* 🎯 CATEGORY FILTERING (MARKETPLACE-SAFE + CASE BUG FIX) */
+    if (activeCategory === "all") {
+      return result
+    }
 
-  case "cases":
-    return result.filter((l) =>
-      CASE_CATEGORIES.includes(l.category)
-    )
+    const active = (activeCategory ?? "").toLowerCase()
 
-  case "new":
-    return result.filter(
-      (l: any) =>
-        l.condition &&
-        l.condition.toLowerCase() === "new"
-    )
+    // 🧳 CASE PILL — matches: case, hard_case, soft_case
+    if (active === "case") {
+      return result.filter((l) => {
+        const cat = (l.category ?? "").toLowerCase()
+        return CASE_CATEGORIES.includes(cat) || cat.includes("case")
+      })
+    }
 
-  case "used":
-    return result.filter(
-      (l: any) =>
-        l.condition &&
-        l.condition.toLowerCase() !== "new"
-    )
+    // 🎱 CUE PILL — matches all cue types
+    if (active === "cue") {
+      return result.filter((l) => {
+        const cat = (l.category ?? "").toLowerCase()
+        return CUE_CATEGORIES.includes(cat) || cat.includes("cue")
+      })
+    }
 
-  case "other":
-    return result.filter(
-      (l) =>
-        !CUE_CATEGORIES.includes(l.category) &&
-        !CASE_CATEGORIES.includes(l.category)
-    )
+    // 📦 OTHER PILL — everything not in known marketplace categories
+    if (active === "other") {
+      const knownCategories = [
+        ...CUE_CATEGORIES,
+        ...CASE_CATEGORIES,
+        "shaft",
+        "apparel",
+        "accessories",
+        "collectibles",
+      ]
 
-  default:
-    return result
-}
+      return result.filter((l) => {
+        const cat = (l.category ?? "").toLowerCase()
+        return !knownCategories.includes(cat)
+      })
+    }
 
+    // 🔒 DEFAULT EXACT MATCH (for apparel, shaft, accessories, etc.)
+    return result.filter((l) => {
+      const cat = (l.category ?? "").toLowerCase()
+      return cat === active
+    })
   }, [listings, activeCategory, search])
 
- /* ---------------- RENDER ---------------- */
+  /* ---------------- RENDER ---------------- */
 
-return (
-  <>
-    <View style={styles.screen}>
-      <View style={styles.headerBlock}>
-        <HomeHeader
-          hasUnreadNotifications={hasUnreadNotifications}
-          hasUnreadMessages={hasUnreadMessages}
-          onNotificationsPress={() => router.push("/notifications")}
-          onMessagesPress={() => router.push("/messages")}
-          onProfilePress={() => router.push("/profile")}
-          onMenuPress={() => setMenuOpen(true)}
-        />
-
-        <SearchBar
-          value={search}
-          onChange={setSearch}
-          placeholder="Search listings"
-        />
-
-        <FilterBar
-          active={activeCategory}
-          onChange={setActiveCategory}
-        />
-      </View>
-
-      {loading ? (
-        <ActivityIndicator style={{ marginTop: 40 }} />
-      ) : (
-        <ListingsGrid
-          listings={filteredListings}
-          refreshing={refreshing}
-          onRefresh={refreshListings}
-        />
-      )}
-
-      <TouchableOpacity
-        style={styles.fab}
-        onPress={() => router.push("/seller-hub/create-listing")}
-        activeOpacity={0.9}
-      >
-        <Ionicons name="add" size={20} color="#0F1E17" />
-        <Text style={styles.fabText}>Create Listing</Text>
-      </TouchableOpacity>
-    </View>
-
-    {/* 🔥 UPGRADED DROPDOWN MENU OVERLAY */}
-    {menuOpen && (
-      <View style={styles.menuOverlay} pointerEvents="box-none">
-        {/* Backdrop */}
-        <TouchableOpacity
-          style={styles.menuBackdrop}
-          activeOpacity={1}
-          onPress={() => setMenuOpen(false)}
-        />
-
-        {/* Dropdown Card */}
-        <View style={styles.menuDropdown}>
-          <MenuItem
-            icon="albums-outline"
-            label="Buyer Hub"
-            onPress={() => {
-              setMenuOpen(false)
-              router.push("/buyer-hub")
-            }}
+  return (
+    <>
+      <View style={styles.screen}>
+        <View style={styles.headerBlock}>
+          <HomeHeader
+            hasUnreadNotifications={hasUnreadNotifications}
+            hasUnreadMessages={hasUnreadMessages}
+            onNotificationsPress={() => router.push("/notifications")}
+            onMessagesPress={() => router.push("/messages")}
+            onProfilePress={() => router.push("/profile")}
+            onMenuPress={() => setMenuOpen(true)}
           />
 
-          <MenuDivider />
-
-          <MenuItem
-            icon="briefcase-outline"
-            label="Seller Hub"
-            onPress={() => {
-              setMenuOpen(false)
-              router.push("/seller-hub")
-            }}
+          <SearchBar
+            value={search}
+            onChange={setSearch}
+            placeholder="Search listings"
           />
 
-          <MenuDivider />
-
-          <MenuItem
-            icon="wallet-outline"
-            label="Wallet"
-            onPress={() => {
-              setMenuOpen(false)
-              router.push("/seller-hub/wallet")
-            }}
-          />
-
-          <MenuDivider />
-
-          <MenuItem
-            icon="create-outline"
-            label="Edit Profile"
-            onPress={() => {
-              setMenuOpen(false)
-              router.push("/settings/edit-profile")
-            }}
-          />
-
-          <MenuDivider />
-
-          <MenuItem
-            icon="settings-outline"
-            label="Settings"
-            onPress={() => {
-              setMenuOpen(false)
-              router.push("/settings")
-            }}
+          <FilterBar
+            active={activeCategory}
+            onChange={setActiveCategory}
           />
         </View>
-      </View>
-    )}
-  </>
-)
 
+        {loading ? (
+          <ActivityIndicator style={{ marginTop: 40 }} />
+        ) : (
+          <ListingsGrid
+            listings={filteredListings}
+            refreshing={refreshing}
+            onRefresh={refreshListings}
+          />
+        )}
+
+        <TouchableOpacity
+          style={styles.fab}
+          onPress={() => router.push("/seller-hub/create-listing")}
+          activeOpacity={0.9}
+        >
+          <Ionicons name="add" size={20} color="#0F1E17" />
+          <Text style={styles.fabText}>Create Listing</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* 🔥 UPGRADED DROPDOWN MENU OVERLAY */}
+      {menuOpen && (
+        <View style={styles.menuOverlay} pointerEvents="box-none">
+          {/* Backdrop */}
+          <TouchableOpacity
+            style={styles.menuBackdrop}
+            activeOpacity={1}
+            onPress={() => setMenuOpen(false)}
+          />
+
+          {/* Dropdown Card */}
+          <View style={styles.menuDropdown}>
+            <MenuItem
+              icon="albums-outline"
+              label="Buyer Hub"
+              onPress={() => {
+                setMenuOpen(false)
+                router.push("/buyer-hub")
+              }}
+            />
+
+            <MenuDivider />
+
+            <MenuItem
+              icon="briefcase-outline"
+              label="Seller Hub"
+              onPress={() => {
+                setMenuOpen(false)
+                router.push("/seller-hub")
+              }}
+            />
+
+            <MenuDivider />
+
+            <MenuItem
+              icon="wallet-outline"
+              label="Wallet"
+              onPress={() => {
+                setMenuOpen(false)
+                router.push("/seller-hub/wallet")
+              }}
+            />
+
+            <MenuDivider />
+
+            <MenuItem
+              icon="create-outline"
+              label="Edit Profile"
+              onPress={() => {
+                setMenuOpen(false)
+                router.push("/settings/edit-profile")
+              }}
+            />
+
+            <MenuDivider />
+
+            <MenuItem
+              icon="settings-outline"
+              label="Settings"
+              onPress={() => {
+                setMenuOpen(false)
+                router.push("/settings")
+              }}
+            />
+          </View>
+        </View>
+      )}
+    </>
+  )
 }
 
 /* ---------------- MENU COMPONENTS ---------------- */
@@ -585,8 +587,6 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     color: "#0F1E17",
   },
-
-  /* 🔥 UPGRADED MENU STYLES */
   menuOverlay: {
     position: "absolute",
     top: 0,

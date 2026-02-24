@@ -130,7 +130,7 @@ export default function ProfileScreen() {
       <View style={styles.menu}>
         <MenuItem
           icon="bag-outline"
-          label="Purchases"
+          label="Buyers Hub"
           onPress={() => router.push("/buyer-hub")}
         />
 
