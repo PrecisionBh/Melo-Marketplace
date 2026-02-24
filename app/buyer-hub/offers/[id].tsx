@@ -6,6 +6,7 @@ import {
   Alert,
   Image,
   Modal,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -358,149 +359,159 @@ if (error) {
 
   /* ---------------- UI ---------------- */
 
-  if (loading) return <ActivityIndicator style={{ marginTop: 80 }} />
+if (loading) return <ActivityIndicator style={{ marginTop: 80 }} />
 
-  return (
-    <View style={styles.screen}>
-      <AppHeader
-  title="Offer"
-  backRoute="/buyer-hub/offers"
-/>
+return (
+  <View style={styles.screen}>
+    <AppHeader
+      title="Offer"
+      backRoute="/buyer-hub/offers"
+    />
 
+    <ScrollView
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+      bounces
+    >
+      <View style={styles.card}>
+        <Image
+          source={{
+            uri:
+              offer.listings.image_urls?.[0] ??
+              "https://via.placeholder.com/300",
+          }}
+          style={styles.image}
+        />
 
-      <View style={styles.content}>
-        <View style={styles.card}>
-          <Image
-            source={{
-              uri:
-                offer.listings.image_urls?.[0] ??
-                "https://via.placeholder.com/300",
-            }}
-            style={styles.image}
+        <Text style={styles.title}>
+          {offer.listings.title}
+        </Text>
+
+        {renderStatusBadge()}
+
+        {/* BUYER RECEIPT */}
+        <View style={styles.receipt}>
+          <Row
+            label="Offer Price"
+            value={`$${itemPrice.toFixed(2)}`}
           />
 
-          <Text style={styles.title}>
-            {offer.listings.title}
+          <Row
+            label="Shipping"
+            value={
+              shippingCost > 0
+                ? `$${shippingCost.toFixed(2)}`
+                : "Free / Included"
+            }
+          />
+
+          <Row
+            label="Buyer Protection & Processing"
+            value={`$${buyerFee.toFixed(2)}`}
+          />
+
+          <View style={styles.divider} />
+
+          <Row
+            label="Total Due at Checkout"
+            value={`$${buyerTotal.toFixed(2)}`}
+            bold
+          />
+        </View>
+
+        {canPay && (
+          <View style={styles.acceptedBox}>
+            <TouchableOpacity
+              style={styles.payBtn}
+              onPress={goToPay}
+            >
+              <Text style={styles.payText}>
+                Pay Now • ${buyerTotal.toFixed(2)}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* 🔥 GAP between receipt card and action buttons */}
+        <View style={{ height: 28 }} />
+
+        {/* 🔥 ACTION BUTTONS NOW SCROLL WITH CONTENT (no absolute positioning) */}
+        {canRespond && (
+          <View style={styles.actionBar}>
+            <TouchableOpacity
+              style={styles.acceptBtn}
+              onPress={acceptOffer}
+            >
+              <Text style={styles.acceptText}>
+                Accept Offer
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.counterBtn}
+              onPress={() => setShowCounter(true)}
+            >
+              <Text style={styles.counterText}>
+                Counter
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.declineBtn}
+              onPress={declineOffer}
+            >
+              <Text style={styles.declineText}>
+                Decline
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* bottom breathing room so buttons aren't tight to screen edge */}
+        <View style={{ height: 40 }} />
+      </View>
+    </ScrollView>
+
+    {/* COUNTER MODAL (UNCHANGED) */}
+    <Modal visible={showCounter} transparent animationType="fade">
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalCard}>
+          <Text style={styles.modalTitle}>
+            Send Counter Offer
           </Text>
 
-          {renderStatusBadge()}
+          <TextInput
+            style={styles.input}
+            placeholder="Enter counter amount"
+            keyboardType="decimal-pad"
+            value={counterAmount}
+            onChangeText={setCounterAmount}
+          />
 
-          {/* BUYER RECEIPT */}
-          <View style={styles.receipt}>
-            <Row
-              label="Offer Price"
-              value={`$${itemPrice.toFixed(2)}`}
-            />
+          <View style={styles.modalActions}>
+            <TouchableOpacity
+              style={styles.modalCancel}
+              onPress={() => setShowCounter(false)}
+            >
+              <Text style={styles.modalCancelText}>
+                Cancel
+              </Text>
+            </TouchableOpacity>
 
-            <Row
-              label="Shipping"
-              value={
-                shippingCost > 0
-                  ? `$${shippingCost.toFixed(2)}`
-                  : "Free / Included"
-              }
-            />
-
-            <Row
-              label="Buyer Protection & Processing"
-              value={`$${buyerFee.toFixed(2)}`}
-            />
-
-            <View style={styles.divider} />
-
-            <Row
-              label="Total Due at Checkout"
-              value={`$${buyerTotal.toFixed(2)}`}
-              bold
-            />
+            <TouchableOpacity
+              style={styles.modalConfirm}
+              onPress={submitCounter}
+            >
+              <Text style={styles.modalConfirmText}>
+                Send
+              </Text>
+            </TouchableOpacity>
           </View>
-
-          {canPay && (
-            <View style={styles.acceptedBox}>
-              <TouchableOpacity
-                style={styles.payBtn}
-                onPress={goToPay}
-              >
-                <Text style={styles.payText}>
-                  Pay Now • ${buyerTotal.toFixed(2)}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          )}
         </View>
       </View>
-
-      {canRespond && (
-        <View style={styles.actionBar}>
-          <TouchableOpacity
-            style={styles.acceptBtn}
-            onPress={acceptOffer}
-          >
-            <Text style={styles.acceptText}>
-              Accept Offer
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.counterBtn}
-            onPress={() => setShowCounter(true)}
-          >
-            <Text style={styles.counterText}>
-              Counter
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.declineBtn}
-            onPress={declineOffer}
-          >
-            <Text style={styles.declineText}>
-              Decline
-            </Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* 🔥 IDENTICAL COUNTER MODAL AS SELLER (THIS FIXES BUTTON) */}
-      <Modal visible={showCounter} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>
-              Send Counter Offer
-            </Text>
-
-            <TextInput
-              style={styles.input}
-              placeholder="Enter counter amount"
-              keyboardType="decimal-pad"
-              value={counterAmount}
-              onChangeText={setCounterAmount}
-            />
-
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={styles.modalCancel}
-                onPress={() => setShowCounter(false)}
-              >
-                <Text style={styles.modalCancelText}>
-                  Cancel
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.modalConfirm}
-                onPress={submitCounter}
-              >
-                <Text style={styles.modalConfirmText}>
-                  Send
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-    </View>
-  )
+    </Modal>
+  </View>
+)
 }
 
 /* ---------------- HELPERS ---------------- */
@@ -670,12 +681,9 @@ const styles = StyleSheet.create({
   /* ---------- ACTION BAR (BOTTOM BUTTON STACK) ---------- */
 
   actionBar: {
-    position: "absolute",
-    bottom: 57,
-    left: 16,
-    right: 16,
-    gap: 10,
-  },
+  gap: 10,
+  marginTop: 8,
+},
 
   acceptBtn: {
     backgroundColor: "#1F7A63",
