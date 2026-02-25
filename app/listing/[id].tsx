@@ -35,6 +35,7 @@ type Listing = {
   allow_offers: boolean
   shipping_type: "free" | "buyer_pays"
   shipping_price: number | null
+  quantity_available: number // 🔥 ADD THIS
 }
 
 export default function ListingDetailScreen() {
@@ -85,19 +86,20 @@ export default function ListingDetailScreen() {
       const { data, error } = await supabase
         .from("listings")
         .select(`
-          id,
-          user_id,
-          title,
-          description,
-          price,
-          brand,
-          condition,
-          category,
-          image_urls,
-          allow_offers,
-          shipping_type,
-          shipping_price
-        `)
+  id,
+  user_id,
+  title,
+  description,
+  price,
+  brand,
+  condition,
+  category,
+  image_urls,
+  allow_offers,
+  shipping_type,
+  shipping_price,
+  quantity_available
+`)
         .eq("id", id)
         .single()
 
@@ -354,13 +356,14 @@ export default function ListingDetailScreen() {
           }
         />
 
-        {/* DETAILS + DESCRIPTION */}
         <ListingDetailsSection
-          condition={listing.condition}
-          category={listing.category}
-          brand={listing.brand}
-          description={listing.description}
-        />
+  condition={listing.condition}
+  category={listing.category}
+  brand={listing.brand}
+  description={listing.description}
+  quantityAvailable={listing.quantity_available}
+  shippingPrice={listing.shipping_price}
+/>
 
         {/* ✅ MOVED: MESSAGE SELLER BUTTON (NOW BELOW DETAILS) */}
         {!isSeller && (

@@ -2,12 +2,12 @@ import { Ionicons } from "@expo/vector-icons"
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { useEffect, useState } from "react"
 import {
-    ActivityIndicator,
-    Alert,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native"
 
 import AppHeader from "@/components/app-header"
@@ -61,12 +61,14 @@ export default function MeloProSuccessScreen() {
 
         const now = new Date().toISOString()
 
+        // 🔥 UPDATED: Added pro_started_at (subscription anchor)
         const { error: updateError } = await supabase
           .from("profiles")
           .update({
             is_pro: true,
-            boosts_remaining: 10,       // 👑 Initial monthly boost allocation
-            last_boost_reset: now,      // 🧠 Anchor for your monthly reset job
+            boosts_remaining: 10,   // 👑 Instant monthly allocation
+            last_boost_reset: now,  // 🧠 Used by monthly cron reset
+            pro_started_at: now,    // ⭐ NEW: lifecycle anchor for subscription logic
           })
           .eq("id", user_id)
 
@@ -75,16 +77,16 @@ export default function MeloProSuccessScreen() {
           throw updateError
         }
 
-        console.log("✅ [MELO PRO] User upgraded to Pro with 10 boosts")
+        console.log("✅ [MELO PRO] User upgraded to Pro with 10 boosts + start date")
 
-        // 🔔 Matches your existing notification insert style EXACTLY
+        // 🔔 Notification (non-blocking)
         console.log("🔔 [MELO PRO] Sending notification...")
 
         const { error: notificationError } = await supabase
           .from("notifications")
           .insert({
             user_id: user_id,
-            type: "order", // Enum-safe (matches your schema)
+            type: "order", // matches your enum safely
             title: "Welcome to Melo Pro 🎉",
             body:
               "Congratulations! You are now a Melo Pro member. Your monthly boosts have been set to 10.",

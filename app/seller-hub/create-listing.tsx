@@ -91,7 +91,6 @@ export default function CreateListingScreen() {
   const [images, setImages] = useState<string[]>([])
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
-
   const [category, setCategory] = useState<string | null>(null)
   const [brand, setBrand] = useState<string | null>(null)
   const [condition, setCondition] = useState<string | null>(null)
@@ -120,7 +119,7 @@ export default function CreateListingScreen() {
   const [checkingPro, setCheckingPro] = useState(true)
   const [isPro, setIsPro] = useState<boolean>(false)
 
-  /* ---------------- CREATE LISTING (DB WIRED) ---------------- */
+  /* ---------------- CREATE LISTING (RPC BOOST SAFE + UI SYNC) ---------------- */
   const handleCreateListing = async () => {
     if (!session?.user) return
     if (submitting) return
@@ -130,9 +129,7 @@ export default function CreateListingScreen() {
 
       const parsedPrice = parseFloat(price)
       const parsedMinOffer = minOffer ? parseFloat(minOffer) : null
-      const parsedShippingPrice = shippingPrice
-        ? parseFloat(shippingPrice)
-        : 0
+      const parsedShippingPrice = shippingPrice ? parseFloat(shippingPrice) : 0
       const parsedQuantity = parseInt(quantity || "1", 10)
 
       if (isNaN(parsedPrice)) {
@@ -140,27 +137,58 @@ export default function CreateListingScreen() {
         return
       }
 
-      const { error } = await supabase.from("listings").insert({
-        user_id: session.user.id,
-        title: title.trim(),
-        description: description.trim() || null,
-        brand: brand,
-        category: category,
-        condition: condition,
-        price: parsedPrice,
-        allow_offers: allowOffers,
-        min_offer: allowOffers ? parsedMinOffer : null,
-        shipping_type: shippingType,
-        shipping_price: parsedShippingPrice,
-        image_urls: images,
-        is_boosted: isPro ? isBoosted : false,
-        quantity: isPro ? parsedQuantity : 1,
-      })
+      // 1️⃣ Create listing FIRST (unboosted by default)
+      const { data, error } = await supabase
+        .from("listings")
+        .insert({
+          user_id: session.user.id,
+          title: title.trim(),
+          description: description.trim() || null,
+          brand: brand,
+          category: category,
+          condition: condition,
+          price: parsedPrice,
+          allow_offers: allowOffers,
+          min_offer: allowOffers ? parsedMinOffer : null,
+          shipping_type: shippingType,
+          shipping_price: parsedShippingPrice,
+          image_urls: images,
+          quantity: isPro ? parsedQuantity : 1,
+        })
+        .select("id")
+        .single()
 
       if (error) throw error
 
+      // 2️⃣ If user toggled boost → call RPC (SOURCE OF TRUTH)
+      if (isPro && isBoosted && data?.id) {
+        const { error: boostError } = await supabase.rpc("boost_listing", {
+          listing_id: data.id,
+          user_id: session.user.id,
+        })
+
+        if (boostError) {
+          console.warn("Boost failed:", boostError.message)
+          Alert.alert(
+            "Listing Created",
+            "Your listing was created but the boost could not be applied."
+          )
+        } else {
+          // 🔥 NEW: Sync UI boost count with DB (CRITICAL FIX)
+          const { data: updatedProfile } = await supabase
+            .from("profiles")
+            .select("boosts_remaining")
+            .eq("id", session.user.id)
+            .single()
+
+          if (updatedProfile) {
+            setBoostsRemaining(updatedProfile.boosts_remaining ?? 0)
+          }
+        }
+      }
+
       Alert.alert("Success", "Your listing has been created!")
-      router.replace("/seller-hub") // or your listings page
+      router.replace("/seller-hub")
     } catch (err) {
       handleAppError(err, {
         context: "create_listing_insert",

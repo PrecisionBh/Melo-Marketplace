@@ -29,6 +29,7 @@ export default function MakeOfferScreen() {
 
   const [listing, setListing] = useState<any>(null)
   const [offer, setOffer] = useState("")
+  const [quantity, setQuantity] = useState(1)
   const [loading, setLoading] = useState(false)
   const [minError, setMinError] = useState<string | null>(null)
 
@@ -47,15 +48,16 @@ export default function MakeOfferScreen() {
         const { data, error } = await supabase
           .from("listings")
           .select(`
-            id,
-            title,
-            price,
-            image_urls,
-            min_offer,
-            user_id,
-            shipping_type,
-            shipping_price
-          `)
+  id,
+  title,
+  price,
+  image_urls,
+  min_offer,
+  user_id,
+  shipping_type,
+  shipping_price,
+  quantity_available
+`)
           .eq("id", listingId)
           .single()
 
@@ -81,254 +83,393 @@ export default function MakeOfferScreen() {
 
   /* ---------------- SHIPPING ---------------- */
 
-  const shippingCost = useMemo(() => {
-    if (!listing) return 0
-    return listing.shipping_type === "buyer_pays"
-      ? Number(listing.shipping_price ?? 0)
-      : 0
-  }, [listing])
+ const shippingCost = useMemo(() => {
+  if (!listing) return 0
+  if (listing.shipping_type !== "buyer_pays") return 0
+  const perItem = Number(listing.shipping_price ?? 0)
+  return Number((perItem * quantity).toFixed(2))
+}, [listing, quantity])
 
   /* ---------------- FEES (UNCHANGED + DISPLAY-ONLY SALES TAX) ---------------- */
   // Buyer fee = 1.5% buyer protection + 2.9% processing + $0.30
-  const buyerFee = useMemo(() => {
-    if (!numericOffer || numericOffer <= 0) return 0
-    return Number((numericOffer * 0.044 + 0.3).toFixed(2))
-  }, [numericOffer])
+ const offerSubtotal = useMemo(() => {
+  if (!numericOffer || numericOffer <= 0) return 0
+  return Number((numericOffer * quantity).toFixed(2))
+}, [numericOffer, quantity])
+
+const buyerFee = useMemo(() => {
+  if (offerSubtotal <= 0) return 0
+  return Number((offerSubtotal * 0.044 + 0.3).toFixed(2))
+}, [offerSubtotal])
 
   // 🔥 DISPLAY ONLY — NOT STORED, NOT USED IN DB
   const salesTax = useMemo(() => {
-    if (!numericOffer || numericOffer <= 0) return 0
-    return Number((numericOffer * 0.075).toFixed(2))
-  }, [numericOffer])
+  if (offerSubtotal <= 0) return 0
+  return Number((offerSubtotal * 0.075).toFixed(2))
+}, [offerSubtotal])
 
-  const totalDue = useMemo(() => {
-    if (!numericOffer || numericOffer <= 0) return 0
-    return Number(
-      (numericOffer + buyerFee + salesTax + shippingCost).toFixed(2)
+const totalDue = useMemo(() => {
+  if (offerSubtotal <= 0) return 0
+  return Number(
+    (offerSubtotal + buyerFee + salesTax + shippingCost).toFixed(2)
+  )
+}, [offerSubtotal, buyerFee, salesTax, shippingCost])
+
+ /* ---------------- VALIDATION ---------------- */
+
+useEffect(() => {
+  if (
+    minError &&
+    typeof listing?.min_offer === "number" &&
+    numericOffer >= listing.min_offer
+  ) {
+    setMinError(null)
+  }
+}, [numericOffer, listing, minError])
+
+/* ---------------- SUBMIT ---------------- */
+
+const submitOffer = async () => {
+  if (submittingRef.current) return
+  if (!session?.user || !listing) return
+
+  // 🚫 BLOCK SELF-OFFERS (CRITICAL MARKETPLACE GUARD)
+  if (listing.user_id === session.user.id) {
+    Alert.alert(
+      "Invalid Action",
+      "You cannot make an offer on your own listing."
     )
-  }, [numericOffer, buyerFee, salesTax, shippingCost])
-
-  /* ---------------- VALIDATION ---------------- */
-
-  useEffect(() => {
-    if (
-      minError &&
-      typeof listing?.min_offer === "number" &&
-      numericOffer >= listing.min_offer
-    ) {
-      setMinError(null)
-    }
-  }, [numericOffer, listing, minError])
-
-  /* ---------------- SUBMIT ---------------- */
-
-  const submitOffer = async () => {
-    if (submittingRef.current) return
-    if (!session?.user || !listing) return
-
-    // 🚫 BLOCK SELF-OFFERS (CRITICAL MARKETPLACE GUARD)
-    if (listing.user_id === session.user.id) {
-      Alert.alert(
-        "Invalid Action",
-        "You cannot make an offer on your own listing."
-      )
-      return
-    }
-
-    if (!numericOffer || numericOffer <= 0) {
-      Alert.alert("Invalid offer", "Enter a valid offer amount.")
-      return
-    }
-
-    if (typeof listing.min_offer === "number" && numericOffer < listing.min_offer) {
-      setMinError(`Minimum offer is $${listing.min_offer.toFixed(2)}`)
-      return
-    }
-
-    try {
-      submittingRef.current = true
-      setLoading(true)
-
-      const { data: newOffer, error } = await supabase
-        .from("offers")
-        .insert({
-          listing_id: listing.id,
-          buyer_id: session.user.id,
-          seller_id: listing.user_id,
-
-          offer_amount: numericOffer,
-          original_offer: numericOffer,
-          current_amount: numericOffer,
-
-          buyer_fee: buyerFee,
-          total_due: totalDue,
-
-          status: "pending",
-          last_action: "buyer",
-          last_actor: "buyer",
-          counter_count: 0,
-
-          expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-        })
-        .select("id")
-        .single()
-
-      if (error) {
-        if (error.code === "23505") {
-          Alert.alert(
-            "Offer already sent",
-            "You already have an active offer on this item."
-          )
-          return
-        }
-        throw error
-      }
-
-      /* ✅ NOTIFY AFTER SUCCESS (non-blocking safe) */
-      try {
-        await notify({
-          userId: listing.user_id,
-          type: "offer",
-          title: "New offer received",
-          body: `You received a new offer on "${listing.title}"`,
-          data: {
-            route: "/seller-hub/offers/[id]",
-            params: { id: newOffer.id },
-          },
-        })
-      } catch (notifyErr) {
-        console.warn("Notify failed:", notifyErr)
-      }
-
-      Alert.alert(
-        "Offer Sent",
-        "The seller has been notified. You’ll be able to respond if they counter."
-      )
-
-      // ✅ Go back to the listing detail route that launched this offer page
-      if (listingId) {
-        router.push({
-          pathname: "/listing/[id]",
-          params: { id: listingId },
-        })
-      } else {
-        router.back()
-      }
-    } catch (err) {
-      console.error("Offer submit error:", err)
-      handleAppError(err, {
-        fallbackMessage: "Failed to submit offer. Please try again.",
-      })
-    } finally {
-      submittingRef.current = false
-      setLoading(false)
-    }
+    return
   }
 
-  if (!listing) return null
+  // 🔥 NEW: Quantity safety (prevents 0 or oversell requests)
+  if (!quantity || quantity <= 0) {
+    Alert.alert("Invalid quantity", "Select a valid quantity.")
+    return
+  }
 
-  /* ---------------- UI ---------------- */
+  if (listing.quantity_available && quantity > listing.quantity_available) {
+    Alert.alert(
+      "Not enough stock",
+      `Only ${listing.quantity_available} available.`
+    )
+    return
+  }
 
-  return (
-    <View style={styles.screen}>
-      <AppHeader
-        title="Make Offer"
-        backLabel="Back"
-        backRoute={
-          listingId
-            ? ({
-                pathname: "/listing/[id]",
-                params: { id: listingId },
-              } as any)
-            : undefined
-        }
-      />
+  if (!numericOffer || numericOffer <= 0) {
+    Alert.alert("Invalid offer", "Enter a valid offer amount.")
+    return
+  }
 
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 20}
-      >
-        <ScrollView contentContainerStyle={styles.content}>
-          {listing.image_urls?.[0] && (
-            <Image source={{ uri: listing.image_urls[0] }} style={styles.image} />
-          )}
+  if (typeof listing.min_offer === "number" && numericOffer < listing.min_offer) {
+    setMinError(`Minimum offer is $${listing.min_offer.toFixed(2)}`)
+    return
+  }
 
-          <View style={styles.card}>
-            <Text style={styles.title}>{listing.title}</Text>
-            <Text style={styles.listedPrice}>
-              Listed at ${Number(listing.price).toFixed(2)}
-            </Text>
-          </View>
+  try {
+    submittingRef.current = true
+    setLoading(true)
 
-          <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Your Offer</Text>
+    const { data: newOffer, error } = await supabase
+      .from("offers")
+      .insert({
+        listing_id: listing.id,
+        buyer_id: session.user.id,
+        seller_id: listing.user_id,
 
-            {minError && <Text style={styles.minError}>{minError}</Text>}
+        // 🔥 UPDATED FOR MULTI-QUANTITY OFFERS
+        quantity: quantity,
+        offer_amount: numericOffer, // per-item offer
+        original_offer: numericOffer,
+        current_amount: numericOffer,
 
-            <TextInput
-              placeholder="Enter your offer"
-              keyboardType="decimal-pad"
-              value={offer}
-              onChangeText={setOffer}
-              style={styles.input}
-            />
+        buyer_fee: buyerFee,
+        total_due: totalDue,
 
-            {numericOffer > 0 && (
-              <View style={styles.summary}>
-                <Row label="Offer amount" value={`$${numericOffer.toFixed(2)}`} />
+        status: "pending",
+        last_action: "buyer",
+        last_actor: "buyer",
+        counter_count: 0,
 
-                {shippingCost > 0 && (
-                  <Row label="Shipping" value={`$${shippingCost.toFixed(2)}`} />
-                )}
+        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      })
+      .select("id")
+      .single()
 
-                <Row
-                  label="Buyer protection & processing"
-                  value={`$${buyerFee.toFixed(2)}`}
-                />
+    if (error) {
+      if (error.code === "23505") {
+        Alert.alert(
+          "Offer already sent",
+          "You already have an active offer on this item."
+        )
+        return
+      }
+      throw error
+    }
 
-                <Row
-                  label="Estimated sales tax (7.5%)"
-                  value={`$${salesTax.toFixed(2)}`}
-                />
+    /* ✅ NOTIFY AFTER SUCCESS (non-blocking safe) */
+    try {
+      await notify({
+        userId: listing.user_id,
+        type: "offer",
+        title: "New offer received",
+        body: `You received a new offer on "${listing.title}" (Qty: ${quantity})`,
+        data: {
+          route: "/seller-hub/offers/[id]",
+          params: { id: newOffer.id },
+        },
+      })
+    } catch (notifyErr) {
+      console.warn("Notify failed:", notifyErr)
+    }
 
-                <View style={styles.divider} />
+    Alert.alert(
+      "Offer Sent",
+      `Your offer for ${quantity} item${quantity > 1 ? "s" : ""} has been sent. The seller has been notified.`
+    )
 
-                <Row
-                  label="Total if accepted"
-                  value={`$${totalDue.toFixed(2)}`}
-                  bold
-                />
-              </View>
-            )}
+    // ✅ Go back to the listing detail route that launched this offer page
+    if (listingId) {
+      router.push({
+        pathname: "/listing/[id]",
+        params: { id: listingId },
+      })
+    } else {
+      router.back()
+    }
+  } catch (err) {
+    console.error("Offer submit error:", err)
+    handleAppError(err, {
+      fallbackMessage: "Failed to submit offer. Please try again.",
+    })
+  } finally {
+    submittingRef.current = false
+    setLoading(false)
+  }
+}
 
+if (!listing) return null
+
+/* ---------------- UI ---------------- */
+
+return (
+  <View style={styles.screen}>
+    <AppHeader
+      title="Make Offer"
+      backLabel="Back"
+      backRoute={
+        listingId
+          ? ({
+              pathname: "/listing/[id]",
+              params: { id: listingId },
+            } as any)
+          : undefined
+      }
+    />
+
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 20}
+    >
+      <ScrollView contentContainerStyle={styles.content}>
+        {listing.image_urls?.[0] && (
+          <Image source={{ uri: listing.image_urls[0] }} style={styles.image} />
+        )}
+
+        <View style={styles.card}>
+          <Text style={styles.title}>{listing.title}</Text>
+          <Text style={styles.listedPrice}>
+            Listed at ${Number(listing.price).toFixed(2)}
+          </Text>
+        </View>
+
+        <View style={styles.card}>
+  <Text style={styles.sectionTitle}>Your Offer</Text>
+
+  {/* 🔥 ONLY show stock + quantity selector if more than 1 available */}
+  {typeof listing?.quantity_available === "number" &&
+    listing.quantity_available > 1 && (
+      <>
+        <Text
+          style={{
+            fontSize: 12,
+            fontWeight: "800",
+            color: "#2E5F4F",
+            marginBottom: 8,
+          }}
+        >
+          {listing.quantity_available} available
+        </Text>
+
+        <View style={{ marginBottom: 12 }}>
+          <Text
+            style={{
+              fontSize: 13,
+              fontWeight: "800",
+              color: "#0F1E17",
+              marginBottom: 6,
+            }}
+          >
+            Quantity
+          </Text>
+
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
             <TouchableOpacity
-              style={[styles.primaryBtn, loading && { opacity: 0.7 }]}
-              onPress={submitOffer}
-              disabled={loading}
+              onPress={() => setQuantity((q) => Math.max(1, q - 1))}
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: 10,
+                backgroundColor: "#E8F5EE",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+              activeOpacity={0.7}
             >
-              <Text style={styles.primaryText}>
-                {loading ? "Sending..." : "Submit Offer"}
+              <Text
+                style={{ fontSize: 20, fontWeight: "900", color: "#0F1E17" }}
+              >
+                -
               </Text>
             </TouchableOpacity>
 
-            <Text style={styles.reassurance}>
-              Submitting an offer does not guarantee acceptance.
+            <Text
+              style={{
+                marginHorizontal: 18,
+                fontSize: 18,
+                fontWeight: "900",
+                color: "#0F1E17",
+                minWidth: 30,
+                textAlign: "center",
+              }}
+            >
+              {quantity}
             </Text>
 
-            <Text style={styles.reassurance}>Offers expire after 24 hours.</Text>
-
-            <View style={styles.protectionPill}>
-              <Ionicons name="shield-checkmark" size={14} color="#1F7A63" />
-              <Text style={styles.protectionText}>Buyer Protection Included</Text>
-            </View>
+            <TouchableOpacity
+              onPress={() =>
+                setQuantity((q) =>
+                  Math.min(listing.quantity_available ?? 1, q + 1)
+                )
+              }
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: 10,
+                backgroundColor: "#E8F5EE",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+              activeOpacity={0.7}
+            >
+              <Text
+                style={{ fontSize: 20, fontWeight: "900", color: "#0F1E17" }}
+              >
+                +
+              </Text>
+            </TouchableOpacity>
           </View>
+        </View>
+      </>
+    )}
 
-          <View style={{ height: 120 }} />
-        </ScrollView>
-      </KeyboardAvoidingView>
+  {minError && <Text style={styles.minError}>{minError}</Text>}
+
+  <TextInput
+    placeholder="Enter your offer (per item)"
+    keyboardType="decimal-pad"
+    value={offer}
+    onChangeText={setOffer}
+    style={styles.input}
+  />
+
+  {numericOffer > 0 && (
+    <View style={styles.summary}>
+      <Row
+        label={
+          typeof listing?.quantity_available === "number" &&
+          listing.quantity_available > 1
+            ? `Offer (${quantity} × $${numericOffer.toFixed(2)})`
+            : `Offer amount`
+        }
+        value={
+          typeof listing?.quantity_available === "number" &&
+          listing.quantity_available > 1
+            ? `$${(numericOffer * quantity).toFixed(2)}`
+            : `$${numericOffer.toFixed(2)}`
+        }
+      />
+
+      {shippingCost > 0 && (
+        <Row
+          label={
+            typeof listing?.quantity_available === "number" &&
+            listing.quantity_available > 1
+              ? `Shipping (${quantity} items)`
+              : "Shipping"
+          }
+          value={`$${shippingCost.toFixed(2)}`}
+        />
+      )}
+
+      <Row
+        label="Buyer protection & processing"
+        value={`$${buyerFee.toFixed(2)}`}
+      />
+
+      <Row
+        label="Estimated sales tax (7.5%)"
+        value={`$${salesTax.toFixed(2)}`}
+      />
+
+      <View style={styles.divider} />
+
+      <Row
+        label="Total if accepted"
+        value={`$${totalDue.toFixed(2)}`}
+        bold
+      />
     </View>
-  )
+  )}
+
+  <TouchableOpacity
+    style={[styles.primaryBtn, loading && { opacity: 0.7 }]}
+    onPress={submitOffer}
+    disabled={loading || listing?.quantity_available === 0}
+  >
+    <Text style={styles.primaryText}>
+      {loading
+        ? "Sending..."
+        : listing?.quantity_available === 0
+        ? "Out of Stock"
+        : "Submit Offer"}
+    </Text>
+  </TouchableOpacity>
+
+  <Text style={styles.reassurance}>
+    Submitting an offer does not guarantee acceptance.
+  </Text>
+
+  <Text style={styles.reassurance}>Offers expire after 24 hours.</Text>
+
+  <View style={styles.protectionPill}>
+    <Ionicons name="shield-checkmark" size={14} color="#1F7A63" />
+    <Text style={styles.protectionText}>Buyer Protection Included</Text>
+  </View>
+</View>
+
+<View style={{ height: 120 }} />
+</ScrollView>
+</KeyboardAvoidingView>
+</View>
+)
 }
 
 /* ---------------- HELPERS ---------------- */

@@ -6,6 +6,7 @@ import {
   Alert,
   Image,
   Modal,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -28,18 +29,19 @@ type Offer = {
   seller_id: string
   buyer_id: string
   current_amount: number
+  quantity: number // 🔥 ADD THIS
   counter_count: number
   last_actor: "buyer" | "seller"
   status: OfferStatus
   created_at: string
   listings: {
-  title: string
-  image_urls: string[] | null
-  shipping_type: "seller_pays" | "buyer_pays"
-  shipping_price: number | null
-  is_sold?: boolean // 🔥 ADD THIS
-}
-
+    id: string
+    title: string
+    image_urls: string[] | null
+    shipping_type: "seller_pays" | "buyer_pays"
+    shipping_price: number | null
+    is_sold?: boolean
+  }
 }
 
 /* ---------------- SCREEN ---------------- */
@@ -72,22 +74,24 @@ export default function SellerOfferDetailScreen() {
     const { data, error } = await supabase
       .from("offers")
       .select(`
-        id,
-        seller_id,
-        buyer_id,
-        current_amount,
-        counter_count,
-        last_actor,
-        status,
-        created_at,
-        listings (
   id,
-  title,
-  image_urls,
-  shipping_type,
-  shipping_price,
-  is_sold
-)
+  seller_id,
+  buyer_id,
+  current_amount,
+  quantity, 
+  counter_count,
+  last_actor,
+  status,
+  created_at,
+  listings (
+    id,
+    title,
+    image_urls,
+    shipping_type,
+    shipping_price,
+    is_sold
+  )
+
 
       `)
       .eq("id", id)
@@ -129,7 +133,8 @@ if (!offer) return null
 
   /* ---------------- CALCULATIONS (SELLER CLEAN VIEW) ---------------- */
 
-  const itemPrice = offer.current_amount
+  const quantity = offer.quantity ?? 1
+const itemPrice = offer.current_amount * quantity
 
   // Only show shipping if buyer pays (actual seller revenue)
   const shippingCost =
@@ -262,7 +267,6 @@ const acceptOffer = async () => {
       .from("listings")
       .update({
         is_sold: true,
-        sold_via_offer_id: offer.id,
         updated_at: new Date().toISOString(),
       })
       .eq("id", listingId)
@@ -405,12 +409,14 @@ const submitCounter = async () => {
   return (
     <View style={styles.screen}>
       <AppHeader
-  title="Offer"
-  backRoute="/seller-hub/offers"
-/>
+        title="Offer"
+        backRoute="/seller-hub/offers"
+      />
 
-
-      <View style={styles.content}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.card}>
           <Image
             source={{
@@ -425,12 +431,26 @@ const submitCounter = async () => {
             {offer.listings.title}
           </Text>
 
+          <Text style={{ fontWeight: "700", color: "#6B8F7D", marginBottom: 6 }}>
+            Quantity: {quantity} • ${offer.current_amount.toFixed(2)} each
+          </Text>
+
           {renderStatusBadge()}
 
-          {/* CLEAN 4-LINE SELLER RECEIPT */}
+          {/* CLEAN SELLER RECEIPT */}
           <View style={styles.receipt}>
             <Row
-              label="Offer Price"
+              label="Unit Price"
+              value={`$${offer.current_amount.toFixed(2)}`}
+            />
+
+            <Row
+              label="Quantity"
+              value={`x${quantity}`}
+            />
+
+            <Row
+              label="Offer Price (Total)"
               value={`$${itemPrice.toFixed(2)}`}
             />
 
@@ -457,40 +477,44 @@ const submitCounter = async () => {
             />
           </View>
         </View>
-      </View>
 
-      {canRespond && (
-        <View style={styles.actionBar}>
-          <TouchableOpacity
-            style={styles.acceptBtn}
-            onPress={acceptOffer}
-          >
-            <Text style={styles.acceptText}>
-              Accept Offer
-            </Text>
-          </TouchableOpacity>
+        {/* 🔥 ACTION BAR NOW SCROLLS WITH CONTENT */}
+        {canRespond && (
+          <View style={styles.actionBar}>
+            <TouchableOpacity
+              style={styles.acceptBtn}
+              onPress={acceptOffer}
+            >
+              <Text style={styles.acceptText}>
+                Accept Offer
+              </Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.counterBtn}
-            onPress={() => setShowCounter(true)}
-          >
-            <Text style={styles.counterText}>
-              Counter
-            </Text>
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.counterBtn}
+              onPress={() => setShowCounter(true)}
+            >
+              <Text style={styles.counterText}>
+                Counter
+              </Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.declineBtn}
-            onPress={declineOffer}
-          >
-            <Text style={styles.declineText}>
-              Decline
-            </Text>
-          </TouchableOpacity>
-        </View>
-      )}
+            <TouchableOpacity
+              style={styles.declineBtn}
+              onPress={declineOffer}
+            >
+              <Text style={styles.declineText}>
+                Decline
+              </Text>
+            </TouchableOpacity>
 
-      {/* COUNTER MODAL (fixes your broken counter button) */}
+            {/* Bottom breathing room */}
+            <View style={{ height: 40 }} />
+          </View>
+        )}
+      </ScrollView>
+
+      {/* COUNTER MODAL */}
       <Modal visible={showCounter} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
@@ -527,6 +551,7 @@ const submitCounter = async () => {
     </View>
   )
 }
+
 /* ---------------- HELPERS ---------------- */
 
 function Row({
@@ -681,12 +706,9 @@ const styles = StyleSheet.create({
   /* ---------- ACTION BAR (BOTTOM BUTTON STACK) ---------- */
 
   actionBar: {
-    position: "absolute",
-    bottom: 48,
-    left: 16,
-    right: 16,
-    gap: 10,
-  },
+  marginTop: 16,
+  gap: 10,
+},
 
   acceptBtn: {
     backgroundColor: "#1F7A63",

@@ -16,7 +16,7 @@ import { useAuth } from "../context/AuthContext"
 import { handleAppError } from "../lib/errors/appError"
 import { supabase } from "../lib/supabase"
 
-/* ---------------- TYPES ---------------- */
+/* ---------------- TYPES (MINIMAL CHANGE = FEWER ERRORS) ---------------- */
 
 type CheckoutItem = {
   id: string
@@ -26,18 +26,7 @@ type CheckoutItem = {
   shipping_type: "free" | "buyer_pays"
   shipping_price: number
   seller_id: string
-}
-
-type OfferWithListing = {
-  id: string
-  current_amount: number
-  seller_id: string
-  listing: {
-    title: string
-    image_urls: string[] | null
-    shipping_type: "seller_pays" | "buyer_pays"
-    shipping_price: number | null
-  } | null
+  quantity_available?: number | null
 }
 
 /* ---------------- SCREEN ---------------- */
@@ -52,6 +41,9 @@ export default function CheckoutScreen() {
 
   const [item, setItem] = useState<CheckoutItem | null>(null)
   const [loading, setLoading] = useState(true)
+
+  // 🔥 SAFE quantity state (does NOT depend on router params)
+  const [quantity, setQuantity] = useState(1)
 
   /* ---------------- BACK ROUTE (SAME LOGIC AS MAKE OFFER) ---------------- */
 
@@ -83,44 +75,44 @@ export default function CheckoutScreen() {
     try {
       setLoading(true)
 
-      if (!offerId) {
-        throw new Error("Missing offerId")
-      }
+      if (!offerId) throw new Error("Missing offerId")
 
+      // NOTE: keep this loosely typed to avoid TS cascade in strict mode
       const { data, error } = await supabase
         .from("offers")
         .select(
           `
-        id,
-        current_amount,
-        seller_id,
-        listing:listings!offers_listing_id_fkey (
-          title,
-          image_urls,
-          shipping_type,
-          shipping_price
-        )
-      `
+          id,
+          current_amount,
+          seller_id,
+          listing:listings (
+            title,
+            image_urls,
+            shipping_type,
+            shipping_price,
+            quantity_available
+          )
+        `
         )
         .eq("id", offerId)
-        .single<OfferWithListing>()
+        .single()
 
       if (error) throw error
-      if (!data || !data.listing) {
-        throw new Error("Offer or listing not found")
-      }
+      if (!data || !(data as any).listing) throw new Error("Offer or listing not found")
+
+      const offerData: any = data
+      const listing: any = offerData.listing
 
       setItem({
-        id: data.id,
-        title: data.listing.title,
-        price: Number(data.current_amount),
-        image_url: data.listing.image_urls?.[0] ?? null,
-        shipping_type:
-          data.listing.shipping_type === "seller_pays"
-            ? "free"
-            : "buyer_pays",
-        shipping_price: Number(data.listing.shipping_price ?? 0),
-        seller_id: data.seller_id,
+        id: String(offerData.id),
+        title: String(listing.title ?? ""),
+        price: Number(offerData.current_amount ?? 0), // per-item
+        image_url: listing.image_urls?.[0] ?? null,
+        shipping_type: listing.shipping_type === "seller_pays" ? "free" : "buyer_pays",
+        shipping_price: Number(listing.shipping_price ?? 0),
+        seller_id: String(offerData.seller_id),
+        quantity_available:
+          typeof listing.quantity_available === "number" ? listing.quantity_available : 1,
       })
     } catch (err) {
       handleAppError(err, {
@@ -136,32 +128,31 @@ export default function CheckoutScreen() {
     try {
       setLoading(true)
 
-      if (!listingId) {
-        throw new Error("Missing listingId")
-      }
+      if (!listingId) throw new Error("Missing listingId")
 
       const { data, error } = await supabase
         .from("listings")
-        .select("id,title,price,image_urls,shipping_type,shipping_price,user_id")
+        .select(
+          "id,title,price,image_urls,shipping_type,shipping_price,user_id,quantity_available"
+        )
         .eq("id", listingId)
         .single()
 
       if (error) throw error
-      if (!data) {
-        throw new Error("Listing not found")
-      }
+      if (!data) throw new Error("Listing not found")
+
+      const listing: any = data
 
       setItem({
-        id: data.id,
-        title: data.title,
-        price: Number(data.price),
-        image_url: data.image_urls?.[0] ?? null,
-        shipping_type:
-          data.shipping_type === "seller_pays"
-            ? "free"
-            : "buyer_pays",
-        shipping_price: Number(data.shipping_price ?? 0),
-        seller_id: data.user_id,
+        id: String(listing.id),
+        title: String(listing.title ?? ""),
+        price: Number(listing.price ?? 0),
+        image_url: listing.image_urls?.[0] ?? null,
+        shipping_type: listing.shipping_type === "seller_pays" ? "free" : "buyer_pays",
+        shipping_price: Number(listing.shipping_price ?? 0),
+        seller_id: String(listing.user_id),
+        quantity_available:
+          typeof listing.quantity_available === "number" ? listing.quantity_available : 1,
       })
     } catch (err) {
       handleAppError(err, {
@@ -187,21 +178,18 @@ export default function CheckoutScreen() {
     )
   }
 
-  /* ---------------- CORRECT MATH (UPDATED WITH 7.5% TAX) ---------------- */
+  /* ---------------- MULTI-QUANTITY SAFE MATH ---------------- */
 
-  const shipping = item.shipping_type === "free" ? 0 : item.shipping_price
+  const effectiveQuantity = Math.max(1, quantity)
 
-  // Seller escrow base (item + shipping)
-  const escrow = item.price + shipping
+  const shippingPerItem = item.shipping_type === "free" ? 0 : Number(item.shipping_price ?? 0)
+  const shipping = shippingPerItem * effectiveQuantity
 
-  // Buyer fee (still ONLY based on escrow, not tax)
+  const itemsTotal = item.price * effectiveQuantity
+  const escrow = itemsTotal + shipping
+
   const buyerFee = +(escrow * 0.03 + 0.3).toFixed(2)
-
-  // Florida sales tax (7.5%) on item + shipping ONLY
-  const taxRate = 0.075
-  const tax = +(escrow * taxRate).toFixed(2)
-
-  // Final total buyer pays
+  const tax = +(escrow * 0.075).toFixed(2)
   const total = +(escrow + buyerFee + tax).toFixed(2)
 
   const totalCents = Math.round(total * 100)
@@ -212,31 +200,106 @@ export default function CheckoutScreen() {
     <View style={styles.screen}>
       <AppHeader title="Checkout" backRoute={backRoute} />
 
-      <ScrollView
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-      >
-        {item.image_url && (
-          <Image source={{ uri: item.image_url }} style={styles.image} />
-        )}
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {item.image_url && <Image source={{ uri: item.image_url }} style={styles.image} />}
 
         <View style={styles.card}>
           <Text style={styles.title}>{item.title}</Text>
-          <Text style={styles.price}>${item.price.toFixed(2)}</Text>
+          <Text style={styles.price}>${item.price.toFixed(2)} each</Text>
+
+          {/* 🔥 ONLY show quantity if > 1 (same as Make Offer) */}
+          {typeof item.quantity_available === "number" && item.quantity_available > 1 && (
+            <>
+              <Text
+                style={{
+                  fontSize: 12,
+                  fontWeight: "800",
+                  color: "#2E5F4F",
+                  marginTop: 6,
+                }}
+              >
+                {item.quantity_available} available
+              </Text>
+
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  marginTop: 10,
+                }}
+              >
+                <TouchableOpacity
+                  onPress={() => setQuantity((q) => Math.max(1, q - 1))}
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 10,
+                    backgroundColor: "#E8F5EE",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={{ fontSize: 20, fontWeight: "900", color: "#0F1E17" }}>-</Text>
+                </TouchableOpacity>
+
+                <Text
+                  style={{
+                    marginHorizontal: 18,
+                    fontSize: 18,
+                    fontWeight: "900",
+                    color: "#0F1E17",
+                  }}
+                >
+                  {effectiveQuantity}
+                </Text>
+
+                <TouchableOpacity
+                  onPress={() =>
+                    setQuantity((q) => Math.min(item.quantity_available ?? 1, q + 1))
+                  }
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 10,
+                    backgroundColor: "#E8F5EE",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={{ fontSize: 20, fontWeight: "900", color: "#0F1E17" }}>+</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
         </View>
 
         <View style={styles.summary}>
-          <Row label="Item price" value={`$${item.price.toFixed(2)}`} />
           <Row
-            label="Shipping"
+            label={
+              effectiveQuantity > 1
+                ? `Items (${effectiveQuantity} × $${item.price.toFixed(2)})`
+                : "Item price"
+            }
+            value={`$${itemsTotal.toFixed(2)}`}
+          />
+
+          <Row
+            label={effectiveQuantity > 1 ? `Shipping (${effectiveQuantity} items)` : "Shipping"}
             value={shipping === 0 ? "Free" : `$${shipping.toFixed(2)}`}
           />
+
           <Row
             label="Buyer protection & processing"
             value={`$${buyerFee.toFixed(2)}`}
           />
+
           <Row label="Sales tax (7.5%)" value={`$${tax.toFixed(2)}`} />
+
           <View style={styles.divider} />
+
           <Row label="Total" value={`$${total.toFixed(2)}`} bold />
         </View>
 
@@ -248,14 +311,13 @@ export default function CheckoutScreen() {
               params: {
                 listingId,
                 offerId,
+                quantity: String(effectiveQuantity), // ✅ pass quantity forward
                 totalCents: String(totalCents),
               },
             })
           }
         >
-          <Text style={styles.primaryText}>
-            Proceed to Checkout • ${total.toFixed(2)}
-          </Text>
+          <Text style={styles.primaryText}>Proceed to Checkout • ${total.toFixed(2)}</Text>
         </TouchableOpacity>
 
         <Text style={styles.reassurance}>Secure checkout powered by Stripe</Text>
@@ -290,22 +352,15 @@ function Row({
   )
 }
 
-/* ---------------- STYLES ---------------- */
+/* ---------------- STYLES (UNCHANGED) ---------------- */
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#EAF4EF" },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
 
-  content: {
-    padding: 20,
-  },
+  content: { padding: 20 },
 
-  image: {
-    width: "100%",
-    height: 220,
-    resizeMode: "contain",
-    marginBottom: 12,
-  },
+  image: { width: "100%", height: 220, resizeMode: "contain", marginBottom: 12 },
 
   card: {
     backgroundColor: "#fff",
@@ -314,18 +369,9 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
 
-  title: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: "#0F1E17",
-  },
+  title: { fontSize: 16, fontWeight: "800", color: "#0F1E17" },
 
-  price: {
-    marginTop: 6,
-    fontSize: 18,
-    fontWeight: "900",
-    color: "#2E5F4F",
-  },
+  price: { marginTop: 6, fontSize: 18, fontWeight: "900", color: "#2E5F4F" },
 
   summary: {
     backgroundColor: "#fff",
@@ -358,11 +404,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
-  primaryText: {
-    color: "#fff",
-    fontWeight: "900",
-    fontSize: 14,
-  },
+  primaryText: { color: "#fff", fontWeight: "900", fontSize: 14 },
 
   reassurance: {
     fontSize: 12,
@@ -384,9 +426,5 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
 
-  protectionText: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: "#1F7A63",
-  },
+  protectionText: { fontSize: 12, fontWeight: "800", color: "#1F7A63" },
 })

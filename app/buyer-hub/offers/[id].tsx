@@ -34,6 +34,7 @@ type Offer = {
   buyer_id: string
   seller_id: string
   current_amount: number
+  quantity: number // 🔥 ADDED (matches DB schema)
   counter_count: number
   last_actor: "buyer" | "seller"
   status: OfferStatus
@@ -79,6 +80,7 @@ export default function BuyerOfferDetailScreen() {
         buyer_id,
         seller_id,
         current_amount,
+        quantity,
         counter_count,
         last_actor,
         status,
@@ -94,20 +96,19 @@ export default function BuyerOfferDetailScreen() {
       .single<Offer>()
 
     if (error) {
-  handleAppError(error, {
-    fallbackMessage: "Failed to load offer details.",
-  })
-  setOffer(null)
-  setLoading(false)
-  return
-}
+      handleAppError(error, {
+        fallbackMessage: "Failed to load offer details.",
+      })
+      setOffer(null)
+      setLoading(false)
+      return
+    }
 
-if (!data) {
-  setOffer(null)
-  setLoading(false)
-  return
-}
-
+    if (!data) {
+      setOffer(null)
+      setLoading(false)
+      return
+    }
 
     // 🔒 Buyer ownership check
     if (data.buyer_id !== session!.user!.id) {
@@ -145,7 +146,8 @@ if (!data) {
 
   /* ---------------- CALCULATIONS (BUYER CLEAN VIEW) ---------------- */
 
-  const itemPrice = offer.current_amount
+  const quantity = offer.quantity ?? 1 // 🔥 NEW (mirrors seller page)
+  const itemPrice = offer.current_amount * quantity // 🔥 FIXED: total item cost
 
   const shippingCost =
     offer.listings.shipping_type === "buyer_pays"
@@ -234,7 +236,7 @@ if (!data) {
         status: "accepted",
         last_actor: "buyer",
         last_action: "accepted",
-        accepted_price: offer.current_amount,
+        accepted_price: offer.current_amount, // unit price snapshot (correct for your orders schema)
         accepted_title: offer.listings.title,
         accepted_image_url: offer.listings.image_urls?.[0] ?? null,
         accepted_shipping_type: offer.listings.shipping_type,
@@ -249,12 +251,11 @@ if (!data) {
     setSaving(false)
 
     if (error) {
-  handleAppError(error, {
-    fallbackMessage: "Failed to accept offer. Please try again.",
-  })
-  return
-}
-
+      handleAppError(error, {
+        fallbackMessage: "Failed to accept offer. Please try again.",
+      })
+      return
+    }
 
     await notify({
       userId: offer.seller_id,
@@ -275,22 +276,22 @@ if (!data) {
     setSaving(true)
 
     const { error } = await supabase
-  .from("offers")
-  .update({
-    status: "declined",
-    last_actor: "buyer",
-    last_action: "declined",
-    updated_at: new Date().toISOString(),
-  })
-  .eq("id", offer.id)
+      .from("offers")
+      .update({
+        status: "declined",
+        last_actor: "buyer",
+        last_action: "declined",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", offer.id)
 
-if (error) {
-  handleAppError(error, {
-    fallbackMessage: "Failed to decline offer. Please try again.",
-  })
-  setSaving(false)
-  return
-}
+    if (error) {
+      handleAppError(error, {
+        fallbackMessage: "Failed to decline offer. Please try again.",
+      })
+      setSaving(false)
+      return
+    }
 
     await notify({
       userId: offer.seller_id,
@@ -333,12 +334,11 @@ if (error) {
     setSaving(false)
 
     if (error) {
-  handleAppError(error, {
-    fallbackMessage: "Failed to send counter offer. Please try again.",
-  })
-  return
-}
-
+      handleAppError(error, {
+        fallbackMessage: "Failed to send counter offer. Please try again.",
+      })
+      return
+    }
 
     setShowCounter(false)
     setCounterAmount("")
@@ -387,12 +387,22 @@ return (
           {offer.listings.title}
         </Text>
 
+        {/* 🔥 NEW: Quantity display (matches seller page) */}
+        <Text style={{ fontWeight: "700", color: "#6B8F7D", marginBottom: 6 }}>
+          Quantity: {offer.quantity ?? 1}
+        </Text>
+
         {renderStatusBadge()}
 
         {/* BUYER RECEIPT */}
         <View style={styles.receipt}>
           <Row
-            label="Offer Price"
+            label="Quantity"
+            value={`x${offer.quantity ?? 1}`} // 🔥 NEW (mirrors seller receipt)
+          />
+
+          <Row
+            label="Offer Price (Total)"
             value={`$${itemPrice.toFixed(2)}`}
           />
 
@@ -432,10 +442,10 @@ return (
           </View>
         )}
 
-        {/* 🔥 GAP between receipt card and action buttons */}
+        {/* 🔥 CRITICAL GAP: keeps buttons off the receipt */}
         <View style={{ height: 28 }} />
 
-        {/* 🔥 ACTION BUTTONS NOW SCROLL WITH CONTENT (no absolute positioning) */}
+        {/* 🔥 ACTION BUTTONS SCROLL WITH CONTENT (NO ABSOLUTE) */}
         {canRespond && (
           <View style={styles.actionBar}>
             <TouchableOpacity
@@ -467,8 +477,8 @@ return (
           </View>
         )}
 
-        {/* bottom breathing room so buttons aren't tight to screen edge */}
-        <View style={{ height: 40 }} />
+        {/* 🔥 BOTTOM PADDING: ensures buttons never hug bottom nav */}
+        <View style={{ height: 48 }} />
       </View>
     </ScrollView>
 
@@ -560,7 +570,7 @@ const styles = StyleSheet.create({
 
   content: {
     padding: 16,
-    paddingBottom: 200, // keeps action bar above bottom nav
+    paddingBottom: 140, // 🔥 UPDATED: safe scroll space so buttons + bottom nav never overlap
   },
 
   card: {
@@ -621,7 +631,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 7, // slightly more spacing = premium feel
+    paddingVertical: 7, // premium spacing
   },
 
   rowLabel: {
@@ -678,12 +688,12 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
 
-  /* ---------- ACTION BAR (BOTTOM BUTTON STACK) ---------- */
+  /* ---------- ACTION BAR (SCROLLING WITH CONTENT) ---------- */
 
   actionBar: {
-  gap: 10,
-  marginTop: 8,
-},
+    gap: 10,
+    marginTop: 8, // 🔥 keeps visual gap after receipt spacer
+  },
 
   acceptBtn: {
     backgroundColor: "#1F7A63",
