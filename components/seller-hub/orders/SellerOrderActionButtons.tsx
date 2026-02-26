@@ -13,6 +13,9 @@ type Props = {
   showRespondToDispute?: boolean
   showSeeDispute?: boolean
 
+  /* 🆕 NEW: SELLER CANCEL CONTROL */
+  showCancelOrder?: boolean
+
   /* DATA */
   trackingUrl: string | null
   returnTrackingUrl?: string | null
@@ -24,6 +27,9 @@ type Props = {
   onDispute: () => void // existing (return dispute)
   onRespondToDispute?: () => void // 🆕 buyer opened dispute
   onSeeDispute?: () => void // 🆕 view dispute thread
+
+  /* 🆕 NEW: SELLER CANCEL ACTION (REFUND TRIGGERED ON ID PAGE) */
+  onCancelOrder?: () => void
 }
 
 export default function SellerOrderActionButtons({
@@ -34,6 +40,7 @@ export default function SellerOrderActionButtons({
   showDispute,
   showRespondToDispute = false,
   showSeeDispute = false,
+  showCancelOrder = false,
   trackingUrl,
   returnTrackingUrl,
   processing,
@@ -42,6 +49,7 @@ export default function SellerOrderActionButtons({
   onDispute,
   onRespondToDispute,
   onSeeDispute,
+  onCancelOrder,
 }: Props) {
   const handleTrackShipment = () => {
     if (!trackingUrl) return
@@ -158,9 +166,26 @@ export default function SellerOrderActionButtons({
           style={styles.seeDisputeBtn}
           onPress={onSeeDispute}
         >
-          <Ionicons name="eye-outline" size={18} color="#fff" />
+          <Ionicons name="eye-outline" size={18} color="#000" />
           <Text style={styles.seeDisputeText}>
             See Dispute
+          </Text>
+        </TouchableOpacity>
+      )}
+
+      {/* 🛑 NEW: SELLER CANCEL ORDER (PRE-SHIP / DAMAGED / SOLD LOCALLY) */}
+      {showCancelOrder && onCancelOrder && (
+        <TouchableOpacity
+          style={[
+            styles.cancelOrderBtn,
+            processing && { opacity: 0.6 }
+          ]}
+          onPress={onCancelOrder}
+          disabled={processing}
+        >
+          <Ionicons name="close-circle-outline" size={18} color="#fff" />
+          <Text style={styles.cancelOrderText}>
+            {processing ? "Cancelling…" : "Cancel Order & Refund Buyer"}
           </Text>
         </TouchableOpacity>
       )}
@@ -229,8 +254,6 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     fontSize: 14,
   },
-
-  /* 🧠 RETURN DISPUTE (existing flow) */
   returnDisputeBtn: {
     marginTop: 14,
     backgroundColor: "#e58383",
@@ -246,8 +269,6 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     fontSize: 14,
   },
-
-  /* 🔥 NEW BLACK & WHITE DISPUTE BUTTONS (NON-RETURN) */
   respondDisputeBtn: {
     marginTop: 14,
     backgroundColor: "#000000",
@@ -279,6 +300,23 @@ const styles = StyleSheet.create({
     color: "#000000",
     fontWeight: "900",
     fontSize: 14,
+  },
+
+  /* 🛑 NEW CANCEL BUTTON (DESTRUCTIVE - MELO SAFE UX) */
+  cancelOrderBtn: {
+    marginTop: 18,
+    backgroundColor: "#D64545",
+    height: 50,
+    borderRadius: 25,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  cancelOrderText: {
+    color: "#FFFFFF",
+    fontWeight: "900",
+    fontSize: 15,
   },
 
   infoBox: {

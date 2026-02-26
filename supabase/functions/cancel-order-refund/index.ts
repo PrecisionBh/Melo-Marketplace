@@ -62,7 +62,7 @@ serve(async (req) => {
       return json(400, { error: "Missing order_id" })
     }
 
-    /* ---------------- AUTH BUYER ---------------- */
+    /* ---------------- AUTH USER (BUYER OR SELLER) ---------------- */
     const authHeader = req.headers.get("Authorization")
     if (!authHeader) {
       return json(401, { error: "Missing auth header" })
@@ -91,9 +91,15 @@ serve(async (req) => {
       return json(404, { error: "Order not found" })
     }
 
-    if (order.buyer_id !== user.id) {
-      return json(403, { error: "Not your order" })
+    /* ---------------- DETERMINE WHO CANCELLED ---------------- */
+    const isBuyerCancelling = order.buyer_id === user.id
+    const isSellerCancelling = order.seller_id === user.id
+
+    if (!isBuyerCancelling && !isSellerCancelling) {
+      return json(403, { error: "Not authorized to cancel this order" })
     }
+
+    const cancelledBy = isSellerCancelling ? "seller" : "buyer"
 
     /* ---------------- BUSINESS RULES ---------------- */
     if (order.status === "cancelled") {
@@ -124,21 +130,20 @@ serve(async (req) => {
       })
     }
 
-    /* ---------------- STRIPE REFUND (ITEM + SHIPPING ONLY) ---------------- */
     /* ---------------- STRIPE REFUND (ITEM + SHIPPING + TAX, EXCLUDES BUYER FEE) ---------------- */
-console.log("💸 Creating refund (item + shipping + tax, excluding buyer fee):", {
-  order_id: order.id,
-  item_price_cents: order.item_price_cents,
-  shipping_amount_cents: order.shipping_amount_cents,
-  tax_cents: order.tax_cents,
-  buyer_fee_cents: order.buyer_fee_cents,
-})
+    console.log("💸 Creating refund (item + shipping + tax, excluding buyer fee):", {
+      order_id: order.id,
+      item_price_cents: order.item_price_cents,
+      shipping_amount_cents: order.shipping_amount_cents,
+      tax_cents: order.tax_cents,
+      buyer_fee_cents: order.buyer_fee_cents,
+      cancelledBy,
+    })
 
-const refundableAmount =
-  (order.item_price_cents ?? 0) +
-  (order.shipping_amount_cents ?? 0) +
-  (order.tax_cents ?? 0) // ✅ Refund tax to buyer
-
+    const refundableAmount =
+      (order.item_price_cents ?? 0) +
+      (order.shipping_amount_cents ?? 0) +
+      (order.tax_cents ?? 0)
 
     if (refundableAmount <= 0) {
       return json(400, { error: "Invalid refundable amount" })
@@ -146,7 +151,7 @@ const refundableAmount =
 
     const refund = await stripe.refunds.create({
       payment_intent: order.stripe_payment_intent,
-      amount: refundableAmount, // 🚨 prevents refunding buyer protection fee
+      amount: refundableAmount,
     })
 
     if (!refund || refund.status !== "succeeded") {
@@ -154,7 +159,7 @@ const refundableAmount =
       return json(500, { error: "Refund failed" })
     }
 
-    const now = new Date().toISOString() // ✅ REQUIRED FIX (was missing)
+    const now = new Date().toISOString()
 
     /* ---------------- REVERSE SELLER PENDING WALLET (THIS ORDER ONLY) ---------------- */
     if (order.wallet_credited && typeof order.seller_net_cents === "number") {
@@ -163,7 +168,6 @@ const refundableAmount =
         amount: order.seller_net_cents,
       })
 
-      // ✅ Use same RPC as webhook, just negative
       const { error: walletErr } = await supabase.rpc(
         "increment_wallet_pending",
         {
@@ -182,9 +186,9 @@ const refundableAmount =
     const { error: updateErr } = await supabase
       .from("orders")
       .update({
-        status: "cancelled",
+        status: cancelledBy === "seller" ? "cancelled_by_seller" : "cancelled",
         escrow_status: "refunded",
-        wallet_credited: false, // ✅ prevents double-subtract later
+        wallet_credited: false,
         updated_at: now,
       })
       .eq("id", order.id)
@@ -194,15 +198,25 @@ const refundableAmount =
       return json(500, { error: "Failed to update order" })
     }
 
-       /* ---------------- NOTIFY SELLER ---------------- */
+    /* ---------------- NOTIFICATIONS (DYNAMIC ACTOR) ---------------- */
     try {
+      /* -------- NOTIFY SELLER -------- */
       if (order.seller_id) {
+        const sellerTitle =
+          cancelledBy === "seller"
+            ? "Order Cancelled (You Cancelled) ❌"
+            : "Order Cancelled by Buyer ❌"
+
+        const sellerBody =
+          cancelledBy === "seller"
+            ? "You cancelled this order. The buyer has been refunded and escrow is closed."
+            : "The buyer has cancelled this order. You can relist your item from your My Listings page."
+
         await supabase.from("notifications").insert({
           user_id: order.seller_id,
           type: "order",
-          title: "Order Cancelled ❌",
-          body:
-            "The buyer has cancelled this order. Please relist your item from your My Listings page.",
+          title: sellerTitle,
+          body: sellerBody,
           data: {
             route: "/seller-hub/orders/[id]",
             params: { id: order.id },
@@ -221,9 +235,8 @@ const refundableAmount =
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               to: profile.expo_push_token,
-              title: "Order Cancelled ❌",
-              body:
-                "The buyer cancelled this order. You can relist it from My Listings.",
+              title: sellerTitle,
+              body: sellerBody,
               data: {
                 type: "order",
                 route: "/seller-hub/orders/[id]",
@@ -234,14 +247,23 @@ const refundableAmount =
         }
       }
 
-      /* ---------------- NOTIFY BUYER ---------------- */
+      /* -------- NOTIFY BUYER -------- */
       if (order.buyer_id) {
+        const buyerTitle =
+          cancelledBy === "seller"
+            ? "Order Cancelled by Seller ❌"
+            : "Order Cancelled 💸"
+
+        const buyerBody =
+          cancelledBy === "seller"
+            ? "The seller has cancelled this order. Your refund is now being processed."
+            : "You cancelled this order. Your refund is now being processed."
+
         await supabase.from("notifications").insert({
           user_id: order.buyer_id,
           type: "order",
-          title: "Order Cancelled 💸",
-          body:
-            "Your order has been cancelled and your refund is processing. Funds may take a few business days to appear.",
+          title: buyerTitle,
+          body: buyerBody,
           data: {
             route: "/buyer-hub/orders/[id]",
             params: { id: order.id },
@@ -263,9 +285,8 @@ const refundableAmount =
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               to: buyerProfile.expo_push_token,
-              title: "Refund Processing 💸",
-              body:
-                "Your order was cancelled and your refund is now being processed.",
+              title: buyerTitle,
+              body: buyerBody,
               data: {
                 type: "order",
                 route: "/buyer-hub/orders/[id]",
@@ -284,10 +305,10 @@ const refundableAmount =
     return json(200, {
       success: true,
       refundId: refund.id,
+      cancelledBy,
     })
   } catch (err) {
     console.error("🔥 cancel-order-refund error:", err)
     return json(500, { error: "Internal error" })
   }
 })
-

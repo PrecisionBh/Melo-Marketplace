@@ -300,7 +300,7 @@ setActiveDispute(disputeData ?? null)
     }
   }
 
-  if (loading) return <ActivityIndicator style={{ marginTop: 80 }} />
+   if (loading) return <ActivityIndicator style={{ marginTop: 80 }} />
   if (!order) return null
 
   /* ---------------- STATE ---------------- */
@@ -318,6 +318,26 @@ const isRefunded = order.escrow_status === "refunded"
 
 const isInReturnFlow = isReturnStarted || isReturnProcessing
 const hasReturnTracking = !!order.return_tracking_url
+
+/* 🆕 NON-RETURN DISPUTE LOGIC (BUYER ISSUE FLOW) */
+const hasActiveDispute = !!activeDispute && !activeDispute?.resolved_at
+const buyerOpenedDispute = activeDispute?.opened_by === "buyer"
+const sellerAlreadyResponded = !!activeDispute?.seller_responded_at
+
+/* 🛑 CANCEL STATES */
+const isCancelled =
+  order.status === "cancelled_by_seller" ||
+  order.status === "cancelled"
+
+/* 🧠 SAFE CANCEL RULES (MARKETPLACE GRADE) */
+const canSellerCancel =
+  (isPaid || order.status === "processing") &&
+  !isShipped &&
+  !isCompleted &&
+  !isRefunded &&
+  !isReturnStarted &&
+  !isReturnProcessing &&
+  !hasActiveDispute
 
 // show buyer address only for paid / shipped (not return flow, not completed, not refunded)
 const showShippingAddress =
@@ -344,11 +364,6 @@ const showShippingAddress =
   const showDispute =
     isReturnStarted && !!order.return_tracking_number && !order.return_received
 
-    /* 🆕 NON-RETURN DISPUTE LOGIC (BUYER ISSUE FLOW) */
-const hasActiveDispute = !!activeDispute && !activeDispute?.resolved_at
-const buyerOpenedDispute = activeDispute?.opened_by === "buyer"
-const sellerAlreadyResponded = !!activeDispute?.seller_responded_at
-
 // 🔥 Show respond button ONLY if buyer opened dispute and seller hasn't responded
 const showRespondToDispute =
   hasActiveDispute &&
@@ -359,6 +374,53 @@ const showRespondToDispute =
 const showSeeDispute =
   hasActiveDispute &&
   (sellerAlreadyResponded || activeDispute?.opened_by === "seller")
+
+  const handleCancelOrder = async () => {
+  if (!order) return
+
+  Alert.alert(
+    "Cancel Order",
+    "Are you sure you want to cancel this order? The buyer will be refunded and escrow will be closed.",
+    [
+      { text: "No", style: "cancel" },
+      {
+        text: "Yes, Cancel & Refund",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            setSaving(true)
+
+            // 🧾 CALL YOUR STRIPE + REFUND EDGE FUNCTION
+            const { error } = await supabase.functions.invoke(
+              "cancel-order-refund",
+              {
+                body: { order_id: order.id },
+              }
+            )
+
+            if (error) throw error
+
+            await loadOrder()
+
+            Alert.alert(
+              "Order Cancelled",
+              "The order has been cancelled and the buyer has been refunded."
+            )
+
+            router.replace("/seller-hub/orders/orders-to-ship")
+          } catch (err) {
+            handleAppError(err, {
+              fallbackMessage:
+                "Failed to cancel and refund the order. Please try again.",
+            })
+          } finally {
+            setSaving(false)
+          }
+        },
+      },
+    ]
+  )
+}
 
   /* ---------------- RENDER ---------------- */
 
@@ -420,7 +482,7 @@ return (
       )}
 
       {/* BUYER SHIPPING ADDRESS (SELLER VIEW) */}
-      {showShippingAddress && !isRefunded && (
+      {showShippingAddress && !isRefunded && !isCancelled && (
         <BuyerShippingAddressCard
           address={{
             shipping_name: order.shipping_name,
@@ -436,7 +498,7 @@ return (
 
       <View style={styles.content}>
         {/* 🚚 SHIPPING STATE (ONLY WHEN ORDER NEEDS TO BE SHIPPED) */}
-        {showAddTracking && !isRefunded && (
+        {showAddTracking && !isRefunded && !isCancelled && (
           <>
             {/* TRACKING INPUT */}
             <View style={styles.trackingCard}>
@@ -484,7 +546,7 @@ return (
               </View>
             </View>
 
-            {/* 🔥 SINGLE ACTION BAR (SHIP STATE ONLY) */}
+            {/* 🔥 FIXED: Added ALL required props for SellerOrderActionButtons */}
             <SellerOrderActionButtons
               showAddTracking={true}
               showTrackShipment={false}
@@ -493,10 +555,12 @@ return (
               showDispute={false}
               showRespondToDispute={false}
               showSeeDispute={false}
+              showCancelOrder={canSellerCancel}
               trackingUrl={null}
               returnTrackingUrl={null}
               processing={saving}
               onAddTracking={submitTracking}
+              onCancelOrder={handleCancelOrder}
               onOpenReturnDetails={() => {}}
               onDispute={() => {}}
               onRespondToDispute={() => {}}
@@ -505,8 +569,8 @@ return (
           </>
         )}
 
-        {/* RECEIPT (HIDDEN DURING RETURN FLOW & REFUNDS) */}
-        {!isInReturnFlow && !isRefunded && (
+        {/* RECEIPT (HIDDEN DURING RETURN FLOW, REFUNDS, OR CANCELLED) */}
+        {!isInReturnFlow && !isRefunded && !isCancelled && (
           <SellerReceiptCard
             itemPrice={itemPrice}
             shipping={shipping}
@@ -515,7 +579,7 @@ return (
         )}
 
         {/* 🧠 MASTER ACTION BAR (ALL NON-SHIPPING STATES INCLUDING RETURNS + DISPUTES) */}
-        {!isRefunded && !showAddTracking && (
+        {!isRefunded && !isCancelled && !showAddTracking && (
           <SellerOrderActionButtons
             showAddTracking={false}
             showTrackShipment={showTrackShipment && !showReturnSection}
@@ -524,28 +588,25 @@ return (
             showDispute={showDispute}
             showRespondToDispute={showRespondToDispute}
             showSeeDispute={showSeeDispute}
+            showCancelOrder={canSellerCancel}
             trackingUrl={order.tracking_url ?? null}
             returnTrackingUrl={order.return_tracking_url ?? null}
             processing={saving}
             onAddTracking={submitTracking}
-
-            /* 🔥 CRITICAL FIX: THIS NOW OPENS YOUR CONFIRM RETURN MODAL */
+            onCancelOrder={handleCancelOrder}
             onOpenReturnDetails={handleCompleteReturn}
-
             onDispute={() =>
               router.push({
                 pathname: "/seller-hub/orders/disputes/dispute-issue",
                 params: { id: order.id },
               })
             }
-
             onRespondToDispute={() =>
               router.push({
                 pathname: "/seller-hub/orders/[id]/dispute-issue",
                 params: { id: order.id },
               })
             }
-
             onSeeDispute={() =>
               router.push(`/seller-hub/orders/disputes/${order.id}`)
             }
