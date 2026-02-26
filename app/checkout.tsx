@@ -1,6 +1,5 @@
-import { Ionicons } from "@expo/vector-icons"
 import { useLocalSearchParams, useRouter } from "expo-router"
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
   ActivityIndicator,
   Image,
@@ -16,7 +15,7 @@ import { useAuth } from "../context/AuthContext"
 import { handleAppError } from "../lib/errors/appError"
 import { supabase } from "../lib/supabase"
 
-/* ---------------- TYPES (MINIMAL CHANGE = FEWER ERRORS) ---------------- */
+/* ---------------- TYPES ---------------- */
 
 type CheckoutItem = {
   id: string
@@ -27,6 +26,7 @@ type CheckoutItem = {
   shipping_price: number
   seller_id: string
   quantity_available?: number | null
+  offer_quantity?: number | null // 🔥 NEW (for offers)
 }
 
 /* ---------------- SCREEN ---------------- */
@@ -39,13 +39,15 @@ export default function CheckoutScreen() {
   }>()
   const { session } = useAuth()
 
+  const isOfferCheckout = !!offerId // 🔥 CORE FLAG
+
   const [item, setItem] = useState<CheckoutItem | null>(null)
   const [loading, setLoading] = useState(true)
 
-  // 🔥 SAFE quantity state (does NOT depend on router params)
+  // Default quantity (used ONLY for listing flow)
   const [quantity, setQuantity] = useState(1)
 
-  /* ---------------- BACK ROUTE (SAME LOGIC AS MAKE OFFER) ---------------- */
+  /* ---------------- BACK ROUTE ---------------- */
 
   const backRoute =
     offerId
@@ -58,10 +60,6 @@ export default function CheckoutScreen() {
 
   useEffect(() => {
     if (!session?.user) {
-      handleAppError(new Error("Missing session"), {
-        context: "checkout_no_session",
-        silent: true,
-      })
       setLoading(false)
       return
     }
@@ -75,15 +73,13 @@ export default function CheckoutScreen() {
     try {
       setLoading(true)
 
-      if (!offerId) throw new Error("Missing offerId")
-
-      // NOTE: keep this loosely typed to avoid TS cascade in strict mode
       const { data, error } = await supabase
         .from("offers")
         .select(
           `
           id,
           current_amount,
+          quantity,
           seller_id,
           listing:listings (
             title,
@@ -98,26 +94,34 @@ export default function CheckoutScreen() {
         .single()
 
       if (error) throw error
-      if (!data || !(data as any).listing) throw new Error("Offer or listing not found")
+      if (!data || !(data as any).listing) {
+        throw new Error("Offer or listing not found")
+      }
 
       const offerData: any = data
       const listing: any = offerData.listing
 
+      const lockedQty = Number(offerData.quantity ?? 1)
+
       setItem({
         id: String(offerData.id),
         title: String(listing.title ?? ""),
-        price: Number(offerData.current_amount ?? 0), // per-item
+        price: Number(offerData.current_amount ?? 0), // 🔥 OFFER PRICE (per item)
         image_url: listing.image_urls?.[0] ?? null,
-        shipping_type: listing.shipping_type === "seller_pays" ? "free" : "buyer_pays",
+        shipping_type:
+          listing.shipping_type === "seller_pays" ? "free" : "buyer_pays",
         shipping_price: Number(listing.shipping_price ?? 0),
         seller_id: String(offerData.seller_id),
-        quantity_available:
-          typeof listing.quantity_available === "number" ? listing.quantity_available : 1,
+        quantity_available: lockedQty, // 🔥 override availability
+        offer_quantity: lockedQty,
       })
+
+      // 🔥 LOCK QUANTITY TO OFFER (CRITICAL)
+      setQuantity(lockedQty)
     } catch (err) {
       handleAppError(err, {
         context: "checkout_load_offer",
-        fallbackMessage: "Failed to load checkout data.",
+        fallbackMessage: "Failed to load offer checkout data.",
       })
     } finally {
       setLoading(false)
@@ -127,8 +131,6 @@ export default function CheckoutScreen() {
   const loadFromListing = async () => {
     try {
       setLoading(true)
-
-      if (!listingId) throw new Error("Missing listingId")
 
       const { data, error } = await supabase
         .from("listings")
@@ -148,11 +150,14 @@ export default function CheckoutScreen() {
         title: String(listing.title ?? ""),
         price: Number(listing.price ?? 0),
         image_url: listing.image_urls?.[0] ?? null,
-        shipping_type: listing.shipping_type === "seller_pays" ? "free" : "buyer_pays",
+        shipping_type:
+          listing.shipping_type === "seller_pays" ? "free" : "buyer_pays",
         shipping_price: Number(listing.shipping_price ?? 0),
         seller_id: String(listing.user_id),
         quantity_available:
-          typeof listing.quantity_available === "number" ? listing.quantity_available : 1,
+          typeof listing.quantity_available === "number"
+            ? listing.quantity_available
+            : 1,
       })
     } catch (err) {
       handleAppError(err, {
@@ -164,7 +169,14 @@ export default function CheckoutScreen() {
     }
   }
 
-  /* ---------------- RENDER ---------------- */
+  /* ---------------- DERIVED VALUES ---------------- */
+
+  const effectiveQuantity = useMemo(() => {
+    if (isOfferCheckout && item?.offer_quantity) {
+      return item.offer_quantity // 🔥 HARD LOCK FOR OFFERS
+    }
+    return Math.max(1, quantity)
+  }, [isOfferCheckout, item, quantity])
 
   if (loading) {
     return <ActivityIndicator style={{ marginTop: 60 }} />
@@ -178,13 +190,12 @@ export default function CheckoutScreen() {
     )
   }
 
-  /* ---------------- MULTI-QUANTITY SAFE MATH ---------------- */
+  /* ---------------- PRICING ---------------- */
 
-  const effectiveQuantity = Math.max(1, quantity)
+  const shippingPerItem =
+    item.shipping_type === "free" ? 0 : Number(item.shipping_price ?? 0)
 
-  const shippingPerItem = item.shipping_type === "free" ? 0 : Number(item.shipping_price ?? 0)
   const shipping = shippingPerItem * effectiveQuantity
-
   const itemsTotal = item.price * effectiveQuantity
   const escrow = itemsTotal + shipping
 
@@ -200,80 +211,72 @@ export default function CheckoutScreen() {
     <View style={styles.screen}>
       <AppHeader title="Checkout" backRoute={backRoute} />
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        {item.image_url && <Image source={{ uri: item.image_url }} style={styles.image} />}
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
+        {item.image_url && (
+          <Image source={{ uri: item.image_url }} style={styles.image} />
+        )}
 
         <View style={styles.card}>
           <Text style={styles.title}>{item.title}</Text>
-          <Text style={styles.price}>${item.price.toFixed(2)} each</Text>
 
-          {/* 🔥 ONLY show quantity if > 1 (same as Make Offer) */}
-          {typeof item.quantity_available === "number" && item.quantity_available > 1 && (
+          {/* 🔥 OFFER MODE LABEL */}
+          {isOfferCheckout ? (
             <>
-              <Text
-                style={{
-                  fontSize: 12,
-                  fontWeight: "800",
-                  color: "#2E5F4F",
-                  marginTop: 6,
-                }}
-              >
-                {item.quantity_available} available
+              <Text style={styles.price}>
+                ${item.price.toFixed(2)} per item (Accepted Offer)
               </Text>
+              <Text style={styles.lockedNote}>
+                Quantity locked by accepted offer: {effectiveQuantity}
+              </Text>
+            </>
+          ) : (
+            <Text style={styles.price}>
+              ${item.price.toFixed(2)} each
+            </Text>
+          )}
 
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  marginTop: 10,
-                }}
-              >
-                <TouchableOpacity
-                  onPress={() => setQuantity((q) => Math.max(1, q - 1))}
-                  style={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: 10,
-                    backgroundColor: "#E8F5EE",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <Text style={{ fontSize: 20, fontWeight: "900", color: "#0F1E17" }}>-</Text>
-                </TouchableOpacity>
-
-                <Text
-                  style={{
-                    marginHorizontal: 18,
-                    fontSize: 18,
-                    fontWeight: "900",
-                    color: "#0F1E17",
-                  }}
-                >
-                  {effectiveQuantity}
+          {/* 🔥 QUANTITY SELECTOR (LISTING ONLY) */}
+          {!isOfferCheckout &&
+            typeof item.quantity_available === "number" &&
+            item.quantity_available > 1 && (
+              <>
+                <Text style={styles.availableText}>
+                  {item.quantity_available} available
                 </Text>
 
-                <TouchableOpacity
-                  onPress={() =>
-                    setQuantity((q) => Math.min(item.quantity_available ?? 1, q + 1))
-                  }
-                  style={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: 10,
-                    backgroundColor: "#E8F5EE",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <Text style={{ fontSize: 20, fontWeight: "900", color: "#0F1E17" }}>+</Text>
-                </TouchableOpacity>
-              </View>
-            </>
-          )}
+                <View style={styles.qtyRow}>
+                  <TouchableOpacity
+                    onPress={() =>
+                      setQuantity((q) => Math.max(1, q - 1))
+                    }
+                    style={styles.qtyBtn}
+                  >
+                    <Text style={styles.qtyBtnText}>-</Text>
+                  </TouchableOpacity>
+
+                  <Text style={styles.qtyValue}>
+                    {effectiveQuantity}
+                  </Text>
+
+                  <TouchableOpacity
+                    onPress={() =>
+                      setQuantity((q) =>
+                        Math.min(
+                          item.quantity_available ?? 1,
+                          q + 1
+                        )
+                      )
+                    }
+                    style={styles.qtyBtn}
+                  >
+                    <Text style={styles.qtyBtnText}>+</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
         </View>
 
         <View style={styles.summary}>
@@ -287,7 +290,7 @@ export default function CheckoutScreen() {
           />
 
           <Row
-            label={effectiveQuantity > 1 ? `Shipping (${effectiveQuantity} items)` : "Shipping"}
+            label="Shipping"
             value={shipping === 0 ? "Free" : `$${shipping.toFixed(2)}`}
           />
 
@@ -296,7 +299,7 @@ export default function CheckoutScreen() {
             value={`$${buyerFee.toFixed(2)}`}
           />
 
-          <Row label="Sales tax (7.5%)" value={`$${tax.toFixed(2)}`} />
+          <Row label="Tax and Compliance" value={`$${tax.toFixed(2)}`} />
 
           <View style={styles.divider} />
 
@@ -309,23 +312,18 @@ export default function CheckoutScreen() {
             router.push({
               pathname: "/checkout/final",
               params: {
-                listingId,
-                offerId,
-                quantity: String(effectiveQuantity), // ✅ pass quantity forward
+                listingId: isOfferCheckout ? undefined : listingId,
+                offerId: offerId,
+                quantity: String(effectiveQuantity), // 🔥 CRITICAL PASS
                 totalCents: String(totalCents),
               },
             })
           }
         >
-          <Text style={styles.primaryText}>Proceed to Checkout • ${total.toFixed(2)}</Text>
+          <Text style={styles.primaryText}>
+            Proceed to Checkout • ${total.toFixed(2)}
+          </Text>
         </TouchableOpacity>
-
-        <Text style={styles.reassurance}>Secure checkout powered by Stripe</Text>
-
-        <View style={styles.protectionPill}>
-          <Ionicons name="shield-checkmark" size={14} color="#1F7A63" />
-          <Text style={styles.protectionText}>Buyer Protection Included</Text>
-        </View>
 
         <View style={{ height: 120 }} />
       </ScrollView>
@@ -424,6 +422,51 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 999,
+  },
+
+    /* ---------- OFFER LOCK + QUANTITY UI ---------- */
+
+  lockedNote: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#2E5F4F",
+    marginTop: 6,
+  },
+
+  availableText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#2E5F4F",
+    marginTop: 6,
+  },
+
+  qtyRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 10,
+  },
+
+  qtyBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: "#E8F5EE",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  qtyBtnText: {
+    fontSize: 20,
+    fontWeight: "900",
+    color: "#0F1E17",
+  },
+
+  qtyValue: {
+    marginHorizontal: 18,
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#0F1E17",
   },
 
   protectionText: { fontSize: 12, fontWeight: "800", color: "#1F7A63" },

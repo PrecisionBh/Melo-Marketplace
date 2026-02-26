@@ -19,10 +19,7 @@ import BuyerReceiptCard from "@/components/buyer-hub/orders/BuyerReceiptCard"
 import ConfirmDeliveryModal from "@/components/buyer-hub/orders/ConfirmDeliveryModal"
 import OrderActionButtons from "@/components/buyer-hub/orders/OrderActionButtons"
 import ReturnWarning from "@/components/buyer-hub/orders/ReturnWarning"
-import ShippersAddress from "@/components/buyer-hub/orders/ShippersAddress"; // 🔥 ADDED
-
-
-/* ---------------- TYPES ---------------- */
+import ShippersAddress from "@/components/buyer-hub/orders/ShippersAddress"
 
 /* ---------------- TYPES ---------------- */
 
@@ -85,11 +82,9 @@ export default function BuyerOrderDetailScreen() {
   const [processing, setProcessing] = useState(false)
   const [cancelReturnVisible, setCancelReturnVisible] = useState(false)
 
-
-  // ADDED: review state (does not change existing logic)
   const [hasReviewed, setHasReviewed] = useState(false)
 
-   useEffect(() => {
+  useEffect(() => {
     if (id) loadOrder()
   }, [id])
 
@@ -97,7 +92,6 @@ export default function BuyerOrderDetailScreen() {
     try {
       if (!id) return
 
-      // 🔐 FIX: get fresh user directly (prevents session hydration race)
       const {
         data: { user },
         error: userError,
@@ -140,25 +134,18 @@ export default function BuyerOrderDetailScreen() {
         return
       }
 
-      // 🔒 FIX: hydration-safe ownership check (was using session!.user.id)
       if (!data || data.buyer_id !== user.id) {
-        console.log("[ORDER ACCESS BLOCKED]", {
-          orderBuyer: data?.buyer_id,
-          currentUser: user.id,
-          orderId: id,
-        })
         router.replace("/buyer-hub/orders")
         return
       }
 
       setOrder(data)
 
-      // 🔥 NEW: fetch seller return shipping address (MANDATORY FOR RETURN FLOW)
       const { data: addressData } = await supabase
-  .from("seller_return_addresses")
-  .select("*")
-  .eq("user_id", data.seller_id)
-  .maybeSingle()
+        .from("seller_return_addresses")
+        .select("*")
+        .eq("user_id", data.seller_id)
+        .maybeSingle()
 
       setReturnAddress(addressData ?? null)
 
@@ -187,13 +174,13 @@ export default function BuyerOrderDetailScreen() {
     })
 
     if (error) {
-  handleAppError(error, {
-    fallbackMessage:
-      "Funds are not available yet. Please try again shortly.",
-  })
-  setProcessing(false)
-  return
-}
+      handleAppError(error, {
+        fallbackMessage:
+          "Funds are not available yet. Please try again shortly.",
+      })
+      setProcessing(false)
+      return
+    }
 
     setConfirmVisible(false)
     setProcessing(false)
@@ -253,20 +240,18 @@ export default function BuyerOrderDetailScreen() {
               await loadOrder()
               setProcessing(false)
             } catch (err) {
-  handleAppError(err, {
-    fallbackMessage:
-      "Something went wrong cancelling your order.",
-  })
-  setProcessing(false)
-}
-
+              handleAppError(err, {
+                fallbackMessage:
+                  "Something went wrong cancelling your order.",
+              })
+              setProcessing(false)
+            }
           },
         },
       ]
     )
   }
 
-  // NEW: Cancel Return (only for return_processing)
   const cancelReturn = async () => {
     if (!order || processing) return
 
@@ -323,152 +308,157 @@ export default function BuyerOrderDetailScreen() {
     return <ActivityIndicator style={{ marginTop: 60 }} />
   }
 
- const isCompleted = order.status === "completed"
-const isReturnStarted = order.status === "return_started"
-const isReturnProcessing = order.status === "return_processing"
-const isShipped = order.status === "shipped"
-const isPaid = order.status === "paid"
+  const isDisputed =
+    !!order.is_disputed ||
+    order.status === "disputed" ||
+    order.status === "issue_open"
 
-// 🔥 TRUE RETURN FLOW (handles BOTH statuses)
-const isInReturnFlow = isReturnStarted || isReturnProcessing
+  const isCompleted = order.status === "completed"
+  const isReturnStarted = order.status === "return_started"
+  const isReturnProcessing = order.status === "return_processing"
+  const isShipped = order.status === "shipped"
+  const isPaid = order.status === "paid"
 
-// 🚨 CRITICAL FIX: use RETURN tracking, NOT seller shipment tracking
-const hasReturnTracking =
-  isInReturnFlow && !!order.return_tracking_url
+  const isInReturnFlow = isReturnStarted || isReturnProcessing
 
-// Seller shipment tracking (separate system)
-const hasShipmentTracking = !!order.tracking_url
+  const hasReturnTracking =
+    isInReturnFlow && !!order.return_tracking_url
 
-// 🚚 Track Package logic (ONLY for seller shipment, never during return flow)
-const canTrack =
-  hasShipmentTracking && isShipped && !isInReturnFlow && !isCompleted
+  const hasShipmentTracking = !!order.tracking_url
 
-// Confirm delivery ONLY if shipped and NOT in return flow
-const canConfirmDelivery = isShipped && !isInReturnFlow && !isCompleted
+  const canTrack =
+    !isDisputed &&
+    hasShipmentTracking &&
+    isShipped &&
+    !isInReturnFlow &&
+    !isCompleted
 
-// Cancel only before seller ships and not in return flow
-const canCancel = isPaid && !isShipped && !isInReturnFlow && !isCompleted
+  const canConfirmDelivery =
+    !isDisputed &&
+    isShipped &&
+    !isInReturnFlow &&
+    !isCompleted
 
-// Buyer disputes allowed ONLY before return starts
-// (Once return_started, seller handles return OR disputes it)
-const canDispute =
-  !isCompleted &&
-  !isInReturnFlow &&
-  !order.is_disputed &&
-  isShipped
+  const canCancel =
+    !isDisputed &&
+    isPaid &&
+    !isShipped &&
+    !isInReturnFlow &&
+    !isCompleted
 
-// 🚨 72-HOUR ANTI-SCAM WARNING
-// MUST show immediately when status = return_started AND no return tracking uploaded
-const showReturnWarning =
-  isReturnStarted &&
-  !order.return_tracking_url &&
-  !order.is_disputed
+  const canDispute =
+    !isCompleted &&
+    !isInReturnFlow &&
+    !order.is_disputed &&
+    isShipped
 
-// 🔁 IMPORTANT: correct tracking URL passed to component
-// - During return flow → use return tracking
-// - Otherwise → use seller shipment tracking
-const activeTrackingUrl = isInReturnFlow
-  ? order.return_tracking_url
-  : order.tracking_url
+  const showReturnWarning =
+    isReturnStarted &&
+    !order.return_tracking_url &&
+    !order.is_disputed
 
-const itemPrice = (order.item_price_cents ?? 0) / 100
-const shipping = (order.shipping_amount_cents ?? 0) / 100
-const tax = (order.tax_cents ?? 0) / 100
-const buyerFee = (order.buyer_fee_cents ?? 0) / 100
-const totalPaid = (order.amount_cents ?? 0) / 100
+  const activeTrackingUrl = isInReturnFlow
+    ? order.return_tracking_url
+    : order.tracking_url
 
-return (
-  <View style={styles.screen}>
-    <AppHeader title="Order" backRoute="/buyer-hub/orders" />
+  const itemPrice = (order.item_price_cents ?? 0) / 100
+  const shipping = (order.shipping_amount_cents ?? 0) / 100
+  const tax = (order.tax_cents ?? 0) / 100
+  const buyerFee = (order.buyer_fee_cents ?? 0) / 100
+  const totalPaid = (order.amount_cents ?? 0) / 100
 
-    <ScrollView contentContainerStyle={{ paddingBottom: 140 }}>
-      <BuyerOrderHeaderCard
-        imageUrl={order.image_url}
-        orderId={order.public_order_number ?? order.id}
-        title={order.listing_snapshot?.title}
-        status={order.status}
-        isDisputed={order.is_disputed}
-        hasReturnTracking={hasReturnTracking}
-      />
+  return (
+    <View style={styles.screen}>
+      <AppHeader title="Order" backRoute="/buyer-hub/orders" />
 
-       {/* 🚨 WARNING: Shows immediately when return_started */}
-    <ReturnWarning visible={showReturnWarning} />
+      <ScrollView contentContainerStyle={{ paddingBottom: 140 }}>
+        <BuyerOrderHeaderCard
+          imageUrl={order.image_url}
+          orderId={order.public_order_number ?? order.id}
+          title={order.listing_snapshot?.title}
+          status={order.status}
+          isDisputed={order.is_disputed}
+          hasReturnTracking={hasReturnTracking}
+        />
 
-      {/* 🔥 NEW: Show shipper address ONLY during return flow */}
-      {isInReturnFlow && returnAddress && (
-  <ShippersAddress address={returnAddress} />
-)}
+        <ReturnWarning visible={showReturnWarning} />
 
-      <View style={styles.content}>
-        {/* 🔥 REMOVE RECEIPT during return_started & return_processing */}
-        {!isInReturnFlow && (
-          <BuyerReceiptCard
-            itemPrice={itemPrice}
-            shipping={shipping}
-            tax={tax}
-            buyerFee={buyerFee}
-            totalPaid={totalPaid}
-            status={order.status} // 🔥 REQUIRED for refunded badge
-          />
+        {isInReturnFlow && returnAddress && (
+          <ShippersAddress address={returnAddress} />
         )}
 
-        {/* 🔥 LOGIC STAYS IN SCREEN (COMPONENT = UI ONLY) */}
-        <OrderActionButtons
-          showTrack={canTrack}
-          showConfirmDelivery={!isCompleted && canConfirmDelivery}
-          showStartReturn={
-            !isCompleted &&
-            isShipped &&
-            !isInReturnFlow &&
-            !order.is_disputed
-          }
-          showReturnSection={
-            !isCompleted &&
-            isInReturnFlow &&
-            !order.is_disputed
-          }
-          hasReturnTracking={hasReturnTracking}
-          showLeaveReview={
-            isCompleted && !order.is_disputed && !hasReviewed
-          }
-          showCancelOrder={!isCompleted && canCancel}
-          showDispute={canDispute}
-          trackingUrl={activeTrackingUrl}
-          processing={processing}
-          onConfirmDelivery={() => setConfirmVisible(true)}
-          onStartReturn={() =>
-            router.push({
-              pathname: "/buyer-hub/returns",
-              params: { orderId: order.id },
-            })
-          }
-          onAddReturnTracking={() =>
-            router.push({
-              pathname: "/buyer-hub/returns/tracking",
-              params: { orderId: order.id },
-            })
-          }
-          onCancelReturn={cancelReturn}
-          onCancelOrder={cancelOrder}
-          onDispute={() =>
-            router.push(`/buyer-hub/orders/${order.id}/dispute-issue`)
-          }
-          onLeaveReview={() =>
-            router.push(`/reviews?orderId=${order.id}`)
-          }
-        />
-      </View>
-    </ScrollView>
+        <View style={styles.content}>
+          {!isInReturnFlow && (
+            <BuyerReceiptCard
+              itemPrice={itemPrice}
+              shipping={shipping}
+              tax={tax}
+              buyerFee={buyerFee}
+              totalPaid={totalPaid}
+              status={order.status}
+            />
+          )}
 
-    <ConfirmDeliveryModal
-      visible={confirmVisible}
-      processing={processing}
-      onConfirm={confirmDelivery}
-      onClose={() => setConfirmVisible(false)}
-    />
-  </View>
-)
+          {/* 🔥 ONLY ADDITION: DISPUTE LOCK + SEE DISPUTE BUTTON */}
+          <OrderActionButtons
+            showTrack={canTrack}
+            showConfirmDelivery={!isCompleted && canConfirmDelivery}
+            showStartReturn={
+              !isCompleted &&
+              isShipped &&
+              !isInReturnFlow &&
+              !order.is_disputed
+            }
+            showReturnSection={
+              !isCompleted &&
+              isInReturnFlow &&
+              !order.is_disputed
+            }
+            hasReturnTracking={hasReturnTracking}
+            showLeaveReview={
+              isCompleted && !order.is_disputed && !hasReviewed
+            }
+            showCancelOrder={!isCompleted && canCancel}
+            showDispute={canDispute}
+            showSeeDispute={isDisputed} // 🔥 NEW
+            trackingUrl={activeTrackingUrl}
+            processing={processing}
+            onConfirmDelivery={() => setConfirmVisible(true)}
+            onStartReturn={() =>
+              router.push({
+                pathname: "/buyer-hub/returns",
+                params: { orderId: order.id },
+              })
+            }
+            onAddReturnTracking={() =>
+              router.push({
+                pathname: "/buyer-hub/returns/tracking",
+                params: { orderId: order.id },
+              })
+            }
+            onCancelReturn={cancelReturn}
+            onCancelOrder={cancelOrder}
+            onDispute={() =>
+              router.push(`/buyer-hub/orders/${order.id}/dispute-issue`)
+            }
+            onLeaveReview={() =>
+              router.push(`/reviews?orderId=${order.id}`)
+            }
+            onSeeDispute={() =>
+              router.push(`/buyer-hub/orders/disputes/${order.id}`)
+            } // 🔥 NEW
+          />
+        </View>
+      </ScrollView>
 
+      <ConfirmDeliveryModal
+        visible={confirmVisible}
+        processing={processing}
+        onConfirm={confirmDelivery}
+        onClose={() => setConfirmVisible(false)}
+      />
+    </View>
+  )
 }
 
 const styles = StyleSheet.create({
@@ -476,42 +466,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#EAF4EF",
   },
-
   content: {
     padding: 16,
   },
-
-  /* --- MODAL (still used in this screen) --- */
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "center",
-    padding: 20,
-  },
-
-  modal: {
-    backgroundColor: "#fff",
-    borderRadius: 14,
-    padding: 20,
-  },
-
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: "900",
-    marginBottom: 10,
-  },
-
-  modalText: {
-    fontSize: 14,
-    marginBottom: 20,
-    color: "#333",
-  },
-
-  modalCancel: {
-    marginTop: 12,
-    textAlign: "center",
-    color: "#7FAF9B",
-    fontWeight: "700",
-  },
 })
-

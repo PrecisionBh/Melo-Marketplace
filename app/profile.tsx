@@ -11,7 +11,6 @@ import {
 
 import AppHeader from "@/components/app-header"
 import { useAuth } from "../context/AuthContext"
-import { isAdmin } from "../lib/admin"
 import { handleAppError } from "../lib/errors/appError"
 import { supabase } from "../lib/supabase"
 
@@ -24,7 +23,7 @@ export default function ProfileScreen() {
   const [displayName, setDisplayName] = useState<string | null>(null)
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
 
-  const showAdmin = isAdmin(userId)
+  const showAdmin = true
 
   /* ---------------- LOAD PROFILE ---------------- */
 
@@ -71,6 +70,17 @@ export default function ProfileScreen() {
       handleAppError(err, {
         context: "profile_public_navigation",
         fallbackMessage: "Unable to open public profile.",
+      })
+    }
+  }
+
+  const handleAdminPress = () => {
+    try {
+      router.push("/admin-panel")
+    } catch (err) {
+      handleAppError(err, {
+        context: "admin_navigation",
+        fallbackMessage: "Unable to open admin panel.",
       })
     }
   }
@@ -156,10 +166,29 @@ export default function ProfileScreen() {
           <MenuItem
             icon="shield-checkmark-outline"
             label="Admin Panel"
-            onPress={() => router.push("/admin")}
+            onPress={handleAdminPress}
           />
         )}
       </View>
+
+      {/* 🚀 BIG MELO ADMIN BUTTON (BOTTOM) */}
+      {showAdmin && (
+        <TouchableOpacity
+          style={styles.bigAdminBtn}
+          onPress={handleAdminPress}
+          activeOpacity={0.9}
+        >
+          <Ionicons
+            name="shield-checkmark"
+            size={20}
+            color="#FFFFFF"
+            style={{ marginRight: 8 }}
+          />
+          <Text style={styles.bigAdminText}>
+            Open Admin Panel
+          </Text>
+        </TouchableOpacity>
+      )}
 
       {/* BACK (UNCHANGED - kept as requested) */}
       <TouchableOpacity
@@ -267,6 +296,25 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: "#0F1E17",
     fontWeight: "500",
+  },
+
+  /* 🚀 BIG ADMIN BUTTON (MELO THEME) */
+  bigAdminBtn: {
+    marginTop: 24,
+    marginHorizontal: 20,
+    backgroundColor: "#7FAF9B",
+    borderRadius: 16,
+    paddingVertical: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    elevation: 3,
+  },
+
+  bigAdminText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "700",
   },
 
   backBtn: {

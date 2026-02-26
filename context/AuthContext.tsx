@@ -17,33 +17,89 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
 
+  const checkBanStatus = async (userId: string): Promise<boolean> => {
+    try {
+      console.log("[AUTH] Checking ban status for:", userId)
+
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("is_banned")
+        .eq("id", userId) // ✅ CONFIRMED correct for your table
+        .single()
+
+      if (error) {
+        console.log("[AUTH] Ban check error:", error.message)
+        return false
+      }
+
+      console.log("[AUTH] Ban status:", data?.is_banned)
+
+      return data?.is_banned === true
+    } catch (err: any) {
+      console.log("[AUTH] Ban check failed:", err?.message ?? err)
+      return false
+    }
+  }
+
   useEffect(() => {
     let mounted = true
 
     console.log("[AUTH] Restoring session...")
 
-    // 🔒 Restore session on app load (CRITICAL FOR NO FLICKER)
-    supabase.auth.getSession().then(({ data, error }) => {
+    const restore = async () => {
+      const { data, error } = await supabase.auth.getSession()
+
       if (!mounted) return
 
       if (error) {
         console.log("[AUTH] getSession error:", error.message)
       }
 
+      const restoredSession = data.session
+      const userId = restoredSession?.user?.id
+
       console.log(
         "[AUTH] Session restored:",
-        !!data.session,
-        data.session?.user?.id ?? "no-user"
+        !!restoredSession,
+        userId ?? "no-user"
       )
 
-      setSession(data.session)
-      setLoading(false)
-    })
+      // 🔒 HARD BAN BLOCK BEFORE SETTING SESSION
+      if (userId) {
+        const isBanned = await checkBanStatus(userId)
 
-    // 🔁 Listen for login / logout changes
+        if (isBanned) {
+          console.log("[AUTH] 🚫 USER BANNED — BLOCKING SESSION & LOGGING OUT")
+          await supabase.auth.signOut()
+          setSession(null)
+          setLoading(false)
+          return // ❗ DO NOT SET SESSION
+        }
+      }
+
+      setSession(restoredSession)
+      setLoading(false)
+    }
+
+    restore()
+
     const { data: listener } = supabase.auth.onAuthStateChange(
-      (event, newSession) => {
+      async (event, newSession) => {
         console.log("[AUTH] Auth state changed:", event)
+
+        const userId = newSession?.user?.id
+
+        if (userId) {
+          const isBanned = await checkBanStatus(userId)
+
+          if (isBanned) {
+            console.log("[AUTH] 🚫 BANNED USER ATTEMPTED LOGIN — FORCING SIGN OUT")
+            await supabase.auth.signOut()
+            setSession(null)
+            return
+          }
+        }
+
         setSession(newSession)
       }
     )
@@ -54,7 +110,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  // 🚀 THIS IS THE FIX FOR YOUR FLASHING BUG
   if (loading) {
     console.log("[AUTH] Still loading session — blocking app render")
 
@@ -77,7 +132,7 @@ export const useAuth = () => useContext(AuthContext)
 const styles = StyleSheet.create({
   loaderScreen: {
     flex: 1,
-    backgroundColor: "#FFFFFF", // Matches your Melo login theme
+    backgroundColor: "#FFFFFF",
     justifyContent: "center",
     alignItems: "center",
   },

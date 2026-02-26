@@ -38,18 +38,42 @@ serve(async (req) => {
       )
     }
 
-    // ✅ Deep links back into Expo app (MATCHES your existing pattern)
+    // 🧠 STEP 1: Find existing Stripe Customer by email (prevents duplicates)
+    let customerId: string | null = null
+
+    const existingCustomers = await stripe.customers.list({
+      email,
+      limit: 1,
+    })
+
+    if (existingCustomers.data.length > 0) {
+      customerId = existingCustomers.data[0].id
+    } else {
+      // 🆕 Create new Stripe Customer linked to Melo user
+      const customer = await stripe.customers.create({
+        email,
+        metadata: {
+          user_id,
+          app: "melo",
+        },
+      })
+      customerId = customer.id
+    }
+
+    // ✅ Deep links back into Expo app (UNCHANGED)
     const successUrl = `melomp://pro/success?user_id=${user_id}`
     const cancelUrl = `melomp://pro/cancel`
 
+    // 🚀 STEP 2: Create subscription checkout session WITH customer ID
     const session = await stripe.checkout.sessions.create({
-      mode: "subscription", // ⭐ THIS is the ONLY major change
+      mode: "subscription",
+      customer: customerId, // 🔥 CRITICAL FIX (NOT customer_email anymore)
+
       payment_method_types: ["card"],
-      customer_email: email,
 
       line_items: [
         {
-          price: MELO_PRO_PRICE_ID, // 🔥 subscription uses PRICE not price_data
+          price: MELO_PRO_PRICE_ID,
           quantity: 1,
         },
       ],
@@ -57,6 +81,7 @@ serve(async (req) => {
       metadata: {
         user_id,
         type: "melo_pro_subscription",
+        customer_id: customerId, // helps webhook later
       },
 
       success_url: successUrl,

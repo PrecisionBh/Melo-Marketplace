@@ -1,532 +1,374 @@
-import { Ionicons } from "@expo/vector-icons"
-import * as ImagePicker from "expo-image-picker"
-import { useLocalSearchParams, useRouter } from "expo-router"
-import { useEffect, useState } from "react"
+// app/edit-listing.tsx (IDENTICAL UI TO CREATE LISTING — EDIT MODE)
+import AppHeader from "@/components/app-header"
+import CategoryBrandConditionSection from "@/components/create-listing/CategoryBrandConditionSection"
+import CreateListingFooter from "@/components/create-listing/CreateListingFooter"
+import FullScreenSelector from "@/components/create-listing/FullScreenSelector"
+import ImageUpload from "@/components/create-listing/ImageUpload"
+import PriceOffersSection from "@/components/create-listing/PriceOffersSection"
+import ProFeaturesSection from "@/components/create-listing/ProFeaturesSection"
+import ShippingSection from "@/components/create-listing/ShippingSection"
+import TitleDescriptionSection from "@/components/create-listing/TitleDescriptionSection"
+import ReturnAddressRequiredModal from "@/components/modals/ReturnAddressRequiredModal"
+import UpgradeToProButton from "@/components/pro/UpgradeToProButton"
+import { useAuth } from "@/context/AuthContext"
+import { handleAppError } from "@/lib/errors/appError"
+import { supabase } from "@/lib/supabase"
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router"
+import { useCallback, useEffect, useState } from "react"
 import {
+  ActivityIndicator,
   Alert,
-  Image,
   ScrollView,
   StyleSheet,
-  Switch,
-  Text,
-  TextInput,
-  TouchableOpacity,
   View,
 } from "react-native"
 
-import { useAuth } from "../../context/AuthContext"
-import { handleAppError } from "../../lib/errors/appError"
-import { supabase } from "../../lib/supabase"
+type ProfileRow = {
+  is_pro: boolean | null
+  boosts_remaining: number | null
+}
 
-
-/* ---------------- CONSTANTS ---------------- */
-
+/* ---------------- SAME SELECTOR DATA AS CREATE ---------------- */
 const CATEGORIES = [
-  { label: "Hard Case", value: "hard_case" },
-  { label: "Soft Case", value: "soft_case" },
-  { label: "Custom Cue", value: "custom_cue" },
-  { label: "Playing Cue", value: "playing_cue" },
-  { label: "Break Cue", value: "break_cue" },
-  { label: "Jump Cue", value: "jump_cue" },
+  { label: "Playing Cues", value: "playing_cue" },
+  { label: "Custom Cues", value: "custom_cue" },
+  { label: "Break Cues", value: "break_cue" },
+  { label: "Jump Cues", value: "jump_cue" },
+  { label: "Shafts", value: "shaft" },
+  { label: "Cue Cases", value: "case" },
+  { label: "Chalk", value: "chalk" },
+  { label: "Gloves", value: "gloves" },
+  { label: "Apparel", value: "apparel" },
+  { label: "Accessories", value: "accessories" },
+  { label: "Collectibles", value: "collectibles" },
   { label: "Other", value: "other" },
 ]
 
 const CONDITIONS = [
-  { label: "New", value: "new" },
-  { label: "Like New", value: "like_new" },
-  { label: "Good", value: "good" },
-  { label: "Fair", value: "fair" },
-  { label: "Poor", value: "poor" },
+  { label: "New", value: "new", subtext: "Brand new, unused, and in original condition." },
+  { label: "Like New", value: "like_new", subtext: "Very lightly used with little to no visible wear." },
+  { label: "Good", value: "good", subtext: "Used but well maintained. Minor cosmetic wear only." },
+  { label: "Fair", value: "fair", subtext: "Noticeable wear, scratches, or cosmetic flaws." },
+  { label: "Poor", value: "poor", subtext: "Heavy wear, damage, or needs repair." },
 ]
 
-const BUYER_SHIPPING_FEE = 15
+const BRANDS = [
+  { label: "Precision", value: "precision" },
+  { label: "Predator", value: "predator" },
+  { label: "Mezz", value: "mezz" },
+  { label: "Cuetec", value: "cuetec" },
+  { label: "McDermott", value: "mcdermott" },
+  { label: "Meucci", value: "meucci" },
+  { label: "Jacoby", value: "jacoby" },
+  { label: "Schon", value: "schon" },
+  { label: "Custom", value: "custom" },
+  { label: "Other", value: "other" },
+]
 
-/* ---------------- SCREEN ---------------- */
-
-export default function EditListing() {
+export default function EditListingScreen() {
+  const { session } = useAuth()
   const router = useRouter()
   const { id } = useLocalSearchParams<{ id: string }>()
-  const { session } = useAuth()
 
-  const [loading, setLoading] = useState(true)
+  const [loadingListing, setLoadingListing] = useState(true)
   const [submitting, setSubmitting] = useState(false)
 
   const [images, setImages] = useState<string[]>([])
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
-  const [brand, setBrand] = useState("")
   const [category, setCategory] = useState<string | null>(null)
+  const [brand, setBrand] = useState<string | null>(null)
   const [condition, setCondition] = useState<string | null>(null)
-  const [price, setPrice] = useState("")
 
+  const [showCategoryModal, setShowCategoryModal] = useState(false)
+  const [showBrandModal, setShowBrandModal] = useState(false)
+  const [showConditionModal, setShowConditionModal] = useState(false)
+
+  const [isBoosted, setIsBoosted] = useState(false)
+  const [quantity, setQuantity] = useState("1")
+  const [boostsRemaining, setBoostsRemaining] = useState<number>(0)
+
+  const [shippingType, setShippingType] =
+    useState<"seller_pays" | "buyer_pays" | null>(null)
+  const [shippingPrice, setShippingPrice] = useState("")
+
+  const [price, setPrice] = useState("")
   const [allowOffers, setAllowOffers] = useState(false)
   const [minOffer, setMinOffer] = useState("")
 
-  const [shippingType, setShippingType] =
-    useState<"free" | "buyer_pays" | null>(null)
+  const [checkingAddress, setCheckingAddress] = useState(true)
+  const [hasReturnAddress, setHasReturnAddress] = useState(false)
+  const [showAddressModal, setShowAddressModal] = useState(false)
 
-  /* ---------------- LOAD LISTING ---------------- */
+  const [checkingPro, setCheckingPro] = useState(true)
+  const [isPro, setIsPro] = useState<boolean>(false)
 
+  /* ---------------- LOAD EXISTING LISTING ---------------- */
   useEffect(() => {
     if (id) loadListing()
   }, [id])
 
   const loadListing = async () => {
-  try {
-    const { data, error } = await supabase
-      .from("listings")
-      .select("*")
-      .eq("id", id)
-      .single()
+    try {
+      setLoadingListing(true)
 
-    if (error || !data) {
-      throw new Error("Listing not found")
+      const { data, error } = await supabase
+        .from("listings")
+        .select("*")
+        .eq("id", id)
+        .single()
+
+      if (error || !data) throw error
+
+      setTitle(data.title ?? "")
+      setDescription(data.description ?? "")
+      setBrand(data.brand ?? null)
+      setCategory(data.category ?? null)
+      setCondition(data.condition ?? null)
+      setPrice(data.price ? String(data.price) : "")
+      setAllowOffers(!!data.allow_offers)
+      setMinOffer(data.min_offer ? String(data.min_offer) : "")
+      setShippingType(data.shipping_type ?? null)
+      setShippingPrice(data.shipping_price ? String(data.shipping_price) : "")
+      setImages(data.image_urls ?? [])
+
+      // 🔒 SAFE LOAD: never allow 0 or null into UI state
+      const safeLoadedQty =
+        data.quantity && data.quantity > 0 ? data.quantity : 1
+      setQuantity(String(safeLoadedQty))
+    } catch (err) {
+      handleAppError(err, {
+        fallbackMessage: "Failed to load listing.",
+      })
+      router.back()
+    } finally {
+      setLoadingListing(false)
     }
-
-    setTitle(data.title ?? "")
-    setDescription(data.description ?? "")
-    setBrand(data.brand ?? "")
-    setCategory(data.category ?? null)
-    setCondition(data.condition ?? null)
-    setPrice(data.price ? String(data.price) : "")
-    setAllowOffers(!!data.allow_offers)
-    setMinOffer(data.min_offer ? String(data.min_offer) : "")
-    setShippingType(data.shipping_type ?? null)
-    setImages(data.image_urls ?? [])
-  } catch (err) {
-    handleAppError(err, {
-      fallbackMessage: "Failed to load listing details.",
-    })
-    router.back()
-  } finally {
-    setLoading(false)
-  }
-}
-
-
-  /* ---------------- IMAGE PICKER ---------------- */
-
-  const pickImage = async () => {
-  try {
-    if (images.length >= 5) {
-      Alert.alert("Limit reached", "Max 5 images allowed")
-      return
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
-      quality: 0.9,
-    })
-
-    if (!result.canceled && result.assets?.[0]?.uri) {
-      setImages((prev) => [...prev, result.assets[0].uri])
-    }
-  } catch (err) {
-    handleAppError(err, {
-      fallbackMessage: "Failed to open image picker.",
-    })
-  }
-}
-
-
-  const removeImage = (uri: string) => {
-    setImages((prev) => prev.filter((i) => i !== uri))
   }
 
-  /* ---------------- IMAGE UPLOAD ---------------- */
-
-  const uploadImage = async (
-  uri: string,
-  userId: string,
-  listingId: string,
-  index: number
-) => {
-  try {
-    if (uri.startsWith("http")) return uri
-
-    const ext = uri.split(".").pop() || "jpg"
-    const path = `${userId}/${listingId}/${index}.${ext}`
-
-    const formData = new FormData()
-    formData.append("file", {
-      uri,
-      name: path,
-      type: `image/${ext === "jpg" ? "jpeg" : ext}`,
-    } as any)
-
-    const { error } = await supabase.storage
-      .from("listing-images")
-      .upload(path, formData, { upsert: true })
-
-    if (error) throw error
-
-    const { data } = supabase.storage
-      .from("listing-images")
-      .getPublicUrl(path)
-
-    return data.publicUrl
-  } catch (err) {
-    handleAppError(err, {
-      fallbackMessage: "Image upload failed. Please try again.",
-    })
-    throw err
-  }
-}
-
-
-  /* ---------------- SUBMIT ---------------- */
-
-  const submit = async () => {
-    if (!session?.user || !id) {
-  handleAppError(new Error("Missing session or listing ID"), {
-    fallbackMessage: "Session expired. Please try again.",
-  })
-  return
-}
-
-
-    if (!title || !category || !condition || !price || images.length === 0) {
-      Alert.alert("Missing info", "Please complete all required fields.")
-      return
-    }
-
-    if (!shippingType) {
-      Alert.alert("Shipping required", "Select a shipping option.")
-      return
-    }
-
-    if (allowOffers && Number(minOffer) >= Number(price)) {
-      Alert.alert("Invalid offer", "Minimum offer must be below price.")
-      return
-    }
+  /* ---------------- UPDATE LISTING (MELO INVENTORY SAFE) ---------------- */
+  const handleUpdateListing = async () => {
+    if (!session?.user || !id || submitting) return
 
     try {
       setSubmitting(true)
 
-      const finalImages: string[] = []
+      const parsedPrice = parseFloat(price)
+      const parsedMinOffer = minOffer ? parseFloat(minOffer) : null
+      const parsedShippingPrice = shippingPrice ? parseFloat(shippingPrice) : 0
 
-      for (let i = 0; i < images.length; i++) {
-        const url = await uploadImage(
-          images[i],
-          session.user.id,
-          id,
-          i
-        )
-        finalImages.push(url)
+      // 🔥 CRITICAL FIX: HARD CLAMP QUANTITY (>= 1 ALWAYS)
+      const rawQty = parseInt(quantity, 10)
+      const safeQuantity = isPro
+        ? Math.max(1, Number.isFinite(rawQty) ? rawQty : 1)
+        : 1
+
+      if (isNaN(parsedPrice)) {
+        Alert.alert("Invalid Price", "Please enter a valid price.")
+        return
       }
 
-      await supabase
+      const { error } = await supabase
         .from("listings")
         .update({
-          title,
-          description,
+          title: title.trim(),
+          description: description.trim() || null,
           brand,
           category,
           condition,
-          price: Number(price),
+          price: parsedPrice,
           allow_offers: allowOffers,
-          min_offer: allowOffers ? Number(minOffer) : null,
+          min_offer: allowOffers ? parsedMinOffer : null,
           shipping_type: shippingType,
-          shipping_price:
-            shippingType === "buyer_pays" ? BUYER_SHIPPING_FEE : 0,
-          image_urls: finalImages,
+          shipping_price: parsedShippingPrice,
+          image_urls: images,
+
+          // 🔥 MELO INVENTORY SOURCE OF TRUTH (DO NOT REMOVE)
+          quantity: safeQuantity,
+          quantity_available: safeQuantity,
         })
         .eq("id", id)
 
-      Alert.alert("Saved", "Listing updated")
-      router.back()
-    } catch (err: any) {
-  handleAppError(err, {
-    fallbackMessage: err?.message ?? "Failed to update listing.",
-  })
-} finally {
+      if (error) throw error
 
+      Alert.alert("Success", "Listing updated successfully!")
+      router.back()
+    } catch (err) {
+      handleAppError(err, {
+        context: "update_listing",
+        fallbackMessage: "Failed to update listing.",
+      })
+    } finally {
       setSubmitting(false)
     }
   }
 
-  if (loading) return null
+  /* ---------------- SAME GUARDS AS CREATE ---------------- */
+  useFocusEffect(
+    useCallback(() => {
+      const loadGuards = async () => {
+        if (!session?.user) return
 
-  /* ---------------- UI ---------------- */
+        try {
+          setCheckingAddress(true)
+          setCheckingPro(true)
+
+          const { data: addressData } = await supabase
+            .from("seller_return_addresses")
+            .select("id")
+            .eq("user_id", session.user.id)
+            .maybeSingle()
+
+          setHasReturnAddress(!!addressData)
+          setShowAddressModal(!addressData)
+
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("is_pro, boosts_remaining")
+            .eq("id", session.user.id)
+            .single<ProfileRow>()
+
+          setIsPro(Boolean(profile?.is_pro))
+          setBoostsRemaining(profile?.boosts_remaining ?? 0)
+        } finally {
+          setCheckingAddress(false)
+          setCheckingPro(false)
+        }
+      }
+
+      loadGuards()
+    }, [session?.user?.id])
+  )
+
+  if (checkingAddress || loadingListing) {
+    return (
+      <View style={styles.screen}>
+        <AppHeader title="Edit Listing" backRoute="/seller-hub" />
+        <View style={styles.loaderWrap}>
+          <ActivityIndicator size="large" color="#7FAF9B" />
+        </View>
+      </View>
+    )
+  }
 
   return (
     <View style={styles.screen}>
-      <View style={styles.topBar}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={22} color="#0F1E17" />
-        </TouchableOpacity>
-        <Text style={styles.title}>Edit Listing</Text>
-        <View style={{ width: 22 }} />
-      </View>
+      <AppHeader title="Edit Listing" backRoute="/seller-hub" />
 
-      <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.label}>Photos *</Text>
-        <View style={styles.imageRow}>
-          {images.map((uri, i) => (
-            <TouchableOpacity key={i} onPress={() => removeImage(uri)}>
-              <Image source={{ uri }} style={styles.image} />
-            </TouchableOpacity>
-          ))}
-          {images.length < 5 && (
-            <TouchableOpacity style={styles.addImage} onPress={pickImage}>
-              <Ionicons name="add" size={24} color="#7FAF9B" />
-            </TouchableOpacity>
-          )}
-        </View>
+      {!checkingPro && !isPro && (
+        <UpgradeToProButton
+          style={{ marginHorizontal: 16, marginTop: 12, marginBottom: 4 }}
+        />
+      )}
 
-        <Field label="Title *" value={title} onChange={setTitle} />
-        <Field label="Description" value={description} onChange={setDescription} multiline />
-        <Field label="Brand" value={brand} onChange={setBrand} />
-        <Field label="Price *" value={price} onChange={setPrice} keyboardType="decimal-pad" />
+      {hasReturnAddress && (
+        <ScrollView contentContainerStyle={styles.content}>
+          <ImageUpload images={images} setImages={setImages} max={5} />
 
-        {/* CONDITION */}
-        <Text style={styles.label}>Condition *</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <View style={styles.pillRow}>
-            {CONDITIONS.map((c) => (
-              <TouchableOpacity
-                key={c.value}
-                style={[
-                  styles.pill,
-                  condition === c.value ? styles.pillActive : undefined,
-                ]}
-                onPress={() => setCondition(c.value)}
-              >
-                <Text
-                  style={[
-                    styles.pillText,
-                    condition === c.value ? styles.pillTextActive : undefined,
-                  ]}
-                >
-                  {c.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </ScrollView>
-
-        {/* CATEGORY */}
-        <Text style={styles.label}>Category *</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <View style={styles.pillRow}>
-            {CATEGORIES.map((c) => (
-              <TouchableOpacity
-                key={c.value}
-                style={[
-                  styles.pill,
-                  category === c.value ? styles.pillActive : undefined,
-                ]}
-                onPress={() => setCategory(c.value)}
-              >
-                <Text
-                  style={[
-                    styles.pillText,
-                    category === c.value ? styles.pillTextActive : undefined,
-                  ]}
-                >
-                  {c.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </ScrollView>
-
-        {/* SHIPPING */}
-        <Text style={styles.label}>Shipping *</Text>
-        <TouchableOpacity
-          style={[
-            styles.option,
-            shippingType === "free" ? styles.optionActive : undefined,
-          ]}
-          onPress={() => setShippingType("free")}
-        >
-          <Text>Free Shipping</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[
-            styles.option,
-            shippingType === "buyer_pays" ? styles.optionActive : undefined,
-          ]}
-          onPress={() => setShippingType("buyer_pays")}
-        >
-          <Text>Buyer Pays Shipping ($15)</Text>
-        </TouchableOpacity>
-
-        {/* OFFERS */}
-        <View style={styles.toggleRow}>
-          <Text style={styles.label}>Accept Offers</Text>
-          <Switch value={allowOffers} onValueChange={setAllowOffers} />
-        </View>
-
-        {allowOffers && (
-          <Field
-            label="Minimum Offer"
-            value={minOffer}
-            onChange={setMinOffer}
-            keyboardType="decimal-pad"
+          <TitleDescriptionSection
+            title={title}
+            setTitle={setTitle}
+            description={description}
+            setDescription={setDescription}
           />
-        )}
 
-        <TouchableOpacity style={styles.submit} onPress={submit}>
-          <Text style={styles.submitText}>
-            {submitting ? "Saving..." : "Save Changes"}
-          </Text>
-        </TouchableOpacity>
-      </ScrollView>
-    </View>
-  )
-}
+          <CategoryBrandConditionSection
+            category={category}
+            brand={brand}
+            condition={condition}
+            onPressCategory={() => setShowCategoryModal(true)}
+            onPressBrand={() => setShowBrandModal(true)}
+            onPressCondition={() => setShowConditionModal(true)}
+          />
 
-/* ---------------- FIELD ---------------- */
+          <View style={styles.sectionSpacing}>
+            <ProFeaturesSection
+              isPro={isPro}
+              boostsRemaining={boostsRemaining}
+              isBoosted={isBoosted}
+              setIsBoosted={setIsBoosted}
+              quantity={quantity}
+              setQuantity={setQuantity}
+            />
+          </View>
 
-function Field({
-  label,
-  value,
-  onChange,
-  multiline,
-  keyboardType,
-}: {
-  label: string
-  value: string
-  onChange: (v: string) => void
-  multiline?: boolean
-  keyboardType?: any
-}) {
-  return (
-    <View style={{ marginBottom: 14 }}>
-      <Text style={styles.label}>{label}</Text>
-      <TextInput
-        value={value}
-        onChangeText={onChange}
-        multiline={multiline}
-        keyboardType={keyboardType}
-        style={[styles.input, multiline ? { height: 90 } : undefined]}
+          <View style={styles.sectionSpacing}>
+            <ShippingSection
+              shippingType={shippingType}
+              setShippingType={setShippingType}
+              shippingPrice={shippingPrice}
+              setShippingPrice={setShippingPrice}
+            />
+          </View>
+
+          <View style={styles.sectionSpacing}>
+            <PriceOffersSection
+              price={price}
+              setPrice={setPrice}
+              allowOffers={allowOffers}
+              setAllowOffers={setAllowOffers}
+              minOffer={minOffer}
+              setMinOffer={setMinOffer}
+            />
+          </View>
+
+          <View style={styles.sectionSpacing}>
+            <CreateListingFooter
+              submitting={submitting}
+              onSubmit={handleUpdateListing}
+              disabled={
+                submitting ||
+                !title ||
+                !category ||
+                !condition ||
+                !price ||
+                images.length === 0 ||
+                (allowOffers && !minOffer) ||
+                !shippingType
+              }
+            />
+          </View>
+        </ScrollView>
+      )}
+
+      <FullScreenSelector
+        visible={showCategoryModal}
+        title="Select Category"
+        options={CATEGORIES}
+        selectedValue={category ?? undefined}
+        onSelect={setCategory}
+        onClose={() => setShowCategoryModal(false)}
+      />
+
+      <FullScreenSelector
+        visible={showBrandModal}
+        title="Select Brand"
+        options={BRANDS}
+        selectedValue={brand ?? undefined}
+        onSelect={setBrand}
+        onClose={() => setShowBrandModal(false)}
+      />
+
+      <FullScreenSelector
+        visible={showConditionModal}
+        title="Select Condition"
+        options={CONDITIONS}
+        selectedValue={condition ?? undefined}
+        onSelect={setCondition}
+        onClose={() => setShowConditionModal(false)}
+      />
+
+      <ReturnAddressRequiredModal
+        visible={showAddressModal}
+        onClose={() => setShowAddressModal(false)}
       />
     </View>
   )
 }
 
-/* ---------------- STYLES ---------------- */
-
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#fff" },
-
-  topBar: {
-    paddingTop: 50,
-    paddingHorizontal: 14,
-    paddingBottom: 10,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-
-  title: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#0F1E17",
-  },
-
-  content: {
-    padding: 16,
-    paddingBottom: 140,
-  },
-
-  label: {
-    fontWeight: "700",
-    marginBottom: 6,
-    color: "#2E5F4F",
-  },
-
-  input: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: "#D6E6DE",
-    color: "#2E5F4F",
-  },
-
-  imageRow: {
-    flexDirection: "row",
-    gap: 10,
-    marginBottom: 16,
-  },
-
-  image: {
-    width: 70,
-    height: 70,
-    borderRadius: 8,
-  },
-
-  addImage: {
-    width: 70,
-    height: 70,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#7FAF9B",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  pillRow: {
-    flexDirection: "row",
-    gap: 10,
-    marginBottom: 16,
-  },
-
-  pill: {
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 20,
-    backgroundColor: "#EAF4EF",
-  },
-
-  pillActive: {
-    backgroundColor: "#7FAF9B",
-  },
-
-  pillText: {
-    color: "#2E5F4F",
-    fontSize: 13,
-  },
-
-  pillTextActive: {
-    color: "#0F1E17",
-    fontWeight: "700",
-  },
-
-  option: {
-    padding: 12,
-    borderWidth: 1,
-    borderColor: "#D6E6DE",
-    borderRadius: 10,
-    marginBottom: 8,
-  },
-
-  optionActive: {
-    backgroundColor: "#EAF4EF",
-    borderColor: "#7FAF9B",
-  },
-
-  toggleRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginVertical: 10,
-  },
-
-  submit: {
-    marginTop: 24,
-    backgroundColor: "#0F1E17",
-    height: 48,
-    borderRadius: 24,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  submitText: {
-    color: "#fff",
-    fontWeight: "900",
-  },
+  screen: { flex: 1, backgroundColor: "#e8e8e8" },
+  loaderWrap: { flex: 1, alignItems: "center", justifyContent: "center" },
+  content: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 140 },
+  sectionSpacing: { marginTop: 18 },
 })

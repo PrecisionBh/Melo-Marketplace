@@ -7,7 +7,11 @@ type Props = {
   showTrackShipment: boolean
   showReturnSection: boolean
   hasReturnTracking: boolean
-  showDispute: boolean
+  showDispute: boolean // 🔁 RETURN DISPUTE (existing)
+
+  /* 🆕 NEW DISPUTE FLAGS (NON-RETURN DISPUTES) */
+  showRespondToDispute?: boolean
+  showSeeDispute?: boolean
 
   /* DATA */
   trackingUrl: string | null
@@ -17,7 +21,9 @@ type Props = {
   /* ACTIONS */
   onAddTracking: () => void
   onOpenReturnDetails: () => void
-  onDispute: () => void
+  onDispute: () => void // existing (return dispute)
+  onRespondToDispute?: () => void // 🆕 buyer opened dispute
+  onSeeDispute?: () => void // 🆕 view dispute thread
 }
 
 export default function SellerOrderActionButtons({
@@ -26,12 +32,16 @@ export default function SellerOrderActionButtons({
   showReturnSection,
   hasReturnTracking,
   showDispute,
+  showRespondToDispute = false,
+  showSeeDispute = false,
   trackingUrl,
   returnTrackingUrl,
   processing,
   onAddTracking,
   onOpenReturnDetails,
   onDispute,
+  onRespondToDispute,
+  onSeeDispute,
 }: Props) {
   const handleTrackShipment = () => {
     if (!trackingUrl) return
@@ -95,7 +105,11 @@ export default function SellerOrderActionButtons({
                 style={styles.trackReturnBtn}
                 onPress={handleTrackReturn}
               >
-                <Ionicons name="return-down-back-outline" size={18} color="#fff" />
+                <Ionicons
+                  name="return-down-back-outline"
+                  size={18}
+                  color="#fff"
+                />
                 <Text style={styles.trackReturnText}>
                   Track Incoming Return
                 </Text>
@@ -107,7 +121,7 @@ export default function SellerOrderActionButtons({
               >
                 <Ionicons name="eye-outline" size={18} color="#fff" />
                 <Text style={styles.returnDetailsText}>
-                  View Return Details
+                  Accept Return - Issue Refund
                 </Text>
               </TouchableOpacity>
             </>
@@ -115,12 +129,38 @@ export default function SellerOrderActionButtons({
         </>
       )}
 
-      {/* ⚠️ DISPUTE */}
+      {/* 🧠 RETURN DISPUTE (SELLER FILES RETURN DISPUTE) */}
       {showDispute && (
-        <TouchableOpacity style={styles.disputeBtn} onPress={onDispute}>
+        <TouchableOpacity style={styles.returnDisputeBtn} onPress={onDispute}>
           <Ionicons name="alert-circle-outline" size={18} color="#fff" />
-          <Text style={styles.disputeText}>
+          <Text style={styles.returnDisputeText}>
+            File Return Dispute
+          </Text>
+        </TouchableOpacity>
+      )}
+
+      {/* 🔥 NEW: RESPOND TO DISPUTE (BUYER OPENED ISSUE) */}
+      {showRespondToDispute && (
+        <TouchableOpacity
+          style={styles.respondDisputeBtn}
+          onPress={onRespondToDispute}
+        >
+          <Ionicons name="chatbubble-ellipses-outline" size={18} color="#fff" />
+          <Text style={styles.respondDisputeText}>
             Respond to Dispute
+          </Text>
+        </TouchableOpacity>
+      )}
+
+      {/* 👁️ SEE DISPUTE (ALREADY RESPONDED OR SELLER CREATED) */}
+      {showSeeDispute && !showRespondToDispute && (
+        <TouchableOpacity
+          style={styles.seeDisputeBtn}
+          onPress={onSeeDispute}
+        >
+          <Ionicons name="eye-outline" size={18} color="#fff" />
+          <Text style={styles.seeDisputeText}>
+            See Dispute
           </Text>
         </TouchableOpacity>
       )}
@@ -189,7 +229,9 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     fontSize: 14,
   },
-  disputeBtn: {
+
+  /* 🧠 RETURN DISPUTE (existing flow) */
+  returnDisputeBtn: {
     marginTop: 14,
     backgroundColor: "#e58383",
     height: 46,
@@ -199,11 +241,46 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 8,
   },
-  disputeText: {
+  returnDisputeText: {
     color: "#fff",
     fontWeight: "800",
     fontSize: 14,
   },
+
+  /* 🔥 NEW BLACK & WHITE DISPUTE BUTTONS (NON-RETURN) */
+  respondDisputeBtn: {
+    marginTop: 14,
+    backgroundColor: "#000000",
+    height: 48,
+    borderRadius: 24,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  respondDisputeText: {
+    color: "#FFFFFF",
+    fontWeight: "900",
+    fontSize: 15,
+  },
+  seeDisputeBtn: {
+    marginTop: 12,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 2,
+    borderColor: "#000000",
+    height: 46,
+    borderRadius: 23,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  seeDisputeText: {
+    color: "#000000",
+    fontWeight: "900",
+    fontSize: 14,
+  },
+
   infoBox: {
     marginTop: 16,
     backgroundColor: "#FFF4E5",

@@ -82,6 +82,50 @@ export default function HomeScreen() {
     setupPushTokenIfNeeded()
   }, [])
 
+  useEffect(() => {
+  setupPushTokenIfNeeded()
+}, [])
+
+// 🚫 ADD BAN CHECK RIGHT HERE (EXACT LOCATION)
+useEffect(() => {
+  const enforceBan = async () => {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!user?.id) return
+
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("is_banned")
+        .eq("id", user.id)
+        .single()
+
+      if (error) {
+        console.log("[HOME] Ban check error:", error.message)
+        return
+      }
+
+      if (data?.is_banned === true) {
+        console.log("[HOME] 🚫 BANNED USER DETECTED ON HOME — SIGNING OUT")
+        await supabase.auth.signOut()
+
+        Alert.alert(
+          "Account Suspended",
+          "Your account has been suspended. Please contact support."
+        )
+
+        router.replace("/login") // or your auth route
+      }
+    } catch (err) {
+      console.log("[HOME] Ban enforcement failed:", err)
+    }
+  }
+
+  enforceBan()
+}, [])
+
   useFocusEffect(
     useCallback(() => {
       loadListings()

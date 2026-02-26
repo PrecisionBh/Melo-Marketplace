@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons"
 import * as Linking from "expo-linking"
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { useEffect, useState } from "react"
@@ -7,17 +6,15 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native"
 
 import AppHeader from "@/components/app-header"
+import ShippingAddress from "@/components/checkout/shippingaddress"
 import { useAuth } from "../../context/AuthContext"
 import { handleAppError } from "../../lib/errors/appError"
 import { supabase } from "../../lib/supabase"
-
-
 
 /* ---------------- TYPES ---------------- */
 
@@ -62,12 +59,16 @@ type ListingForTotal = {
 
 export default function FinalPaymentScreen() {
   const router = useRouter()
-  const { listingId, offerId } = useLocalSearchParams<{
+  const { listingId, offerId, quantity } = useLocalSearchParams<{
     listingId?: string
     offerId?: string
+    quantity?: string
   }>()
 
   const { session } = useAuth()
+
+  // 🔥 CRITICAL: Safe quantity parsing (default = 1)
+  const parsedQuantity = Math.max(1, Number(quantity ?? "1"))
 
   const [paying, setPaying] = useState(false)
   const [useSaved, setUseSaved] = useState(true)
@@ -87,44 +88,79 @@ export default function FinalPaymentScreen() {
   const [state, setState] = useState("")
   const [postal, setPostal] = useState("")
   const [phone, setPhone] = useState("")
+  const [hasSavedAddress, setHasSavedAddress] = useState(false)
 
   /* ---------------- LOAD SAVED SHIPPING ---------------- */
 
-  useEffect(() => {
-    if (!session?.user?.id) return
+  const loadSavedAddress = async () => {
+  if (!session?.user?.id) return
 
-    supabase
-  .from("profiles")
-  .select(`
-    display_name,
-    address_line1,
-    address_line2,
-    city,
-    state,
-    postal_code
-  `)
-  .eq("id", session.user.id)
-  .single()
-  .then(({ data, error }) => {
-    if (error) {
-      handleAppError(error, {
-        fallbackMessage: "Failed to load saved shipping address.",
-      })
-      return
-    }
+  const { data, error } = await supabase
+    .from("profiles")
+    .select(`
+      shipping_name,
+      address_line1,
+      address_line2,
+      city,
+      state,
+      postal_code,
+      shipping_phone
+    `)
+    .eq("id", session.user.id)
+    .single()
 
-    if (!data) return
-    setName(data.display_name ?? "")
+  if (error) {
+    handleAppError(error, {
+      fallbackMessage: "Failed to load saved shipping address.",
+    })
+    return
+  }
+
+  if (!data) return
+
+  // 🔒 STRICT SHIPPING COMPLETENESS CHECK
+  const hasFullAddress =
+    !!data.shipping_name?.trim() &&
+    !!data.address_line1?.trim() &&
+    !!data.city?.trim() &&
+    !!data.state?.trim() &&
+    !!data.postal_code?.trim()
+
+  setHasSavedAddress(hasFullAddress)
+
+  // 🔥 ALWAYS SHOW THE FORM (NEVER HIDE IT BASED ON DB STATE)
+  if (hasFullAddress) {
+    setName(data.shipping_name ?? "")
     setLine1(data.address_line1 ?? "")
     setLine2(data.address_line2 ?? "")
     setCity(data.city ?? "")
     setState(data.state ?? "")
     setPostal(data.postal_code ?? "")
-  })
+    setPhone(data.shipping_phone ?? "")
 
+    // Only default to saved mode if a valid saved address exists
+    setUseSaved(true)
+  } else {
+    // 🚨 CRITICAL FIX:
+    // DO NOT force toggle OFF
+    // Just mark that no saved address exists and leave the form empty
+    setName("")
+    setLine1("")
+    setLine2("")
+    setCity("")
+    setState("")
+    setPostal("")
+    setPhone("")
+    // NO setUseSaved(false) here
+  }
+}
+
+  useEffect(() => {
+    if (!session?.user?.id) return
+    loadSavedAddress()
   }, [session?.user?.id])
 
-  /* ---------------- CALCULATE DISPLAY TOTAL ---------------- */
+  /* ---------------- CALCULATE DISPLAY TOTAL (FIXED FOR QUANTITY) ---------------- */
 
   useEffect(() => {
     const loadTotal = async () => {
@@ -137,22 +173,27 @@ export default function FinalPaymentScreen() {
         if (offerId) {
           const { data, error } = await supabase
             .from("offers")
-            .select(
-              `
+            .select(`
               current_amount,
               listing: listings (shipping_type, shipping_price)
-            `
-            )
+            `)
             .eq("id", offerId)
             .single<OfferForTotal>()
 
           if (error || !data) return
 
-          itemCents = Math.round(Number(data.current_amount) * 100)
+          const unitPriceCents = Math.round(
+            Number(data.current_amount) * 100
+          )
+
+          itemCents = unitPriceCents * parsedQuantity
 
           const listing = data.listing
           if (listing?.shipping_type === "buyer_pays") {
-            shippingCents = Math.round((listing.shipping_price ?? 0) * 100)
+            const shippingPerItem = Math.round(
+              (listing.shipping_price ?? 0) * 100
+            )
+            shippingCents = shippingPerItem * parsedQuantity
           }
         } else if (listingId) {
           const { data, error } = await supabase
@@ -163,35 +204,33 @@ export default function FinalPaymentScreen() {
 
           if (error || !data) return
 
-          itemCents = Math.round(Number(data.price) * 100)
+          const unitPriceCents = Math.round(Number(data.price) * 100)
+          itemCents = unitPriceCents * parsedQuantity
 
           if (data.shipping_type === "buyer_pays") {
-            shippingCents = Math.round((data.shipping_price ?? 0) * 100)
+            const shippingPerItem = Math.round(
+              (data.shipping_price ?? 0) * 100
+            )
+            shippingCents = shippingPerItem * parsedQuantity
           }
         }
 
         const escrow = itemCents + shippingCents
+        const taxRate = 0.075
+        const taxCents = Math.round(escrow * taxRate)
+        const buyerFee = Math.round(escrow * 0.03) + 30
 
-// Florida sales tax (7.5%) on item + shipping ONLY
-const taxRate = 0.075
-const taxCents = Math.round(escrow * taxRate)
-
-// Buyer fee (DO NOT charge fee on tax)
-const buyerFee = Math.round(escrow * 0.03) + 30
-
-// Final display total must match Stripe total
-setDisplayTotalCents(escrow + buyerFee + taxCents)
+        setDisplayTotalCents(escrow + buyerFee + taxCents)
       } catch (err) {
-  handleAppError(err, {
-    fallbackMessage: "Failed to calculate checkout total.",
-  })
-  setDisplayTotalCents(null)
-}
-
+        handleAppError(err, {
+          fallbackMessage: "Failed to calculate checkout total.",
+        })
+        setDisplayTotalCents(null)
+      }
     }
 
     loadTotal()
-  }, [listingId, offerId])
+  }, [listingId, offerId, parsedQuantity])
 
   /* ---------------- PAY ---------------- */
 
@@ -206,13 +245,22 @@ setDisplayTotalCents(escrow + buyerFee + taxCents)
       return
     }
 
-    if (
-      (!useSaved &&
-        (!name || !line1 || !city || !state || !postal || !phone)) ||
-      (useSaved &&
-        (!name || !line1 || !city || !state || !postal))
-    ) {
-      Alert.alert("Missing info", "Please complete shipping address.")
+    /* ---------------- HARDENED SHIPPING VALIDATION (MELO SAFE) ---------------- */
+
+    // 🛡️ SINGLE SOURCE OF TRUTH — REQUIRED FIELDS (PHONE OPTIONAL)
+    const isShippingComplete =
+      name?.trim().length > 1 &&
+      line1?.trim().length > 4 &&
+      city?.trim().length > 1 &&
+      state?.trim().length > 1 &&
+      postal?.trim().length >= 5
+
+    // 🔴 CRITICAL: HARD SHIPPING GUARD (CANNOT CREATE ORDER WITHOUT ADDRESS)
+    if (!isShippingComplete) {
+      Alert.alert(
+        "Shipping Required",
+        "Please complete your full shipping address before continuing to payment."
+      )
       return
     }
 
@@ -224,7 +272,6 @@ setDisplayTotalCents(escrow + buyerFee + taxCents)
       let listingSnapshot: ListingSnapshot | null = null
       let itemPriceCents: number | null = null
 
-      /* ---------- OFFER FLOW ---------- */
       if (offerId) {
         const { data, error } = await supabase
           .from("offers")
@@ -250,7 +297,11 @@ setDisplayTotalCents(escrow + buyerFee + taxCents)
 
         sellerId = data.seller_id
         imageUrl = data.listing.image_urls?.[0] ?? null
-        itemPriceCents = Math.round(Number(data.current_amount) * 100)
+
+        const unitPriceCents = Math.round(
+          Number(data.current_amount) * 100
+        )
+        itemPriceCents = unitPriceCents * parsedQuantity
 
         listingSnapshot = {
           id: data.listing.id,
@@ -262,7 +313,6 @@ setDisplayTotalCents(escrow + buyerFee + taxCents)
         }
       }
 
-      /* ---------- LISTING FLOW ---------- */
       if (!offerId && listingId) {
         const { data, error } = await supabase
           .from("listings")
@@ -284,7 +334,9 @@ setDisplayTotalCents(escrow + buyerFee + taxCents)
 
         sellerId = data.user_id
         imageUrl = data.image_urls?.[0] ?? null
-        itemPriceCents = Math.round(Number(data.price) * 100)
+
+        const unitPriceCents = Math.round(Number(data.price) * 100)
+        itemPriceCents = unitPriceCents * parsedQuantity
 
         listingSnapshot = {
           id: data.id,
@@ -300,121 +352,96 @@ setDisplayTotalCents(escrow + buyerFee + taxCents)
         throw new Error("Missing listing pricing data")
       }
 
-            /* ---------- HARD SOLD GUARD (ANTI DOUBLE PURCHASE) ---------- */
+      const shippingPerItem =
+        listingSnapshot.shipping_type === "buyer_pays"
+          ? Math.round((listingSnapshot.shipping_price ?? 0) * 100)
+          : 0
 
-      const { data: latestListing, error: soldCheckError } = await supabase
-        .from("listings")
-        .select("id, is_sold")
-        .eq("id", listingSnapshot.id)
+      const shippingCents = shippingPerItem * parsedQuantity
+      const escrowCents = itemPriceCents + shippingCents
+      const taxRate = 0.075
+      const taxCents = Math.round(escrowCents * taxRate)
+      const buyerFeeCents = Math.round(escrowCents * 0.03) + 30
+      const stripeTotalCents = escrowCents + buyerFeeCents + taxCents
+
+      // 🔒 SAVE DEFAULT SHIPPING (CORRECT — SEPARATE FROM DISPLAY NAME)
+// 🔒 AUTO-SAVE DEFAULT SHIPPING TO PROFILES (MELO SAFE — NOT DEPENDENT ON TOGGLES)
+if (session?.user?.id) {
+  const trimmedName = name.trim()
+  const trimmedLine1 = line1.trim()
+  const trimmedCity = city.trim()
+  const trimmedState = state.trim()
+  const trimmedPostal = postal.trim()
+
+  // Double safety guard (never save incomplete address)
+  const isValidForProfileSave =
+    trimmedName &&
+    trimmedLine1 &&
+    trimmedCity &&
+    trimmedState &&
+    trimmedPostal
+
+  if (isValidForProfileSave) {
+    const { error: profileSaveError } = await supabase
+      .from("profiles")
+      .update({
+        // 🔴 IMPORTANT: DO NOT TOUCH display_name
+        shipping_name: trimmedName,
+        address_line1: trimmedLine1,
+        address_line2: line2?.trim() || null,
+        city: trimmedCity,
+        state: trimmedState,
+        postal_code: trimmedPostal,
+        shipping_phone: phone?.trim() || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", session.user.id)
+
+    if (profileSaveError) {
+      console.error(
+        "❌ Failed to save default shipping address to profiles:",
+        profileSaveError
+      )
+    } else {
+      console.log("✅ Default shipping address saved to profiles")
+    }
+  }
+}
+
+      // 🧾 CREATE ORDER (NOW GUARANTEED TO HAVE VALID SHIPPING)
+      const { data: order, error } = await supabase
+        .from("orders")
+        .insert({
+          buyer_id: session.user.id,
+          seller_id: sellerId,
+          listing_id: listingId ?? listingSnapshot.id,
+          offer_id: offerId ?? null,
+          listing_snapshot: listingSnapshot,
+          status: "pending_payment",
+          amount_cents: stripeTotalCents,
+          currency: "usd",
+          item_price_cents: itemPriceCents,
+          shipping_amount_cents: shippingCents,
+          tax_cents: taxCents,
+          buyer_fee_cents: buyerFeeCents,
+          escrow_amount_cents: escrowCents,
+          shipping_name: name.trim(),
+          shipping_line1: line1.trim(),
+          shipping_line2: line2?.trim() || null,
+          shipping_city: city.trim(),
+          shipping_state: state.trim(),
+          shipping_postal_code: postal.trim(),
+          shipping_country: "US",
+          shipping_phone: phone?.trim() || null,
+          image_url: imageUrl,
+          quantity: parsedQuantity,
+        })
+        .select()
         .single()
 
-      if (soldCheckError) {
-        throw new Error("Failed to verify listing availability")
-      }
-
-      if (latestListing?.is_sold) {
-        Alert.alert(
-          "Item Sold",
-          "This item has already been sold and is no longer available."
-        )
-        setPaying(false)
-        return
-      }
-
-
-      // 🚫 BLOCK BUYING YOUR OWN LISTING (CRITICAL MARKETPLACE GUARD)
-if (sellerId === session.user.id) {
-  Alert.alert(
-    "Invalid Purchase",
-    "You cannot buy your own listing."
-  )
-  setPaying(false)
-  return
-}
-
-
-      /* ---------- PRICING (SINGLE SOURCE OF TRUTH) ---------- */
-
-      const shippingCents =
-  listingSnapshot.shipping_type === "buyer_pays"
-    ? Math.round((listingSnapshot.shipping_price ?? 0) * 100)
-    : 0
-
-// Seller escrow (DO NOT include tax here)
-const escrowCents = itemPriceCents + shippingCents
-
-// Florida sales tax (7.5%) applied to item + shipping only
-const taxRate = 0.075
-const taxCents = Math.round(escrowCents * taxRate)
-
-// Platform buyer fee (DO NOT charge fee on tax)
-const buyerFeeCents = Math.round(escrowCents * 0.03) + 30
-
-// Final amount charged to the buyer via Stripe
-const stripeTotalCents = escrowCents + buyerFeeCents + taxCents
-
-      /* ---------- CREATE ORDER ---------- */
-
-      const { data: order, error } = await supabase
-  .from("orders")
-  .insert({
-    buyer_id: session.user.id,
-    seller_id: sellerId,
-
-    listing_id: listingId ?? listingSnapshot.id,
-    offer_id: offerId ?? null,
-
-    listing_snapshot: listingSnapshot,
-
-    status: "pending_payment",
-
-    amount_cents: stripeTotalCents,
-    currency: "usd",
-
-    // 🔒 CORE SNAPSHOT FIELDS
-    item_price_cents: itemPriceCents,
-    shipping_amount_cents: shippingCents,
-    tax_cents: taxCents, // ✅ THIS is why it was missing
-    buyer_fee_cents: buyerFeeCents,
-    escrow_amount_cents: escrowCents,
-
-    shipping_name: name,
-    shipping_line1: line1,
-    shipping_line2: line2,
-    shipping_city: city,
-    shipping_state: state,
-    shipping_postal_code: postal,
-    shipping_country: "US",
-    shipping_phone: phone,
-
-    image_url: imageUrl,
-  })
-  .select()
-  .single()
-
-
       if (error || !order) {
-  throw new Error("Failed to create order.")
-}
-
-
-      /* ---------- SAVE DEFAULT SHIPPING ---------- */
-      if (!useSaved && saveAsDefault) {
-        await supabase
-          .from("profiles")
-          .update({
-            display_name: name,
-            address_line1: line1,
-            address_line2: line2,
-            city,
-            state,
-            postal_code: postal,
-            country: "United States",
-          })
-          .eq("id", session.user.id)
+        throw new Error("Failed to create order.")
       }
-
-      /* ---------- STRIPE ---------- */
 
       const { data, error: stripeErr } =
         await supabase.functions.invoke("create-checkout-session", {
@@ -425,210 +452,135 @@ const stripeTotalCents = escrowCents + buyerFeeCents + taxCents
           },
         })
 
-      if (stripeErr) {
-  throw stripeErr
-}
-
-if (!data?.url) {
-  throw new Error("Stripe session failed to return a checkout URL.")
-}
-
+      if (stripeErr) throw stripeErr
+      if (!data?.url)
+        throw new Error("Stripe session failed to return a checkout URL.")
 
       await Linking.openURL(data.url)
     } catch (err: any) {
-  handleAppError(err, {
-    fallbackMessage:
-      err?.message ?? "Checkout failed. Please try again.",
-  })
-} finally {
-  setPaying(false)
-}
-
+      handleAppError(err, {
+        fallbackMessage:
+          err?.message ?? "Checkout failed. Please try again.",
+      })
+    } finally {
+      setPaying(false)
+    }
   }
 
-  /* ---------------- RENDER ---------------- */
+ /* ---------------- RENDER ---------------- */
 
-  return (
-    <View style={styles.screen}>
-      <AppHeader
-  title="Shipping"
-  backRoute={{
-    pathname: "/checkout",
-    params: { listingId, offerId },
-  }}
-/>
+const isShippingComplete =
+  name?.trim().length > 1 &&
+  line1?.trim().length > 4 &&
+  city?.trim().length > 1 &&
+  state?.trim().length > 1 &&
+  postal?.trim().length >= 5
 
+return (
+  <View style={styles.screen}>
+    <AppHeader
+      title="Shipping"
+      backRoute={{
+        pathname: "/checkout",
+        params: { listingId, offerId },
+      }}
+    />
 
+    <ScrollView contentContainerStyle={styles.content}>
+      <ShippingAddress
+        useSaved={useSaved}
+        setUseSaved={async (v) => {
+          // 🔁 TOGGLE ON → PRELOAD SAVED ADDRESS (DO NOT CLEAR)
+          if (v) {
+            if (hasSavedAddress) {
+              await loadSavedAddress()
+            }
+            setUseSaved(true)
+            return
+          }
 
-      <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.card}>
-          <View style={styles.toggleRow}>
-            <TouchableOpacity
-              onPress={() => {
-                if (useSaved) {
-                  setName("")
-                  setLine1("")
-                  setLine2("")
-                  setCity("")
-                  setState("")
-                  setPostal("")
-                  setPhone("")
-                  setSaveAsDefault(false)
-                }
-                setUseSaved(!useSaved)
-              }}
-            >
-              <Ionicons
-                name={useSaved ? "checkbox" : "square-outline"}
-                size={18}
-                color="#1F7A63"
-              />
-            </TouchableOpacity>
-            <Text style={styles.toggleText}>Use default shipping address</Text>
-          </View>
+          // 🔁 TOGGLE OFF → CLEAR FOR NEW ADDRESS ENTRY
+          setUseSaved(false)
+          setName("")
+          setLine1("")
+          setLine2("")
+          setCity("")
+          setState("")
+          setPostal("")
+          setPhone("")
+          setSaveAsDefault(false) // 🔥 REQUIRED: new address should not auto-overwrite profile
+        }}
+        saveAsDefault={saveAsDefault}
+        setSaveAsDefault={setSaveAsDefault}
+        name={name}
+        setName={setName}
+        line1={line1}
+        setLine1={setLine1}
+        line2={line2}
+        setLine2={setLine2}
+        city={city}
+        setCity={setCity}
+        state={state}
+        setState={setState}
+        postal={postal}
+        setPostal={setPostal}
+        phone={phone}
+        setPhone={setPhone}
+        hasSavedAddress={hasSavedAddress}
+      />
 
-          {!useSaved && (
-            <View style={styles.toggleRow}>
-              <TouchableOpacity onPress={() => setSaveAsDefault(!saveAsDefault)}>
-                <Ionicons
-                  name={saveAsDefault ? "checkbox" : "square-outline"}
-                  size={18}
-                  color="#1F7A63"
-                />
-              </TouchableOpacity>
-              <Text style={styles.toggleText}>Save as default shipping address</Text>
-            </View>
-          )}
+      <TouchableOpacity
+        style={[
+          styles.primaryBtn,
+          (!isShippingComplete || paying) && styles.primaryBtnDisabled,
+        ]}
+        onPress={payNow}
+        disabled={!isShippingComplete || paying}
+      >
+        <Text style={styles.primaryText}>
+          {paying
+            ? "Processing..."
+            : displayTotalCents
+            ? `Pay Now • $${(displayTotalCents / 100).toFixed(2)}`
+            : "Pay Now"}
+        </Text>
+      </TouchableOpacity>
 
-          <TextInput
-            style={[styles.input, useSaved && styles.disabled]}
-            editable={!useSaved}
-            placeholder="Full Name"
-            value={name}
-            onChangeText={setName}
-          />
-
-          <View style={styles.row}>
-            <TextInput
-              style={[styles.input, styles.half, useSaved && styles.disabled]}
-              editable={!useSaved}
-              placeholder="Address"
-              value={line1}
-              onChangeText={setLine1}
-            />
-            <TextInput
-              style={[styles.input, styles.half, useSaved && styles.disabled]}
-              editable={!useSaved}
-              placeholder="Apt / Unit"
-              value={line2}
-              onChangeText={setLine2}
-            />
-          </View>
-
-          <View style={styles.row}>
-            <TextInput
-              style={[styles.input, styles.half, useSaved && styles.disabled]}
-              editable={!useSaved}
-              placeholder="City"
-              value={city}
-              onChangeText={setCity}
-            />
-            <TextInput
-              style={[styles.input, styles.half, useSaved && styles.disabled]}
-              editable={!useSaved}
-              placeholder="State"
-              value={state}
-              onChangeText={setState}
-            />
-          </View>
-
-          <View style={styles.row}>
-            <TextInput
-              style={[styles.input, styles.half, useSaved && styles.disabled]}
-              editable={!useSaved}
-              placeholder="Postal Code"
-              value={postal}
-              onChangeText={setPostal}
-            />
-            <TextInput
-              style={[styles.input, styles.half, useSaved && styles.disabled]}
-              editable={!useSaved}
-              placeholder="Phone"
-              value={phone}
-              onChangeText={setPhone}
-            />
-          </View>
-        </View>
-
-        <TouchableOpacity style={styles.primaryBtn} onPress={payNow} disabled={paying}>
-          <Text style={styles.primaryText}>
-            {paying
-              ? "Processing..."
-              : displayTotalCents
-              ? `Pay Now • $${(displayTotalCents / 100).toFixed(2)}`
-              : "Pay Now"}
-          </Text>
-        </TouchableOpacity>
-
-        <Text style={styles.reassurance}>Secure checkout powered by Stripe</Text>
-      </ScrollView>
-    </View>
-  )
+      <Text style={styles.reassurance}>
+        Secure checkout powered by Stripe
+      </Text>
+    </ScrollView>
+  </View>
+)
 }
 
 /* ---------------- STYLES ---------------- */
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#EAF4EF" },
-
   content: { padding: 20 },
-  card: {
-    backgroundColor: "#fff",
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 16,
-  },
-  toggleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 12,
-  },
-  toggleText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#2E5F4F",
-  },
-  row: { flexDirection: "row", gap: 8 },
-  input: {
-    height: 46,
-    borderRadius: 10,
-    backgroundColor: "#F4FAF7",
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    borderColor: "#D6E6DE",
-    marginBottom: 10,
-    fontSize: 14,
-  },
-  half: { flex: 1 },
-  disabled: { opacity: 0.6 },
   primaryBtn: {
-    height: 50,
-    borderRadius: 25,
+    height: 54,
+    borderRadius: 28,
     backgroundColor: "#0F1E17",
     alignItems: "center",
     justifyContent: "center",
+    marginTop: 4,
   },
   primaryText: {
     color: "#fff",
     fontWeight: "900",
-    fontSize: 14,
+    fontSize: 16,
   },
   reassurance: {
     fontSize: 12,
     textAlign: "center",
     color: "#6B8F7D",
     fontWeight: "600",
-    marginTop: 10,
+    marginTop: 12,
   },
+
+  primaryBtnDisabled: {
+  opacity: 0.45,
+}
 })

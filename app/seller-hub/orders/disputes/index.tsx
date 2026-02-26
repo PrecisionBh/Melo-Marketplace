@@ -198,7 +198,7 @@ setDisputes(rows)
     return (
       <TouchableOpacity
         style={styles.card}
-        onPress={() => router.push(`/seller-hub/orders/disputes/${item.id}`)}
+        onPress={() => router.push(`/seller-hub/orders/disputes/${item.order_id}`)}
       >
         {/* IMAGE */}
         <Image source={{ uri: imageUri }} style={styles.image} />

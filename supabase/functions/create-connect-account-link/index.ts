@@ -90,6 +90,15 @@ serve(
         const account = await stripe.accounts.create({
           type: "express",
           email,
+
+          // ✅ CRITICAL: Prevent Stripe auto-payouts. Withdrawals are app-controlled.
+          settings: {
+            payouts: {
+              schedule: {
+                interval: "manual",
+              },
+            },
+          },
         })
 
         console.log("✅ STRIPE ACCOUNT CREATED:", account.id)
@@ -118,13 +127,11 @@ serve(
       console.log("🔗 CREATING STRIPE ONBOARDING LINK")
 
       const accountLink = await stripe.accountLinks.create({
-  account: stripeAccountId,
-return_url: "https://melomp-redirect.vercel.app",
-refresh_url: "https://melomp-redirect.vercel.app",
-  type: "account_onboarding",
-})
-
-
+        account: stripeAccountId,
+        return_url: "https://melomp-redirect.vercel.app",
+        refresh_url: "https://melomp-redirect.vercel.app",
+        type: "account_onboarding",
+      })
 
       console.log("🎉 ONBOARDING LINK CREATED:", accountLink.url)
 

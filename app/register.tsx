@@ -1,8 +1,9 @@
 import { Ionicons } from "@expo/vector-icons"
 import { useRouter } from "expo-router"
-import { useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import {
   Alert,
+  Animated,
   StyleSheet,
   Text,
   TextInput,
@@ -21,19 +22,90 @@ export default function RegisterScreen() {
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+
+  const glowAnim = useRef(new Animated.Value(0)).current
+  const scaleAnim = useRef(new Animated.Value(1)).current
 
   const normalizedEmail = email.trim().toLowerCase()
 
+  /* VALIDATION */
+  const passwordsMatch = useMemo(
+    () => password.length > 0 && password === confirmPassword,
+    [password, confirmPassword]
+  )
+
+  const passwordLongEnough = password.length > 6
+
   const isFormValid =
     normalizedEmail.length > 0 &&
-    password.length >= 6 &&
-    password === confirmPassword
+    passwordLongEnough &&
+    passwordsMatch
+
+  /* GLOW ANIMATION */
+  useEffect(() => {
+    if (isFormValid) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(glowAnim, {
+            toValue: 1,
+            duration: 1000,
+            useNativeDriver: false,
+          }),
+          Animated.timing(glowAnim, {
+            toValue: 0.4,
+            duration: 1000,
+            useNativeDriver: false,
+          }),
+        ])
+      ).start()
+    } else {
+      glowAnim.stopAnimation()
+      glowAnim.setValue(0)
+    }
+  }, [isFormValid])
+
+  const handlePressIn = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 0.97,
+      useNativeDriver: true,
+    }).start()
+  }
+
+  const handlePressOut = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      useNativeDriver: true,
+    }).start()
+  }
 
   const handleCreateAccount = async () => {
     if (!isFormValid || loading) return
 
     try {
       setLoading(true)
+      setErrorMessage(null)
+
+      // Check existing or banned email
+      const { data: existingProfile } = await supabase
+        .from("profiles")
+        .select("id, is_banned")
+        .eq("email", normalizedEmail)
+        .maybeSingle()
+
+      if (existingProfile?.is_banned === true) {
+        setErrorMessage(
+          "This account has been banned for not following our terms and policies."
+        )
+        return
+      }
+
+      if (existingProfile) {
+        setErrorMessage(
+          "An account with this email already exists. Please sign in instead."
+        )
+        return
+      }
 
       const { error } = await supabase.auth.signUp({
         email: normalizedEmail,
@@ -41,32 +113,27 @@ export default function RegisterScreen() {
       })
 
       if (error) {
-        // Known auth errors handled cleanly for UX
-        if (error.message?.toLowerCase().includes("already registered")) {
-          Alert.alert(
-            "Account Exists",
+        const msg = error.message?.toLowerCase() || ""
+
+        if (msg.includes("already registered")) {
+          setErrorMessage(
             "An account with this email already exists. Please sign in instead."
           )
           return
         }
 
-        if (error.message?.toLowerCase().includes("invalid email")) {
-          Alert.alert(
-            "Invalid Email",
-            "Please enter a valid email address."
-          )
+        if (msg.includes("invalid email")) {
+          setErrorMessage("Please enter a valid email address.")
           return
         }
 
         throw error
       }
 
-      // Auth trigger handles profile + wallet creation (as designed in Melo)
       Alert.alert(
         "Account Created",
         "Your account has been created successfully."
       )
-
       router.replace("/")
     } catch (err) {
       handleAppError(err, {
@@ -79,9 +146,28 @@ export default function RegisterScreen() {
     }
   }
 
+  const glowShadowRadius = glowAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 28],
+  })
+
+  const glowOpacity = glowAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 0.9],
+  })
+
+  const showMatchIndicator = confirmPassword.length > 0
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Create Account</Text>
+
+      {/* ERROR / BAN MESSAGE */}
+      {errorMessage && (
+        <View style={styles.errorBox}>
+          <Text style={styles.errorText}>{errorMessage}</Text>
+        </View>
+      )}
 
       <TextInput
         placeholder="Email"
@@ -94,16 +180,16 @@ export default function RegisterScreen() {
         keyboardType="email-address"
       />
 
+      {/* PASSWORD */}
       <View style={styles.passwordWrapper}>
         <TextInput
-          placeholder="Password"
+          placeholder="Password (min 7 characters)"
           placeholderTextColor="#999"
           value={password}
           onChangeText={setPassword}
           secureTextEntry={!showPassword}
           style={styles.passwordInput}
         />
-
         <TouchableOpacity
           onPress={() => setShowPassword(!showPassword)}
           style={styles.eyeButton}
@@ -117,6 +203,7 @@ export default function RegisterScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* CONFIRM PASSWORD */}
       <View style={styles.passwordWrapper}>
         <TextInput
           placeholder="Confirm Password"
@@ -126,9 +213,10 @@ export default function RegisterScreen() {
           secureTextEntry={!showConfirmPassword}
           style={styles.passwordInput}
         />
-
         <TouchableOpacity
-          onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+          onPress={() =>
+            setShowConfirmPassword(!showConfirmPassword)
+          }
           style={styles.eyeButton}
           disabled={loading}
         >
@@ -140,19 +228,52 @@ export default function RegisterScreen() {
         </TouchableOpacity>
       </View>
 
-      <TouchableOpacity
-        style={[
-          styles.createButton,
-          !isFormValid && styles.buttonDisabled,
-          loading && { opacity: 0.6 },
-        ]}
-        onPress={handleCreateAccount}
-        disabled={!isFormValid || loading}
-      >
-        <Text style={styles.createText}>
-          {loading ? "Creating..." : "Create Account"}
+      {/* 🔥 PASSWORD MATCH INDICATOR */}
+      {showMatchIndicator && (
+        <Text
+          style={[
+            styles.matchText,
+            passwordsMatch ? styles.matchGreen : styles.matchRed,
+          ]}
+        >
+          {passwordsMatch
+            ? "✓ Passwords match"
+            : "✗ Passwords do not match"}
         </Text>
-      </TouchableOpacity>
+      )}
+
+      {/* GLOW BUTTON */}
+      <Animated.View
+        style={[
+          styles.glowWrapper,
+          isFormValid && {
+            shadowColor: "#7FAF9B",
+            shadowOpacity: glowOpacity,
+            shadowRadius: glowShadowRadius,
+            shadowOffset: { width: 0, height: 0 },
+            elevation: 30,
+          },
+        ]}
+      >
+        <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+          <TouchableOpacity
+            style={[
+              styles.createButton,
+              isFormValid && styles.createButtonActive,
+              (!isFormValid || loading) && styles.buttonDisabled,
+            ]}
+            onPress={handleCreateAccount}
+            onPressIn={handlePressIn}
+            onPressOut={handlePressOut}
+            disabled={!isFormValid || loading}
+            activeOpacity={0.9}
+          >
+            <Text style={styles.createText}>
+              {loading ? "Creating..." : "Create Account"}
+            </Text>
+          </TouchableOpacity>
+        </Animated.View>
+      </Animated.View>
 
       <TouchableOpacity
         onPress={() => {
@@ -169,7 +290,7 @@ export default function RegisterScreen() {
   )
 }
 
-const SAGE = "#8FAF9A"
+const MELO_GREEN = "#7FAF9B"
 
 const styles = StyleSheet.create({
   container: {
@@ -182,8 +303,34 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: "700",
     color: "#222",
-    marginBottom: 30,
+    marginBottom: 20,
     textAlign: "center",
+  },
+  errorBox: {
+    backgroundColor: "#FFE5E5",
+    borderWidth: 1,
+    borderColor: "#FF4D4D",
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 14,
+  },
+  errorText: {
+    color: "#B00020",
+    fontSize: 14,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  matchText: {
+    fontSize: 13,
+    fontWeight: "600",
+    marginBottom: 12,
+    marginLeft: 4,
+  },
+  matchGreen: {
+    color: "#1F9D6A",
+  },
+  matchRed: {
+    color: "#D64545",
   },
   input: {
     borderWidth: 1,
@@ -195,7 +342,7 @@ const styles = StyleSheet.create({
   },
   passwordWrapper: {
     position: "relative",
-    marginBottom: 14,
+    marginBottom: 4,
   },
   passwordInput: {
     borderWidth: 1,
@@ -211,20 +358,28 @@ const styles = StyleSheet.create({
     top: "50%",
     transform: [{ translateY: -10 }],
   },
+  glowWrapper: {
+    width: "100%",
+    borderRadius: 16,
+  },
   createButton: {
-    backgroundColor: SAGE,
-    paddingVertical: 14,
-    borderRadius: 12,
+    width: "100%",
+    backgroundColor: "#CFCFCF",
+    paddingVertical: 18,
+    borderRadius: 14,
     alignItems: "center",
-    marginTop: 10,
+    justifyContent: "center",
+  },
+  createButtonActive: {
+    backgroundColor: "#71d5ac",
   },
   buttonDisabled: {
-    backgroundColor: "#D3DED8",
+    backgroundColor: "#CFCFCF",
   },
   createText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "600",
+    color: "#FFFFFF",
+    fontSize: 18,
+    fontWeight: "800",
   },
   backText: {
     textAlign: "center",
@@ -233,7 +388,7 @@ const styles = StyleSheet.create({
     color: "#666",
   },
   link: {
-    color: SAGE,
+    color: MELO_GREEN,
     fontWeight: "600",
   },
 })

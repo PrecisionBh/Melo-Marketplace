@@ -67,13 +67,11 @@ export default function ProQuickActions() {
         <Ionicons name="chevron-forward" size={18} color="#0F1E17" />
       </TouchableOpacity>
 
-      {/* Manage Subscription (Stripe Portal Later) */}
+      {/* Manage Subscription */}
       <TouchableOpacity
         style={styles.row}
         activeOpacity={0.7}
-        onPress={() => {
-          console.log("💳 Open Stripe Customer Portal (Future)")
-        }}
+        onPress={() => router.push("/manage-subscription")}
       >
         <View style={styles.left}>
           <View style={styles.iconWrap}>

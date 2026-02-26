@@ -20,6 +20,7 @@ export default function SignInScreen() {
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [bannedMessage, setBannedMessage] = useState<string | null>(null)
 
   // Prevent setState on unmounted component
   const mountedRef = useRef(true)
@@ -52,6 +53,7 @@ export default function SignInScreen() {
     try {
       console.log("[AUTH] Starting login process...")
       setLoading(true)
+      setBannedMessage(null) // reset any previous ban message
       Keyboard.dismiss()
 
       console.log("[AUTH] Calling supabase.auth.signInWithPassword...")
@@ -70,7 +72,6 @@ export default function SignInScreen() {
         console.log("[AUTH] Login error message:", error.message)
         const msg = (error.message || "").toLowerCase()
 
-        // Common Supabase auth UX improvements
         if (msg.includes("email not confirmed")) {
           console.log("[AUTH] Email not confirmed case triggered")
           Alert.alert(
@@ -94,9 +95,42 @@ export default function SignInScreen() {
         throw error
       }
 
+      // 🚫 HARD BAN CHECK (BLOCK BEFORE HOME NAVIGATION)
+      const userId = data?.user?.id
+
+      if (userId) {
+        console.log("[AUTH] Running post-login ban check for:", userId)
+
+        const { data: profile, error: banError } = await supabase
+          .from("profiles")
+          .select("is_banned")
+          .eq("id", userId)
+          .single()
+
+        if (banError) {
+          console.log("[AUTH] Ban check error:", banError.message)
+        }
+
+        if (profile?.is_banned === true) {
+          console.log("[AUTH] 🚫 BANNED USER DETECTED - BLOCKING LOGIN ACCESS")
+
+          // Force logout immediately
+          await supabase.auth.signOut()
+
+          // Show red inline banned message
+          if (mountedRef.current) {
+            setBannedMessage(
+              "This account has been banned for not following our terms and policies."
+            )
+            setLoading(false)
+          }
+
+          return // ⛔ STOP HERE — DO NOT NAVIGATE TO HOME
+        }
+      }
+
       console.log("[AUTH] Login SUCCESS - clearing inputs")
 
-      // Optional: clear inputs on success
       if (mountedRef.current) {
         setEmail("")
         setPassword("")
@@ -104,7 +138,7 @@ export default function SignInScreen() {
         console.log("[AUTH] Component unmounted before clearing inputs")
       }
 
-      console.log("[AUTH] Navigating to /home with router.replace")
+      console.log("[AUTH] User cleared ban check — navigating to /home")
       router.replace("/home")
     } catch (err) {
       console.log("[AUTH] CATCH BLOCK TRIGGERED")
@@ -133,6 +167,13 @@ export default function SignInScreen() {
       {/* CARD */}
       <View style={styles.card}>
         <Text style={styles.title}>Sign In</Text>
+
+        {/* 🚫 RED BANNED MESSAGE */}
+        {bannedMessage && (
+          <View style={styles.bannedBox}>
+            <Text style={styles.bannedText}>{bannedMessage}</Text>
+          </View>
+        )}
 
         <TextInput
           style={styles.input}
@@ -175,7 +216,6 @@ export default function SignInScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* FORGOT PASSWORD LINK */}
         <TouchableOpacity
           onPress={() => {
             console.log("[AUTH] Navigating to forgot password")
@@ -279,9 +319,26 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: "800",
-    marginBottom: 20,
+    marginBottom: 12,
     textAlign: "center",
     color: "#2E5F4F",
+  },
+
+  // 🔴 BANNED MESSAGE STYLES
+  bannedBox: {
+    backgroundColor: "#FFE5E5",
+    borderWidth: 1,
+    borderColor: "#FF4D4D",
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 14,
+  },
+
+  bannedText: {
+    color: "#B00020",
+    fontSize: 14,
+    fontWeight: "700",
+    textAlign: "center",
   },
 
   input: {

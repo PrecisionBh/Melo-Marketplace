@@ -59,7 +59,8 @@ async function markOrderPaid(params: {
       buyer_id,
       paid_at,
       escrow_funded_at,
-      wallet_credited
+      wallet_credited,
+      quantity
     `)
     .eq("id", orderId)
     .single()
@@ -173,15 +174,100 @@ async function markOrderPaid(params: {
   }
 
   if (resolvedListingId) {
+    const purchasedQty =
+      typeof (order as any).quantity === "number" && (order as any).quantity > 0
+        ? (order as any).quantity
+        : 1
+
+    const { data: listing, error: listingErr } = await supabase
+      .from("listings")
+      .select("id, quantity_available")
+      .eq("id", resolvedListingId)
+      .single()
+
+    if (listingErr || !listing) {
+      console.error("❌ Failed to load listing for quantity update", {
+        orderId,
+        resolvedListingId,
+        listingErr,
+      })
+      return json(200, { received: true })
+    }
+
+    const currentQty =
+      typeof (listing as any).quantity_available === "number"
+        ? (listing as any).quantity_available
+        : 1
+
+    const nextQtyRaw = currentQty - purchasedQty
+    const nextQty = nextQtyRaw <= 0 ? 0 : nextQtyRaw
+
     await supabase
       .from("listings")
       .update({
-        is_sold: true,
-        status: "inactive",
+        quantity_available: nextQty,
+        is_sold: nextQty <= 0,
+        status: nextQty <= 0 ? "inactive" : "active",
         updated_at: now,
       })
       .eq("id", resolvedListingId)
   }
+  // 🔔 Send notifications (buyer + seller)
+try {
+  console.log("🔔 Notification Debug:", {
+    buyer_id: order.buyer_id,
+    seller_id: order.seller_id,
+    order_id: orderId,
+  })
+
+  const nowIso = now
+
+  // If buyer and seller are the same (dev testing), send ONE notification
+  const isSelfPurchase = order.buyer_id === order.seller_id
+
+  if (order.buyer_id) {
+    const { error: notifError } = await supabase
+      .from("notifications")
+      .insert({
+        user_id: order.buyer_id,
+        type: "order",
+        title: isSelfPurchase
+          ? "Test Order Paid"
+          : "Order Successful",
+        body: isSelfPurchase
+          ? "Your test order was processed successfully."
+          : "Your order was successful and is now secured in escrow.",
+        data: { route: `/buyer-hub/orders/${orderId}` },
+        read: false,
+        created_at: nowIso,
+      })
+
+    if (notifError) {
+      console.error("❌ Buyer notification failed:", notifError)
+    }
+  }
+
+  // Only send seller notification if different user
+  if (order.seller_id && order.seller_id !== order.buyer_id) {
+    const { error: sellerNotifError } = await supabase
+      .from("notifications")
+      .insert({
+        user_id: order.seller_id,
+        type: "order",
+        title: "New Order Paid",
+        body: "A buyer has paid. Prepare the order for shipment.",
+        data: { route: `/seller-hub/orders/${orderId}` },
+        read: false,
+        created_at: nowIso,
+      })
+
+    if (sellerNotifError) {
+      console.error("❌ Seller notification failed:", sellerNotifError)
+    }
+  }
+} catch (notifErr) {
+  console.error("❌ Notification insert failed:", notifErr)
+}
 
   return json(200, { received: true })
 }
@@ -243,7 +329,6 @@ serve(async (req) => {
     return new Response("Invalid signature", { status: 400 })
   }
 
-  // ⭐⭐⭐ ONLY CHANGE IN WHOLE FILE (supports Pro + Orders)
   if (
     event.type === "checkout.session.completed" ||
     event.type === "checkout.session.async_payment_succeeded"
@@ -255,7 +340,6 @@ serve(async (req) => {
     const userId = metadata.user_id
     const type = metadata.type
 
-    // 🌟 Melo Pro subscription flow (NEW)
     if (type === "melo_pro_subscription" && userId) {
       return await activateMeloPro({
         userId,
@@ -264,7 +348,6 @@ serve(async (req) => {
       })
     }
 
-    // 🛒 Existing marketplace order flow (UNCHANGED behavior)
     if (orderId) {
       return await markOrderPaid({
         orderId,
@@ -274,7 +357,6 @@ serve(async (req) => {
       })
     }
 
-    // Safety fallback (prevents crashes)
     return json(200, { received: true })
   }
 
@@ -291,7 +373,6 @@ serve(async (req) => {
     })
   }
 
-  // 💸 ADDED: Handle ACH & Instant payout finalization (wallet accuracy fix)
   if (event.type === "payout.paid") {
     const payout = event.data.object as Stripe.Payout
     const stripePayoutId = payout.id
@@ -310,6 +391,40 @@ serve(async (req) => {
       })
       .eq("stripe_payout_id", stripePayoutId)
 
+    return json(200, { received: true })
+  }
+
+  if (event.type === "customer.subscription.updated") {
+    const subscription = event.data.object as Stripe.Subscription
+
+    if (subscription.cancel_at_period_end === true) {
+      console.log("📅 Melo Pro scheduled to cancel at period end:", subscription.id)
+      return json(200, { received: true })
+    }
+  }
+
+  if (event.type === "customer.subscription.deleted") {
+    const subscription = event.data.object as Stripe.Subscription
+    const stripeCustomerId = subscription.customer as string
+
+    console.log("🚫 Melo Pro subscription fully canceled:", subscription.id)
+
+    const { error } = await supabase
+      .from("profiles")
+      .update({
+        is_pro: false,
+        boosts_remaining: 0,
+        stripe_subscription_id: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("stripe_customer_id", stripeCustomerId)
+
+    if (error) {
+      console.error("❌ Failed to deactivate Melo Pro:", error)
+      return json(500, { error: "Failed to deactivate Melo Pro" })
+    }
+
+    console.log("✅ Melo Pro access revoked")
     return json(200, { received: true })
   }
 

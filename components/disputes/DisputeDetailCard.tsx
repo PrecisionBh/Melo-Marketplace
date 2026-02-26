@@ -1,12 +1,12 @@
 import { useFocusEffect } from "expo-router"
 import { useCallback, useState } from "react"
 import {
-    ActivityIndicator,
-    Image,
-    ScrollView,
-    StyleSheet,
-    Text,
-    View,
+  ActivityIndicator,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from "react-native"
 
 import { useAuth } from "@/context/AuthContext"
@@ -143,22 +143,29 @@ export default function DisputeDetailCard({
       setLoading(true)
 
       const { data, error } = await supabase
-        .from("disputes")
-        .select("*")
-        .eq("id", disputeId)
-        .single()
+  .from("disputes")
+  .select("*")
+  .eq("order_id", disputeId)
+  .maybeSingle() // 🔥 FIX: prevents PGRST116 crash
 
       if (error) throw error
 
-      // 🔒 Role security gate (MELO CRITICAL)
-      if (
-        (role === "buyer" && data.buyer_id !== user.id) ||
-        (role === "seller" && data.seller_id !== user.id)
-      ) {
-        return
-      }
+// 🛑 CRITICAL: handle null safely (maybeSingle can return null)
+if (!data) {
+  setDispute(null)
+  return
+}
 
-      setDispute(data)
+// 🔒 Role security gate (MELO CRITICAL)
+if (
+  (role === "buyer" && data.buyer_id !== user.id) ||
+  (role === "seller" && data.seller_id !== user.id)
+) {
+  setDispute(null)
+  return
+}
+
+setDispute(data)
     } catch (err) {
       handleAppError(err, {
         fallbackMessage: "Failed to load dispute details.",

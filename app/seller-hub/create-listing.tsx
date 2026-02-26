@@ -119,7 +119,7 @@ export default function CreateListingScreen() {
   const [checkingPro, setCheckingPro] = useState(true)
   const [isPro, setIsPro] = useState<boolean>(false)
 
-  /* ---------------- CREATE LISTING (RPC BOOST SAFE + UI SYNC) ---------------- */
+  /* ---------------- CREATE LISTING (FIXED QUANTITY + DB SAFE) ---------------- */
   const handleCreateListing = async () => {
     if (!session?.user) return
     if (submitting) return
@@ -130,14 +130,18 @@ export default function CreateListingScreen() {
       const parsedPrice = parseFloat(price)
       const parsedMinOffer = minOffer ? parseFloat(minOffer) : null
       const parsedShippingPrice = shippingPrice ? parseFloat(shippingPrice) : 0
-      const parsedQuantity = parseInt(quantity || "1", 10)
+
+      // 🔒 HARD CLAMP: quantity must ALWAYS be >= 1
+      const rawQty = parseInt(quantity, 10)
+      const safeQuantity = isPro
+        ? Math.max(1, Number.isFinite(rawQty) ? rawQty : 1)
+        : 1
 
       if (isNaN(parsedPrice)) {
         Alert.alert("Invalid Price", "Please enter a valid price.")
         return
       }
 
-      // 1️⃣ Create listing FIRST (unboosted by default)
       const { data, error } = await supabase
         .from("listings")
         .insert({
@@ -153,14 +157,16 @@ export default function CreateListingScreen() {
           shipping_type: shippingType,
           shipping_price: parsedShippingPrice,
           image_urls: images,
-          quantity: isPro ? parsedQuantity : 1,
+
+          // 🔥 CRITICAL: BOTH columns (min 1, never null)
+          quantity: safeQuantity,
+          quantity_available: safeQuantity,
         })
         .select("id")
         .single()
 
       if (error) throw error
 
-      // 2️⃣ If user toggled boost → call RPC (SOURCE OF TRUTH)
       if (isPro && isBoosted && data?.id) {
         const { error: boostError } = await supabase.rpc("boost_listing", {
           listing_id: data.id,
@@ -174,7 +180,6 @@ export default function CreateListingScreen() {
             "Your listing was created but the boost could not be applied."
           )
         } else {
-          // 🔥 NEW: Sync UI boost count with DB (CRITICAL FIX)
           const { data: updatedProfile } = await supabase
             .from("profiles")
             .select("boosts_remaining")

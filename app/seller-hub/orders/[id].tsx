@@ -1,7 +1,16 @@
 import { notify } from "@/lib/notifications/notify"
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { useEffect, useState } from "react"
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, View } from "react-native"
+import {
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native"
 
 import AppHeader from "@/components/app-header"
 import { useAuth } from "@/context/AuthContext"
@@ -97,6 +106,8 @@ export default function SellerOrderDetailScreen() {
   const [saving, setSaving] = useState(false)
 
   const [confirmReturnVisible, setConfirmReturnVisible] = useState(false)
+  // 🆕 ACTIVE DISPUTE (non-return + return disputes)
+const [activeDispute, setActiveDispute] = useState<any>(null)
 
   useEffect(() => {
     if (id) loadOrder()
@@ -151,8 +162,17 @@ export default function SellerOrderDetailScreen() {
       }
 
       setOrder(data)
-      setCarrier(data.carrier ?? "")
-      setTracking(data.tracking_number ?? "")
+setCarrier(data.carrier ?? "")
+setTracking(data.tracking_number ?? "")
+
+// 🧠 MELO CRITICAL: check if ANY dispute exists for this order
+const { data: disputeData } = await supabase
+  .from("disputes")
+  .select("id, opened_by, seller_responded_at, resolved_at")
+  .eq("order_id", data.id)
+  .maybeSingle()
+
+setActiveDispute(disputeData ?? null)
     } catch (err) {
       handleAppError(err, {
         fallbackMessage: "Failed to load order details.",
@@ -324,6 +344,22 @@ const showShippingAddress =
   const showDispute =
     isReturnStarted && !!order.return_tracking_number && !order.return_received
 
+    /* 🆕 NON-RETURN DISPUTE LOGIC (BUYER ISSUE FLOW) */
+const hasActiveDispute = !!activeDispute && !activeDispute?.resolved_at
+const buyerOpenedDispute = activeDispute?.opened_by === "buyer"
+const sellerAlreadyResponded = !!activeDispute?.seller_responded_at
+
+// 🔥 Show respond button ONLY if buyer opened dispute and seller hasn't responded
+const showRespondToDispute =
+  hasActiveDispute &&
+  buyerOpenedDispute &&
+  !sellerAlreadyResponded
+
+// 👁️ Show see dispute if already responded OR seller opened it
+const showSeeDispute =
+  hasActiveDispute &&
+  (sellerAlreadyResponded || activeDispute?.opened_by === "seller")
+
   /* ---------------- RENDER ---------------- */
 
 return (
@@ -335,7 +371,7 @@ return (
       <SellerOrderHeaderCard
         imageUrl={order.image_url}
         orderId={order.public_order_number ?? order.id}
-        title={"Order"} // placeholder if your SellerOrderHeaderCard expects title; update if your snapshot exists
+        title={"Order"}
         status={order.status}
         isDisputed={isReturnProcessing}
         hasReturnTracking={hasReturnTracking}
@@ -399,7 +435,77 @@ return (
       )}
 
       <View style={styles.content}>
-        {/* RECEIPT (SELLER VIEW) */}
+        {/* 🚚 SHIPPING STATE (ONLY WHEN ORDER NEEDS TO BE SHIPPED) */}
+        {showAddTracking && !isRefunded && (
+          <>
+            {/* TRACKING INPUT */}
+            <View style={styles.trackingCard}>
+              <SellerMessage
+                variant="info"
+                title="Ship This Order"
+                message="Select the carrier and enter tracking to mark this order as shipped."
+              />
+
+              {/* Carrier Selection Pills */}
+              <View style={styles.field}>
+                <View style={styles.carrierRow}>
+                  {["USPS", "UPS", "FedEx", "DHL"].map((c) => (
+                    <TouchableOpacity
+                      key={c}
+                      style={[
+                        styles.carrierPill,
+                        carrier === c && styles.carrierPillActive,
+                      ]}
+                      onPress={() => setCarrier(c)}
+                    >
+                      <Text
+                        style={[
+                          styles.carrierText,
+                          carrier === c && styles.carrierTextActive,
+                        ]}
+                      >
+                        {c}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              {/* Tracking Number Input */}
+              <View style={styles.field}>
+                <Text style={styles.label}>Tracking Number</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Enter tracking number"
+                  value={tracking}
+                  onChangeText={setTracking}
+                  autoCapitalize="characters"
+                />
+              </View>
+            </View>
+
+            {/* 🔥 SINGLE ACTION BAR (SHIP STATE ONLY) */}
+            <SellerOrderActionButtons
+              showAddTracking={true}
+              showTrackShipment={false}
+              showReturnSection={false}
+              hasReturnTracking={false}
+              showDispute={false}
+              showRespondToDispute={false}
+              showSeeDispute={false}
+              trackingUrl={null}
+              returnTrackingUrl={null}
+              processing={saving}
+              onAddTracking={submitTracking}
+              onOpenReturnDetails={() => {}}
+              onDispute={() => {}}
+              onRespondToDispute={() => {}}
+              onSeeDispute={() => {}}
+            />
+          </>
+        )}
+
+        {/* RECEIPT (HIDDEN DURING RETURN FLOW & REFUNDS) */}
         {!isInReturnFlow && !isRefunded && (
           <SellerReceiptCard
             itemPrice={itemPrice}
@@ -408,47 +514,47 @@ return (
           />
         )}
 
-        {/* ACTIONS (BUTTONS) */}
-        {!isRefunded && (
+        {/* 🧠 MASTER ACTION BAR (ALL NON-SHIPPING STATES INCLUDING RETURNS + DISPUTES) */}
+        {!isRefunded && !showAddTracking && (
           <SellerOrderActionButtons
-            showAddTracking={showAddTracking}
-            showTrackShipment={showTrackShipment}
+            showAddTracking={false}
+            showTrackShipment={showTrackShipment && !showReturnSection}
             showReturnSection={showReturnSection}
             hasReturnTracking={hasReturnTracking}
             showDispute={showDispute}
+            showRespondToDispute={showRespondToDispute}
+            showSeeDispute={showSeeDispute}
             trackingUrl={order.tracking_url ?? null}
             returnTrackingUrl={order.return_tracking_url ?? null}
             processing={saving}
             onAddTracking={submitTracking}
-            onOpenReturnDetails={() => {
-              router.push({
-                pathname: "/seller-hub/orders/returns",
-                params: { id: order.id },
-              } as any)
-            }}
+
+            /* 🔥 CRITICAL FIX: THIS NOW OPENS YOUR CONFIRM RETURN MODAL */
+            onOpenReturnDetails={handleCompleteReturn}
+
             onDispute={() =>
               router.push({
                 pathname: "/seller-hub/orders/disputes/dispute-issue",
                 params: { id: order.id },
               })
             }
+
+            onRespondToDispute={() =>
+              router.push({
+                pathname: "/seller-hub/orders/[id]/dispute-issue",
+                params: { id: order.id },
+              })
+            }
+
+            onSeeDispute={() =>
+              router.push(`/seller-hub/orders/disputes/${order.id}`)
+            }
           />
         )}
       </View>
     </ScrollView>
 
-    {/* ORIGINAL RETURN ACTIONS (COMPLETE RETURN) */}
-    {showDispute && !isRefunded && (
-      <View style={styles.actionBar}>
-        <SellerMessage
-          variant="neutral"
-          title="Return Action Required"
-          message="Once the return is delivered to you, confirm receipt to issue the refund. If there is an issue, file a dispute."
-        />
-      </View>
-    )}
-
-    {/* MODAL: CONFIRM RETURN RECEIVED */}
+    {/* MODAL: CONFIRM RETURN RECEIVED (UNCHANGED) */}
     <ConfirmReturnReceivedModal
       visible={confirmReturnVisible}
       processing={saving}
@@ -471,11 +577,50 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     marginTop: 8,
   },
-  actionBar: {
-    position: "absolute",
-    bottom: 85,
-    left: 0,
-    right: 0,
-    paddingHorizontal: 18,
+
+  /* 📦 Tracking UI */
+  trackingCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 16,
+    marginTop: 12,
+    marginBottom: 12,
+  },
+  field: {
+    marginTop: 12,
+  },
+  label: {
+    fontSize: 13,
+    fontWeight: "600",
+    marginBottom: 6,
+    color: "#1E1E1E",
+  },
+  input: {
+    backgroundColor: "#F5F7F6",
+    borderRadius: 10,
+    padding: 12,
+    fontSize: 14,
+  },
+  carrierRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  carrierPill: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    backgroundColor: "#F1F3F2",
+  },
+  carrierPillActive: {
+    backgroundColor: "#7FAF9B",
+  },
+  carrierText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#333",
+  },
+  carrierTextActive: {
+    color: "#FFFFFF",
   },
 })

@@ -11,6 +11,7 @@ type Props = {
   showCancelOrder: boolean
   showDispute: boolean
   showLeaveReview: boolean
+  showSeeDispute?: boolean // 🔥 NEW (optional & safe)
 
   /* DATA */
   trackingUrl: string | null
@@ -24,6 +25,7 @@ type Props = {
   onCancelOrder: () => void
   onDispute: () => void
   onLeaveReview: () => void
+  onSeeDispute?: () => void // 🔥 NEW
 }
 
 export default function OrderActionButtons({
@@ -35,6 +37,7 @@ export default function OrderActionButtons({
   showCancelOrder,
   showDispute,
   showLeaveReview,
+  showSeeDispute, // 🔥 NEW
   trackingUrl,
   processing,
   onConfirmDelivery,
@@ -44,6 +47,7 @@ export default function OrderActionButtons({
   onCancelOrder,
   onDispute,
   onLeaveReview,
+  onSeeDispute, // 🔥 NEW
 }: Props) {
   const handleTrack = () => {
     if (!trackingUrl) return
@@ -168,6 +172,17 @@ export default function OrderActionButtons({
         <TouchableOpacity style={styles.disputeBtn} onPress={onDispute}>
           <Ionicons name="alert-circle-outline" size={18} color="#fff" />
           <Text style={styles.disputeText}>Report an Issue</Text>
+        </TouchableOpacity>
+      )}
+
+      {/* 🔥 SEE DISPUTE (BLACK & WHITE — LOCKED STATE AFTER DISPUTE FILED) */}
+      {showSeeDispute && onSeeDispute && (
+        <TouchableOpacity
+          style={styles.seeDisputeBtn}
+          onPress={onSeeDispute}
+        >
+          <Ionicons name="document-text-outline" size={18} color="#000" />
+          <Text style={styles.seeDisputeText}>See Dispute</Text>
         </TouchableOpacity>
       )}
     </View>
@@ -313,5 +328,24 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     lineHeight: 18,
     textAlign: "center",
+  },
+
+  /* 🔥 NEW: BLACK & WHITE DISPUTE BUTTON */
+  seeDisputeBtn: {
+    marginTop: 14,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 2,
+    borderColor: "#000000",
+    height: 48,
+    borderRadius: 24,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  seeDisputeText: {
+    color: "#000000",
+    fontWeight: "900",
+    fontSize: 15,
   },
 })

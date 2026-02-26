@@ -32,9 +32,6 @@ export default function CheckoutSuccessScreen() {
   const [verifying, setVerifying] = useState(true)
   const [orderNotFound, setOrderNotFound] = useState(false)
 
-  // Prevent double inventory updates
-  const inventoryFinalizedRef = useRef(false)
-
   /* ---------------- CONFETTI ---------------- */
   const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window")
   const confettiCount = 26
@@ -152,74 +149,6 @@ export default function CheckoutSuccessScreen() {
     }
 
     verifyOrder()
-  }, [orderId])
-
-  /* ---------------- 🔥 FINALIZE INVENTORY (CRITICAL) ---------------- */
-  useEffect(() => {
-    const finalizeInventory = async () => {
-      try {
-        if (!orderId) return
-        if (inventoryFinalizedRef.current) return
-
-        inventoryFinalizedRef.current = true
-
-        // Get order + snapshot
-        const { data: order, error: orderError } = await supabase
-          .from("orders")
-          .select("id, listing_id, listing_snapshot")
-          .eq("id", orderId)
-          .single()
-
-        if (orderError || !order) return
-
-        const listingId =
-          order.listing_id ?? order.listing_snapshot?.id
-
-        if (!listingId) return
-
-        // Fetch latest inventory (live DB, not snapshot)
-        const { data: listing, error: listingError } = await supabase
-          .from("listings")
-          .select("id, quantity, is_sold")
-          .eq("id", listingId)
-          .single()
-
-        if (listingError || !listing) return
-
-        // Already sold = do nothing (idempotent safety)
-        if (listing.is_sold) return
-
-        // Default quantity = 1 (backwards compatible)
-        let purchasedQty = 1
-
-        // Future-proof: if you later store quantity in snapshot
-        if (
-          order.listing_snapshot &&
-          typeof order.listing_snapshot === "object" &&
-          "quantity" in order.listing_snapshot
-        ) {
-          const q = Number(order.listing_snapshot.quantity)
-          if (!isNaN(q) && q > 0) {
-            purchasedQty = q
-          }
-        }
-
-        const currentQty = Number(listing.quantity ?? 1)
-        const newQty = Math.max(0, currentQty - purchasedQty)
-
-        await supabase
-          .from("listings")
-          .update({
-            quantity: newQty,
-            is_sold: newQty === 0,
-          })
-          .eq("id", listingId)
-      } catch (err) {
-        console.warn("Inventory finalization failed:", err)
-      }
-    }
-
-    finalizeInventory()
   }, [orderId])
 
   /* ---------------- LOADING ---------------- */

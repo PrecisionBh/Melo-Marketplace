@@ -35,10 +35,9 @@ serve(async (req) => {
       )
     }
 
-    // ✅ Deep links back into Expo app
-    const successUrl = `melomp://checkout/success?order_id=${order_id}`
-    const cancelUrl = `melomp://checkout/success?order_id=${order_id}`
-
+    // ✅ Deep links back into Expo app (FIXED: orderId param for router)
+    const successUrl = `melomp://checkout/success?orderId=${order_id}`
+    const cancelUrl = `melomp://checkout/cancel?orderId=${order_id}`
 
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
@@ -58,8 +57,17 @@ serve(async (req) => {
         },
       ],
 
+      // 🔥 KEEP existing metadata (unchanged)
       metadata: {
         order_id,
+      },
+
+      // 🚨 CRITICAL FIX: ensures webhook can read order_id from PaymentIntent
+      // This does NOT change checkout behavior, only restores downstream logic (notifications, quantity, etc.)
+      payment_intent_data: {
+        metadata: {
+          order_id,
+        },
       },
 
       success_url: successUrl,
