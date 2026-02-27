@@ -74,14 +74,12 @@ export default function SellerDisputeIssue() {
         return
       }
 
-      // 🔒 Security: Only seller can respond
       if (data.seller_id !== user.id) {
         Alert.alert("Access denied")
         router.back()
         return
       }
 
-      // 🔒 Block if already resolved/closed
       if (
         data.status?.startsWith("resolved") ||
         data.status === "closed"
@@ -105,58 +103,93 @@ export default function SellerDisputeIssue() {
     }
   }
 
-  /* ---------------- IMAGE PICKER ---------------- */
+  /* ---------------- IMAGE PICKER (MATCHES WORKING UPLOADER) ---------------- */
   const pickImage = async () => {
     try {
-      const res = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        quality: 0.8,
-        allowsEditing: false,
+      const MAX = 7
+
+      if (images.length >= MAX) {
+        Alert.alert("Limit reached", `You can upload up to ${MAX} photos.`)
+        return
+      }
+
+      const remainingSlots = MAX - images.length
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        quality: 0.9,
+        allowsMultipleSelection: true,
+        selectionLimit: remainingSlots,
       })
 
-      if (!res.canceled && res.assets && res.assets[0]?.uri) {
-        setImages((prev) => [...prev, res.assets[0].uri])
+      if (!result.canceled && result.assets?.length > 0) {
+        const newUris = result.assets.map((asset) => asset.uri)
+
+        setImages((prev) => {
+          const combined = [...prev, ...newUris]
+          return combined.slice(0, MAX)
+        })
       }
     } catch (err) {
       handleAppError(err, {
-        fallbackMessage: "Failed to open image picker.",
+        context: "seller_dispute_image_picker",
+        fallbackMessage: "Failed to select images. Please try again.",
       })
     }
   }
 
-  /* ---------------- UPLOAD SELLER EVIDENCE ---------------- */
+  const removeImage = (uri: string) => {
+    setImages((prev) => prev.filter((img) => img !== uri))
+  }
+
+  /* ---------------- UPLOAD SELLER EVIDENCE (FAIL-SAFE - NO SILENT SUCCESS) ---------------- */
   const uploadImages = async (): Promise<string[]> => {
     if (!dispute || images.length === 0) return []
 
     const uploaded: string[] = []
 
-    for (const uri of images) {
+    for (let i = 0; i < images.length; i++) {
+      const uri = images[i]
+
       try {
-        const fileName = `${dispute.id}/seller-${Date.now()}.jpg`
-        const response = await fetch(uri)
-        const blob = await response.blob()
+        const extMatch = uri.split(".").pop()?.toLowerCase()
+        const ext = extMatch && extMatch.length <= 4 ? extMatch : "jpg"
+
+        const fileName = `${dispute.id}/seller-${Date.now()}-${i}.${ext}`
+
+        const fetchRes = await fetch(uri)
+        if (!fetchRes.ok) {
+          throw new Error("Failed to read local image file")
+        }
+
+        const blob = await fetchRes.blob()
 
         const { error } = await supabase.storage
           .from("dispute-images")
           .upload(fileName, blob, {
-            contentType: "image/jpeg",
+            contentType: `image/${ext === "jpg" ? "jpeg" : ext}`,
             upsert: false,
           })
 
-        if (error) throw error
+        if (error) {
+          console.error("Supabase storage error:", error)
+          throw error
+        }
 
         const { data } = supabase.storage
           .from("dispute-images")
           .getPublicUrl(fileName)
 
-        if (data?.publicUrl) {
-          uploaded.push(data.publicUrl)
+        if (!data?.publicUrl) {
+          throw new Error("Failed to generate public URL")
         }
+
+        uploaded.push(data.publicUrl)
       } catch (err) {
-        console.error("Image upload error:", err)
-        handleAppError(err, {
-          fallbackMessage: "One of the images failed to upload.",
-        })
+        console.error("🚨 SELLER DISPUTE IMAGE UPLOAD FAILED:", err)
+        throw new Error(
+          "Image upload failed due to network/storage error. Please check your connection and try again."
+        )
       }
     }
 
@@ -191,14 +224,13 @@ export default function SellerDisputeIssue() {
           seller_response: response.trim(),
           seller_responded_at: new Date().toISOString(),
           seller_evidence_urls: mergedEvidence,
-          status: "under_review", // unified lifecycle
+          status: "under_review",
         })
         .eq("id", dispute.id)
         .eq("seller_id", user.id)
 
       if (error) throw error
 
-      // 🔔 Notify buyer (non-blocking)
       try {
         await notify({
           userId: dispute.buyer_id,
@@ -281,17 +313,42 @@ export default function SellerDisputeIssue() {
             onChangeText={setResponse}
           />
 
-          <TouchableOpacity style={styles.imageBtn} onPress={pickImage}>
-            <Text style={styles.imageText}>
-              Add Images / Screenshots
-            </Text>
-          </TouchableOpacity>
+          {/* IMAGE UPLOADER (MATCHES YOUR WORKING COMPONENT UX) */}
+          <Text style={styles.sectionTitle}>
+            Evidence Photos (Optional)
+          </Text>
 
-          <View style={styles.imageRow}>
-            {images.map((uri) => (
-              <Image key={uri} source={{ uri }} style={styles.thumb} />
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.uploadRow}
+          >
+            {images.map((uri, index) => (
+              <View key={`${uri}-${index}`} style={styles.squareWrapper}>
+                <Image source={{ uri }} style={styles.squareImage} />
+
+                <TouchableOpacity
+                  style={styles.deleteButton}
+                  onPress={() => removeImage(uri)}
+                >
+                  <Text style={styles.deleteText}>×</Text>
+                </TouchableOpacity>
+              </View>
             ))}
-          </View>
+
+            {Array.from({
+              length: Math.max(7 - images.length, 0),
+            }).map((_, i) => (
+              <TouchableOpacity
+                key={`empty-${i}`}
+                style={styles.addSquare}
+                onPress={pickImage}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.addPlus}>＋</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
 
           <TouchableOpacity
             style={styles.submitBtn}
@@ -349,35 +406,58 @@ const styles = StyleSheet.create({
     minHeight: 120,
     textAlignVertical: "top",
   },
-  imageBtn: {
-    marginTop: 12,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: "#1F7A63",
-    borderRadius: 12,
-  },
-  imageText: {
-    textAlign: "center",
-    fontWeight: "800",
-    color: "#1F7A63",
-  },
-  imageRow: {
+  uploadRow: {
     flexDirection: "row",
-    flexWrap: "wrap",
-    marginTop: 10,
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 8,
+  },
+  squareWrapper: {
+    width: 120,
+    height: 120,
+    position: "relative",
+  },
+  squareImage: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 10,
+  },
+  addSquare: {
+    width: 120,
+    height: 120,
+    borderWidth: 1,
+    borderColor: "#CFE3DA",
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 10,
+  },
+  addPlus: {
+    fontSize: 28,
+    color: "#7FAF9B",
+    fontWeight: "900",
+  },
+  deleteButton: {
+    position: "absolute",
+    top: 6,
+    right: 6,
+    backgroundColor: "#E5484D",
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  deleteText: {
+    color: "#fff",
+    fontWeight: "900",
+    fontSize: 16,
   },
   image: {
     width: 120,
     height: 120,
     borderRadius: 10,
     marginRight: 8,
-  },
-  thumb: {
-    width: 80,
-    height: 80,
-    borderRadius: 8,
-    marginRight: 8,
-    marginTop: 8,
   },
   submitBtn: {
     marginTop: 20,

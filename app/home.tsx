@@ -53,6 +53,8 @@ type ListingRow = {
   user_id?: string
   is_boosted?: boolean | null
   boost_expires_at?: string | null
+  is_mega_boost?: boolean | null
+  mega_boost_expires_at?: string | null
 }
 
 /* ---------------- SCREEN ---------------- */
@@ -75,6 +77,8 @@ export default function HomeScreen() {
     useState(false)
 
   const [menuOpen, setMenuOpen] = useState(false)
+  const [isPro, setIsPro] = useState(false)
+  const [megaBoostListings, setMegaBoostListings] = useState<Listing[]>([])
 
   /* ---------------- LOAD DATA ---------------- */
 
@@ -134,7 +138,7 @@ useEffect(() => {
     }, [])
   )
 
-  const loadListings = async () => {
+    const loadListings = async () => {
     setLoading(true)
 
     try {
@@ -152,13 +156,29 @@ useEffect(() => {
 
         followedSellerIds =
           followsData?.map((f: any) => f.following_id) ?? []
+
+        // ✅ FIX: is_pro fetch MUST be inside if (user)
+        const { data: proData, error: proErr } = await supabase
+          .from("profiles")
+          .select("is_pro")
+          .eq("id", user.id)
+          .maybeSingle()
+
+        if (proErr) {
+          console.log("[HOME] is_pro fetch error:", proErr.message)
+        }
+
+        setIsPro(proData?.is_pro === true)
+      } else {
+        // ✅ IMPORTANT: prevent stale pro state + null user crash
+        setIsPro(false)
       }
 
       const { data, error } = await supabase
         .from("listings")
         .select(
-          "id,title,description,brand,price,category,condition,image_urls,allow_offers,shipping_type,is_sold,is_removed,user_id,is_boosted,boost_expires_at"
-        )
+  "id,title,description,brand,price,category,condition,image_urls,allow_offers,shipping_type,is_sold,is_removed,user_id,is_boosted,boost_expires_at,is_mega_boost,mega_boost_expires_at"
+)
         .eq("status", "active")
         .eq("is_sold", false)
         .eq("is_removed", false)
@@ -177,6 +197,14 @@ useEffect(() => {
       )
 
       const now = new Date().toISOString()
+
+      // 👑 ACTIVE MEGA BOOSTS (highest tier visibility)
+const activeMegaBoostRows = validRows.filter(
+  (l) =>
+    l.is_mega_boost === true &&
+    l.mega_boost_expires_at &&
+    l.mega_boost_expires_at > now
+)
 
       const boostedRows = validRows.filter(
         (l) =>
@@ -255,14 +283,26 @@ useEffect(() => {
         title: l.title,
         price: Number(l.price),
         category: l.category ?? "",
-        // IMPORTANT: do NOT pass nullable condition to Listing type
-        // ListingCard type does not include condition, so we omit it
         image_url: l.image_urls?.[0] ?? null,
         allow_offers: l.allow_offers ?? false,
         shipping_type: l.shipping_type ?? null,
       }))
 
       setListings(normalized)
+
+      // 👑 Normalize mega boost listings (separate pool for grid injection)
+const normalizedMegaBoosts: Listing[] = activeMegaBoostRows.map((l) => ({
+  id: l.id,
+  title: l.title,
+  price: Number(l.price),
+  category: l.category ?? "",
+  image_url: l.image_urls?.[0] ?? null,
+  allow_offers: l.allow_offers ?? false,
+  shipping_type: l.shipping_type ?? null,
+}))
+
+setMegaBoostListings(normalizedMegaBoosts)
+
     } catch (err) {
       handleAppError(err, {
         fallbackMessage:
@@ -483,10 +523,12 @@ const checkUnreadNotifications = async () => {
           <ActivityIndicator style={{ marginTop: 40 }} />
         ) : (
           <ListingsGrid
-            listings={filteredListings}
-            refreshing={refreshing}
-            onRefresh={refreshListings}
-          />
+  listings={filteredListings}
+  refreshing={refreshing}
+  onRefresh={refreshListings}
+  showUpgradeRow={!isPro}
+  megaBoostListings={megaBoostListings} // 👑 THIS LINE ONLY
+/>
         )}
 
         <TouchableOpacity

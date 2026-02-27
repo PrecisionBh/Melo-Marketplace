@@ -26,6 +26,7 @@ import {
 type ProfileRow = {
   is_pro: boolean | null
   boosts_remaining: number | null
+  mega_boosts_remaining: number | null // 👑 NEW (matches create page)
 }
 
 /* ---------------- SAME SELECTOR DATA AS CREATE ---------------- */
@@ -85,8 +86,10 @@ export default function EditListingScreen() {
   const [showConditionModal, setShowConditionModal] = useState(false)
 
   const [isBoosted, setIsBoosted] = useState(false)
+  const [isMegaBoosted, setIsMegaBoosted] = useState(false) // 👑 NEW
   const [quantity, setQuantity] = useState("1")
   const [boostsRemaining, setBoostsRemaining] = useState<number>(0)
+  const [megaBoostsRemaining, setMegaBoostsRemaining] = useState<number>(0) // 👑 NEW
 
   const [shippingType, setShippingType] =
     useState<"seller_pays" | "buyer_pays" | null>(null)
@@ -132,7 +135,6 @@ export default function EditListingScreen() {
       setShippingPrice(data.shipping_price ? String(data.shipping_price) : "")
       setImages(data.image_urls ?? [])
 
-      // 🔒 SAFE LOAD: never allow 0 or null into UI state
       const safeLoadedQty =
         data.quantity && data.quantity > 0 ? data.quantity : 1
       setQuantity(String(safeLoadedQty))
@@ -146,7 +148,7 @@ export default function EditListingScreen() {
     }
   }
 
-  /* ---------------- UPDATE LISTING (MELO INVENTORY SAFE) ---------------- */
+  /* ---------------- UPDATE LISTING (NOW WITH MEGA BOOST SUPPORT) ---------------- */
   const handleUpdateListing = async () => {
     if (!session?.user || !id || submitting) return
 
@@ -157,7 +159,6 @@ export default function EditListingScreen() {
       const parsedMinOffer = minOffer ? parseFloat(minOffer) : null
       const parsedShippingPrice = shippingPrice ? parseFloat(shippingPrice) : 0
 
-      // 🔥 CRITICAL FIX: HARD CLAMP QUANTITY (>= 1 ALWAYS)
       const rawQty = parseInt(quantity, 10)
       const safeQuantity = isPro
         ? Math.max(1, Number.isFinite(rawQty) ? rawQty : 1)
@@ -168,25 +169,45 @@ export default function EditListingScreen() {
         return
       }
 
+      const now = new Date()
+      const boostExpires = new Date(now)
+      boostExpires.setDate(now.getDate() + 7)
+
+      const megaExpires = new Date(now)
+      megaExpires.setDate(now.getDate() + 14)
+
+      const updatePayload: any = {
+        title: title.trim(),
+        description: description.trim() || null,
+        brand,
+        category,
+        condition,
+        price: parsedPrice,
+        allow_offers: allowOffers,
+        min_offer: allowOffers ? parsedMinOffer : null,
+        shipping_type: shippingType,
+        shipping_price: parsedShippingPrice,
+        image_urls: images,
+        quantity: safeQuantity,
+        quantity_available: safeQuantity,
+      }
+
+      // 👑 MEGA BOOST TAKES PRIORITY (cannot stack with normal boost)
+      if (isPro && isMegaBoosted) {
+        updatePayload.is_mega_boost = true
+        updatePayload.mega_boost_expires_at = megaExpires.toISOString()
+        updatePayload.is_boosted = false
+        updatePayload.boost_expires_at = null
+      } else if (isPro && isBoosted) {
+        updatePayload.is_boosted = true
+        updatePayload.boost_expires_at = boostExpires.toISOString()
+        updatePayload.is_mega_boost = false
+        updatePayload.mega_boost_expires_at = null
+      }
+
       const { error } = await supabase
         .from("listings")
-        .update({
-          title: title.trim(),
-          description: description.trim() || null,
-          brand,
-          category,
-          condition,
-          price: parsedPrice,
-          allow_offers: allowOffers,
-          min_offer: allowOffers ? parsedMinOffer : null,
-          shipping_type: shippingType,
-          shipping_price: parsedShippingPrice,
-          image_urls: images,
-
-          // 🔥 MELO INVENTORY SOURCE OF TRUTH (DO NOT REMOVE)
-          quantity: safeQuantity,
-          quantity_available: safeQuantity,
-        })
+        .update(updatePayload)
         .eq("id", id)
 
       if (error) throw error
@@ -224,12 +245,13 @@ export default function EditListingScreen() {
 
           const { data: profile } = await supabase
             .from("profiles")
-            .select("is_pro, boosts_remaining")
+            .select("is_pro, boosts_remaining, mega_boosts_remaining")
             .eq("id", session.user.id)
             .single<ProfileRow>()
 
           setIsPro(Boolean(profile?.is_pro))
           setBoostsRemaining(profile?.boosts_remaining ?? 0)
+          setMegaBoostsRemaining(profile?.mega_boosts_remaining ?? 0)
         } finally {
           setCheckingAddress(false)
           setCheckingPro(false)
@@ -285,8 +307,12 @@ export default function EditListingScreen() {
             <ProFeaturesSection
               isPro={isPro}
               boostsRemaining={boostsRemaining}
+              megaBoostsRemaining={megaBoostsRemaining}
               isBoosted={isBoosted}
               setIsBoosted={setIsBoosted}
+              isMegaBoosted={isMegaBoosted}
+              setIsMegaBoosted={setIsMegaBoosted}
+              megaBoostDescription="Take over the home page in one listing."
               quantity={quantity}
               setQuantity={setQuantity}
             />
@@ -316,6 +342,7 @@ export default function EditListingScreen() {
             <CreateListingFooter
               submitting={submitting}
               onSubmit={handleUpdateListing}
+              label="Update Listing"
               disabled={
                 submitting ||
                 !title ||

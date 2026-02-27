@@ -12,9 +12,9 @@ export type Listing = {
   title: string
   price: number
   category: string
-  condition?: string | null      // ✅ ADDED (fixes HomeScreen error)
-  description?: string | null    // ✅ ADDED (for search)
-  brand?: string | null          // ✅ ADDED (for search)
+  condition?: string | null
+  description?: string | null
+  brand?: string | null
   image_url: string | null
   allow_offers?: boolean
   shipping_type?: "seller_pays" | "buyer_pays" | null
@@ -25,6 +25,8 @@ type Props = {
   mode?: "buyer" | "seller"
   onEdit?: () => void
   onPress?: () => void
+  isMegaBoost?: boolean
+  megaHero?: boolean // 👑 NEW: allows hero scaling (used by MegaBoostBlock)
 }
 
 export default function ListingCard({
@@ -32,18 +34,30 @@ export default function ListingCard({
   mode = "buyer",
   onEdit,
   onPress,
+  isMegaBoost = false,
+  megaHero = false,
 }: Props) {
   const showFreeShipping =
     listing.shipping_type === "seller_pays"
 
+  const isHero = isMegaBoost || megaHero
+
   return (
     <TouchableOpacity
-      style={styles.card}
+      style={[
+        styles.card,
+        isHero && styles.heroCard, // 👑 slightly larger premium feel
+      ]}
       onPress={onPress}
       activeOpacity={0.85}
     >
       {/* IMAGE WRAP */}
-      <View style={styles.imageWrap}>
+      <View
+        style={[
+          styles.imageWrap,
+          isMegaBoost && styles.megaGlowWrap, // ⭐ GOLD GLOW
+        ]}
+      >
         {listing.image_url ? (
           <Image
             source={{ uri: listing.image_url }}
@@ -59,7 +73,26 @@ export default function ListingCard({
           </View>
         )}
 
-        {/* FREE SHIPPING BADGE (CLEAR + CLEAN) */}
+        {/* 👑 MEGA BOOST BADGE (BIGGER BUT CLEAN) */}
+        {isMegaBoost && (
+          <View
+            style={[
+              styles.megaBoostBadge,
+              isHero && styles.megaBoostBadgeHero,
+            ]}
+          >
+            <Text
+              style={[
+                styles.megaBoostText,
+                isHero && styles.megaBoostTextHero,
+              ]}
+            >
+              Mega Boosted
+            </Text>
+          </View>
+        )}
+
+        {/* FREE SHIPPING BADGE */}
         {showFreeShipping && (
           <View style={styles.freeShipBadge}>
             <Text style={styles.freeShipText}>
@@ -89,16 +122,29 @@ export default function ListingCard({
       </View>
 
       {/* TEXT BELOW IMAGE */}
-      <View style={styles.meta}>
+      <View
+        style={[
+          styles.meta,
+          isHero && styles.metaHero, // more breathing room
+        ]}
+      >
         <Text
-          style={styles.title}
+          style={[
+            styles.title,
+            isHero && styles.titleHero, // 🔥 BIGGER TITLE
+          ]}
           numberOfLines={2}
           ellipsizeMode="tail"
         >
           {listing.title?.trim()}
         </Text>
 
-        <Text style={styles.price}>
+        <Text
+          style={[
+            styles.price,
+            isHero && styles.priceHero, // 🔥 BIGGER PRICE
+          ]}
+        >
           ${listing.price}
         </Text>
       </View>
@@ -121,6 +167,14 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
 
+  /* 👑 HERO CARD (ONLY FOR MEGA BOOST) */
+  heroCard: {
+    transform: [{ scale: 1 }], // remove shrink so it feels larger
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+
   /* IMAGE */
   imageWrap: {
     position: "relative",
@@ -137,6 +191,54 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
+  },
+
+  /* ⭐ PREMIUM GOLD GLOW (STRONGER FOR HERO) */
+  megaGlowWrap: {
+    borderWidth: 2,
+    borderColor: "#E6C200",
+    shadowColor: "#E6C200",
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 8,
+  },
+
+  /* 👑 MEGA BOOST BADGE */
+  megaBoostBadge: {
+    position: "absolute",
+    top: 6,
+    right: 6,
+    backgroundColor: "rgba(0,0,0,0.65)",
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: "#E6C200",
+  },
+
+  megaBoostBadgeHero: {
+    top: 8,
+    right: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+    shadowColor: "#E6C200",
+    shadowOpacity: 0.7,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 0 },
+  },
+
+  megaBoostText: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: "#FFD700",
+    letterSpacing: 0.3,
+  },
+
+  megaBoostTextHero: {
+    fontSize: 12, // 🔥 bigger but still classy
+    letterSpacing: 0.5,
   },
 
   /* FREE SHIPPING */
@@ -200,15 +302,30 @@ const styles = StyleSheet.create({
     gap: 4,
   },
 
+  metaHero: {
+    padding: 12,
+    gap: 6,
+  },
+
   title: {
     fontSize: 12,
     fontWeight: "700",
     color: "#0F1E17",
   },
 
+  titleHero: {
+    fontSize: 16, // 🔥 bigger title for mega boost
+    fontWeight: "800",
+  },
+
   price: {
     fontSize: 13,
     fontWeight: "900",
     color: "#0F1E17",
+  },
+
+  priceHero: {
+    fontSize: 18, // 🔥 bigger price = higher perceived value
+    fontWeight: "900",
   },
 })

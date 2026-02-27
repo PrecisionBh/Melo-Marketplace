@@ -280,26 +280,97 @@ async function activateMeloPro(params: {
   const { userId, stripeCustomerId, subscriptionId } = params
 
   const now = new Date()
-  const nextMonth = new Date()
-  nextMonth.setMonth(now.getMonth() + 1)
+  const nowIso = now.toISOString()
 
-  const { error } = await supabase
+  const nextMonth = new Date(now)
+  nextMonth.setMonth(nextMonth.getMonth() + 1)
+  const nextMonthIso = nextMonth.toISOString()
+
+  // 🔍 Fetch current profile FIRST (prevents overwriting stacked credits)
+  const { data: profile, error: fetchError } = await supabase
+    .from("profiles")
+    .select(
+      "boosts_remaining, mega_boosts_remaining, is_pro, pro_activated_at, last_boost_reset"
+    )
+    .eq("id", userId)
+    .single()
+
+  if (fetchError || !profile) {
+    console.error("❌ Failed to fetch profile before Pro activation:", fetchError)
+    return json(500, { error: "Profile fetch failed" })
+  }
+
+  const currentBoosts = profile.boosts_remaining ?? 0
+  const currentMegaBoosts = profile.mega_boosts_remaining ?? 0
+
+  // 🧠 Detect TRUE first-time activation (never had Pro before)
+  const isFirstActivation =
+    profile.is_pro !== true && !profile.pro_activated_at
+
+  // 🔁 Resubscribe logic:
+  // If user had Pro before, only grant credits if 30+ days since last reset
+  let shouldGrantMonthlyCredits = false
+
+  if (!profile.last_boost_reset) {
+    // No reset history = eligible (new or legacy user)
+    shouldGrantMonthlyCredits = true
+  } else {
+    const lastResetDate = new Date(profile.last_boost_reset)
+    const diffMs = now.getTime() - lastResetDate.getTime()
+    const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000
+
+    if (diffMs >= THIRTY_DAYS_MS) {
+      shouldGrantMonthlyCredits = true
+    }
+  }
+
+  // 🎯 FINAL CREDIT GRANT RULES
+  // - First activation → grant
+  // - Resubscribe after 30+ days → grant
+  // - Active Pro renewing within cycle → NO grant (RPC handles refills)
+  const grantCredits = isFirstActivation || shouldGrantMonthlyCredits
+
+  const grantBoosts = grantCredits ? 5 : 0
+  const grantMegaBoosts = grantCredits ? 1 : 0
+
+  // 🔥 IMPORTANT: Stack credits (DO NOT overwrite for Melo economy)
+  const newBoostTotal = currentBoosts + grantBoosts
+  const newMegaBoostTotal = currentMegaBoosts + grantMegaBoosts
+
+  const { error: updateError } = await supabase
     .from("profiles")
     .update({
       is_pro: true,
-      pro_activated_at: now.toISOString(),
-      pro_expires_at: nextMonth.toISOString(),
-      boosts_remaining: 10,
+      pro_activated_at: profile.pro_activated_at || nowIso,
+      pro_expires_at: nextMonthIso,
+
+      // 🚀 Stacked economy (wild west model)
+      boosts_remaining: newBoostTotal,
+      mega_boosts_remaining: newMegaBoostTotal,
+
+      // 🧠 Only update reset timestamp IF we actually granted credits
+      last_boost_reset: grantCredits ? nowIso : profile.last_boost_reset,
+
       stripe_customer_id: stripeCustomerId ?? null,
       stripe_subscription_id: subscriptionId ?? null,
-      updated_at: now.toISOString(),
+      updated_at: nowIso,
     })
     .eq("id", userId)
 
-  if (error) {
-    console.error("❌ Failed to activate Melo Pro:", error)
+  if (updateError) {
+    console.error("❌ Failed to activate Melo Pro:", updateError)
     return json(500, { error: "Failed to activate Melo Pro" })
   }
+
+  console.log("👑 Melo Pro activation processed:", {
+    userId,
+    first_activation: isFirstActivation,
+    monthly_reset_eligible: shouldGrantMonthlyCredits,
+    granted_boosts: grantBoosts,
+    granted_mega_boosts: grantMegaBoosts,
+    final_boost_total: newBoostTotal,
+    final_mega_boost_total: newMegaBoostTotal,
+  })
 
   return json(200, { received: true })
 }

@@ -151,18 +151,26 @@ export default function MyListingsScreen() {
 
   const deactivateListing = async (id: string) => {
     try {
+      // 🚀 OPTIMISTIC UI UPDATE (instant removal from Active tab)
+      setListings((prev) =>
+        prev.map((l) =>
+          l.id === id ? { ...l, status: "inactive" } : l
+        )
+      )
+
       const { error } = await supabase
         .from("listings")
         .update({ status: "inactive" })
         .eq("id", id)
 
       if (error) throw error
-      loadListings()
     } catch (err) {
       handleAppError(err, {
         context: "my_listings_deactivate",
         fallbackMessage: "Failed to deactivate listing.",
       })
+      // fallback safety reload
+      loadListings()
     }
   }
 
@@ -188,7 +196,10 @@ export default function MyListingsScreen() {
         ...rest
       } = oldListing
 
-      const { error: insertError } = await supabase
+      // 🚀 CRITICAL: instantly remove from inactive list (prevents duplicates)
+      setListings((prev) => prev.filter((l) => l.id !== id))
+
+      const { data: newListing, error: insertError } = await supabase
         .from("listings")
         .insert({
           ...rest,
@@ -198,11 +209,17 @@ export default function MyListingsScreen() {
           boost_expires_at: null,
           created_at: new Date().toISOString(),
         })
+        .select()
+        .single()
 
       if (insertError) throw insertError
 
+      // 🚀 instantly add new active listing (no refresh lag)
+      if (newListing) {
+        setListings((prev) => [newListing as Listing, ...prev])
+      }
+
       Alert.alert("Success", "Listing reactivated.")
-      loadListings()
     } catch (err) {
       handleAppError(err, {
         context: "my_listings_duplicate",
@@ -222,18 +239,22 @@ export default function MyListingsScreen() {
           style: "destructive",
           onPress: async () => {
             try {
+              // 🚀 OPTIMISTIC REMOVE (instant UI update)
+              setListings((prev) => prev.filter((l) => l.id !== id))
+
               const { error } = await supabase
                 .from("listings")
                 .delete()
                 .eq("id", id)
 
               if (error) throw error
-              loadListings()
             } catch (err) {
               handleAppError(err, {
                 context: "my_listings_delete",
                 fallbackMessage: "Failed to delete listing.",
               })
+              // fallback reload if something fails
+              loadListings()
             }
           },
         },
@@ -257,7 +278,6 @@ export default function MyListingsScreen() {
         backRoute="/seller-hub"
       />
 
-      {/* PRO STATUS */}
       <View style={styles.topSection}>
         {!isPro ? (
           <UpgradeToProButton />
@@ -266,7 +286,6 @@ export default function MyListingsScreen() {
         )}
       </View>
 
-      {/* ✨ ELEGANT MELO SEGMENTED TOGGLE */}
       <View style={styles.toggleOuter}>
         <View style={styles.toggleContainer}>
           <TouchableOpacity
@@ -361,7 +380,6 @@ const styles = StyleSheet.create({
     paddingBottom: 2,
   },
 
-  /* ✨ ELEGANT MELO TOGGLE */
   toggleOuter: {
     paddingHorizontal: 16,
     marginTop: 6,
@@ -370,14 +388,14 @@ const styles = StyleSheet.create({
 
   toggleContainer: {
     flexDirection: "row",
-    backgroundColor: "#E3F2EC", // soft sage glass feel
+    backgroundColor: "#E3F2EC",
     borderRadius: 999,
     padding: 4,
   },
 
   segment: {
     flex: 1,
-    paddingVertical: 8, // slimmer height (elegant)
+    paddingVertical: 8,
     borderRadius: 999,
     alignItems: "center",
     justifyContent: "center",
@@ -395,12 +413,12 @@ const styles = StyleSheet.create({
   segmentText: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#6F9C8A", // muted Melo green
+    color: "#6F9C8A",
     letterSpacing: 0.3,
   },
 
   segmentTextActive: {
-    color: "#0F1E17", // dark forest for contrast
+    color: "#0F1E17",
     fontWeight: "800",
   },
 

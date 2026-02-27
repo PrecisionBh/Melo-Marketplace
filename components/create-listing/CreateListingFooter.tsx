@@ -4,12 +4,14 @@ type Props = {
   onSubmit: () => void
   submitting: boolean
   disabled?: boolean
+  label?: string // ✅ NEW: allows "Create Listing" OR "Update Listing"
 }
 
 export default function CreateListingFooter({
   onSubmit,
   submitting,
   disabled = false,
+  label = "Create Listing", // ✅ default keeps create page unchanged
 }: Props) {
   return (
     <View style={styles.section}>
@@ -30,13 +32,17 @@ export default function CreateListingFooter({
           {submitting ? (
             <ActivityIndicator size="small" color="#FFFFFF" />
           ) : (
-            <Text style={styles.submitText}>Create Listing</Text>
+            <Text style={styles.submitText}>
+              {label === "Update Listing" ? "Update Listing" : label}
+            </Text>
           )}
         </TouchableOpacity>
 
         {/* Subtext reassurance (marketplace UX best practice) */}
         <Text style={styles.helperText}>
-          Your listing will go live immediately after creation.
+          {label === "Update Listing"
+            ? "Your changes will be saved immediately."
+            : "Your listing will go live immediately after creation."}
         </Text>
       </View>
     </View>

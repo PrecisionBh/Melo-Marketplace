@@ -56,13 +56,13 @@ serve(async (req) => {
     console.log("📦 incoming payload:", payload)
 
     const dispute_id = payload?.dispute_id
-    const admin_notes = payload?.admin_notes
+    const admin_notes = payload?.admin_notes ?? null
 
     if (!dispute_id) {
       return json(400, { error: "Missing dispute_id" })
     }
 
-    /* ---------------- VERIFY ADMIN ---------------- */
+    /* ---------------- AUTH USER (ADMIN) ---------------- */
     const authHeader = req.headers.get("Authorization")
     if (!authHeader) {
       return json(401, { error: "Missing auth header" })
@@ -70,8 +70,10 @@ serve(async (req) => {
 
     const token = authHeader.replace("Bearer ", "")
 
-    const { data: userData, error: userError } = await supabase.auth.getUser(token)
-    const user = userData?.user
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser(token)
 
     if (userError || !user) {
       console.error("❌ auth.getUser failed:", userError)
@@ -124,6 +126,8 @@ serve(async (req) => {
     console.log("💳 order stripe fields:", {
       order_id: order.id,
       stripe_payment_intent: order.stripe_payment_intent,
+      status: order.status,
+      escrow_status: order.escrow_status,
     })
 
     if (!order.stripe_payment_intent) {
@@ -138,18 +142,37 @@ serve(async (req) => {
       return json(400, { error: "Cannot refund — escrow already released" })
     }
 
-    /* ---------------- STRIPE REFUND ---------------- */
+    /* ---------------- STRIPE REFUND (ITEM + SHIPPING + TAX, EXCLUDES BUYER FEE) ---------------- */
+    const refundableAmount =
+      (order.item_price_cents ?? 0) +
+      (order.shipping_amount_cents ?? 0) +
+      (order.tax_cents ?? 0)
+
+    console.log("💸 Creating admin refund (excluding buyer fee):", {
+      order_id: order.id,
+      refundableAmount,
+      item_price_cents: order.item_price_cents,
+      shipping_amount_cents: order.shipping_amount_cents,
+      tax_cents: order.tax_cents,
+      buyer_fee_cents: order.buyer_fee_cents,
+    })
+
+    if (refundableAmount <= 0) {
+      return json(400, { error: "Invalid refundable amount" })
+    }
+
     let refund
     try {
       refund = await stripe.refunds.create({
         payment_intent: order.stripe_payment_intent,
+        amount: refundableAmount,
       })
     } catch (stripeErr) {
       console.error("❌ Stripe refund error:", stripeErr)
       return json(500, { error: "Stripe refund error" })
     }
 
-    // Treat succeeded OR pending as success (Stripe accepted it)
+    // accept succeeded OR pending
     if (!refund || (refund.status !== "succeeded" && refund.status !== "pending")) {
       console.error("❌ Refund failed:", refund)
       return json(500, { error: "Refund failed", status: refund?.status ?? null })
@@ -157,12 +180,31 @@ serve(async (req) => {
 
     const now = new Date().toISOString()
 
+    /* ---------------- REVERSE SELLER PENDING WALLET (THIS ORDER ONLY) ---------------- */
+    if (order.wallet_credited && typeof order.seller_net_cents === "number") {
+      console.log("↩️ Reversing seller pending wallet (per-order):", {
+        seller_id: order.seller_id,
+        amount: order.seller_net_cents,
+      })
+
+      const { error: walletErr } = await supabase.rpc("increment_wallet_pending", {
+        p_user_id: order.seller_id,
+        p_amount_cents: -order.seller_net_cents,
+      })
+
+      if (walletErr) {
+        console.error("❌ Wallet reversal failed:", walletErr)
+        return json(500, { error: "Wallet reversal failed" })
+      }
+    }
+
     /* ---------------- UPDATE ORDER ---------------- */
     const { error: orderUpdateErr } = await supabase
       .from("orders")
       .update({
         status: "refunded",
         escrow_status: "refunded",
+        wallet_credited: false,
         updated_at: now,
       })
       .eq("id", order.id)
@@ -180,7 +222,7 @@ serve(async (req) => {
         resolution: "refund", // must match CHECK constraint
         resolved_at: now,
         resolved_by: user.id,
-        admin_notes: admin_notes ?? null,
+        admin_notes,
       })
       .eq("id", dispute.id)
 

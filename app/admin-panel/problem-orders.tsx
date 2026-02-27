@@ -39,6 +39,7 @@ export default function ProblemOrdersScreen() {
   const [loading, setLoading] = useState(true)
   const [showResolved, setShowResolved] = useState(false)
   const [refundingId, setRefundingId] = useState<string | null>(null)
+  const [releasingId, setReleasingId] = useState<string | null>(null)
 
   useEffect(() => {
     fetchDisputes()
@@ -50,12 +51,14 @@ export default function ProblemOrdersScreen() {
 
       let query = supabase
         .from("disputes")
-        .select(`
+        .select(
+          `
           *,
           orders:order_id (
             public_order_number
           )
-        `)
+        `
+        )
         .order("created_at", { ascending: false })
 
       if (showResolved) {
@@ -78,117 +81,182 @@ export default function ProblemOrdersScreen() {
     }
   }
 
+  const getAdminAuth = async () => {
+    const { data: sessionData, error: sessionErr } =
+      await supabase.auth.getSession()
+
+    if (sessionErr) {
+      console.error("SESSION ERROR:", sessionErr)
+      throw sessionErr
+    }
+
+    const token = sessionData?.session?.access_token
+    const userId = sessionData?.session?.user?.id
+
+    const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? ""
+    if (!anonKey) throw new Error("Missing EXPO_PUBLIC_SUPABASE_ANON_KEY")
+    if (!token) throw new Error("Missing auth session token")
+
+    return { token, userId, anonKey }
+  }
+
+  const callAdminFunction = async (url: string, token: string, anonKey: string, body: any) => {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        Authorization: `Bearer ${token}`,
+        apikey: anonKey,
+      },
+      body: JSON.stringify(body),
+    })
+
+    const rawText = await response.text()
+    console.log("🧾 RAW FUNCTION RESPONSE:", rawText)
+
+    let parsed: any = null
+    try {
+      parsed = rawText ? JSON.parse(rawText) : null
+    } catch (parseErr) {
+      console.error("❌ JSON PARSE ERROR:", parseErr)
+    }
+
+    console.log("🧾 PARSED FUNCTION RESPONSE:", {
+      status: response.status,
+      ok: response.ok,
+      body: parsed,
+    })
+
+    if (!response.ok) {
+      const errorMessage = parsed?.error || `Request failed (${response.status})`
+      throw new Error(errorMessage)
+    }
+
+    if (!parsed?.success) {
+      throw new Error(parsed?.error || "Request failed")
+    }
+
+    return parsed
+  }
+
   const handleRefund = async (disputeId: string) => {
-  try {
-    Alert.alert(
-      "Confirm Refund",
-      "Are you sure you want to refund the buyer? This cannot be undone.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Refund",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              setRefundingId(disputeId)
+    try {
+      Alert.alert(
+        "Confirm Refund",
+        "Are you sure you want to refund the buyer? This cannot be undone.",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Refund",
+            style: "destructive",
+            onPress: async () => {
+              try {
+                setRefundingId(disputeId)
 
-              // 🔥 Get session (needed for Authorization header)
-              const { data: sessionData, error: sessionErr } =
-                await supabase.auth.getSession()
+                const { token, userId, anonKey } = await getAdminAuth()
 
-              if (sessionErr) {
-                console.error("SESSION ERROR:", sessionErr)
-                throw sessionErr
-              }
+                console.log("🧠 ADMIN REFUND DEBUG:", {
+                  disputeId,
+                  hasToken: !!token,
+                  userId,
+                })
 
-              const token = sessionData?.session?.access_token
-              const userId = sessionData?.session?.user?.id
-
-              console.log("🧠 ADMIN REFUND DEBUG:", {
-                disputeId,
-                hasToken: !!token,
-                userId,
-              })
-
-              if (!token) {
-                throw new Error("Missing auth session token")
-              }
-
-              // 🔥 DIRECT FETCH (bypasses invoke() 400 parsing bug in React Native)
-              const response = await fetch(
-                "https://ccrrxdpfepsoghtgtpwx.supabase.co/functions/v1/admin-refund",
-                {
-                  method: "POST",
-                  headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${token}`,
-                    apikey:
-                      process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? "",
-                  },
-                  body: JSON.stringify({
+                await callAdminFunction(
+                  "https://ccrrxdpfepsoghtgtpwx.supabase.co/functions/v1/admin-refund",
+                  token,
+                  anonKey,
+                  {
                     dispute_id: disputeId,
                     admin_notes: "Refund issued by admin panel",
-                  }),
-                }
-              )
+                  }
+                )
 
-              // 🔥 Read raw text FIRST (critical for debugging 400 errors)
-              const rawText = await response.text()
-              console.log("💸 RAW FUNCTION RESPONSE TEXT:", rawText)
+                Alert.alert(
+                  "Refund Successful",
+                  "Buyer has been refunded and the dispute is resolved."
+                )
 
-              let parsed: any = null
-              try {
-                parsed = rawText ? JSON.parse(rawText) : null
-              } catch (parseErr) {
-                console.error("❌ JSON PARSE ERROR:", parseErr)
+                await fetchDisputes()
+              } catch (err) {
+                console.error("🔥 ADMIN REFUND CATCH:", err)
+                handleAppError(err, {
+                  context: "admin_refund",
+                  fallbackMessage:
+                    "Refund failed. Check console logs for exact reason.",
+                })
+              } finally {
+                setRefundingId(null)
               }
-
-              console.log("💸 PARSED FUNCTION RESPONSE:", {
-                status: response.status,
-                ok: response.ok,
-                body: parsed,
-              })
-
-              // 🔥 Handle non-2xx properly (this is what invoke() was hiding)
-              if (!response.ok) {
-                const errorMessage =
-                  parsed?.error ||
-                  `Refund failed (${response.status})`
-                console.error("❌ FUNCTION NON-200:", errorMessage)
-                throw new Error(errorMessage)
-              }
-
-              if (!parsed?.success) {
-                console.error("❌ FUNCTION RETURNED FAILURE:", parsed)
-                throw new Error(parsed?.error || "Refund failed")
-              }
-
-              Alert.alert(
-                "Refund Successful",
-                "Buyer has been refunded and dispute resolved."
-              )
-
-              await fetchDisputes()
-            } catch (err) {
-              console.error("🔥 ADMIN REFUND CATCH:", err)
-              handleAppError(err, {
-                context: "admin_refund",
-                fallbackMessage:
-                  "Refund failed. Check console logs for exact reason.",
-              })
-            } finally {
-              setRefundingId(null)
-            }
+            },
           },
-        },
-      ]
-    )
-  } catch (err) {
-    handleAppError(err, {
-      context: "admin_refund_alert",
-    })
+        ]
+      )
+    } catch (err) {
+      handleAppError(err, {
+        context: "admin_refund_alert",
+      })
+    }
   }
-}
+
+  const handleReleaseEscrow = async (disputeId: string) => {
+    try {
+      Alert.alert(
+        "Confirm Release",
+        "Are you sure you want to release escrow to the seller? This cannot be undone.",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Release",
+            style: "destructive",
+            onPress: async () => {
+              try {
+                setReleasingId(disputeId)
+
+                const { token, userId, anonKey } = await getAdminAuth()
+
+                console.log("🧠 ADMIN RELEASE DEBUG:", {
+                  disputeId,
+                  hasToken: !!token,
+                  userId,
+                })
+
+                await callAdminFunction(
+                  "https://ccrrxdpfepsoghtgtpwx.supabase.co/functions/v1/admin-release-escrow",
+                  token,
+                  anonKey,
+                  {
+                    dispute_id: disputeId,
+                    admin_notes: "Escrow released by admin panel",
+                  }
+                )
+
+                Alert.alert(
+                  "Escrow Released",
+                  "Funds have been released to the seller and the dispute is resolved."
+                )
+
+                await fetchDisputes()
+              } catch (err) {
+                console.error("🔥 ADMIN RELEASE CATCH:", err)
+                handleAppError(err, {
+                  context: "admin_release_escrow",
+                  fallbackMessage:
+                    "Release failed. Check console logs for exact reason.",
+                })
+              } finally {
+                setReleasingId(null)
+              }
+            },
+          },
+        ]
+      )
+    } catch (err) {
+      handleAppError(err, {
+        context: "admin_release_escrow_alert",
+      })
+    }
+  }
 
   const getResponseBadge = (d: Dispute) => {
     if (d.opened_by === "buyer" && !d.seller_responded_at) {
@@ -233,9 +301,7 @@ export default function ProblemOrdersScreen() {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" />
-        <Text style={{ marginTop: 10 }}>
-          Loading dispute queue...
-        </Text>
+        <Text style={{ marginTop: 10 }}>Loading dispute queue...</Text>
       </View>
     )
   }
@@ -246,20 +312,14 @@ export default function ProblemOrdersScreen() {
 
       <View style={styles.toggleRow}>
         <TouchableOpacity
-          style={[
-            styles.toggleBtn,
-            !showResolved && styles.activeToggle,
-          ]}
+          style={[styles.toggleBtn, !showResolved && styles.activeToggle]}
           onPress={() => setShowResolved(false)}
         >
           <Text style={styles.toggleText}>Unresolved</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[
-            styles.toggleBtn,
-            showResolved && styles.activeToggle,
-          ]}
+          style={[styles.toggleBtn, showResolved && styles.activeToggle]}
           onPress={() => setShowResolved(true)}
         >
           <Text style={styles.toggleText}>Resolved</Text>
@@ -271,46 +331,29 @@ export default function ProblemOrdersScreen() {
           const badge = getResponseBadge(d)
           const locked = adminActionLocked(d)
           const isRefunding = refundingId === d.id
+          const isReleasing = releasingId === d.id
+          const busy = isRefunding || isReleasing
 
-          const publicOrderNumber =
-            d.orders?.public_order_number || d.order_id
+          const publicOrderNumber = d.orders?.public_order_number || d.order_id
 
           return (
             <View key={d.id} style={styles.card}>
-              <Text style={styles.orderId}>
-                Order: #{publicOrderNumber}
-              </Text>
+              <Text style={styles.orderId}>Order: #{publicOrderNumber}</Text>
 
-              <Text style={styles.reason}>
-                Reason: {d.reason || "N/A"}
-              </Text>
+              <Text style={styles.reason}>Reason: {d.reason || "N/A"}</Text>
 
               <Text style={styles.description}>
                 {d.description || "No description provided"}
               </Text>
 
               <View style={styles.badgeRow}>
-                <View
-                  style={[
-                    styles.badge,
-                    { backgroundColor: badge.color },
-                  ]}
-                >
-                  <Text style={styles.badgeText}>
-                    {badge.text}
-                  </Text>
+                <View style={[styles.badge, { backgroundColor: badge.color }]}>
+                  <Text style={styles.badgeText}>{badge.text}</Text>
                 </View>
 
                 {d.resolved_at && (
-                  <View
-                    style={[
-                      styles.badge,
-                      { backgroundColor: "#16A34A" },
-                    ]}
-                  >
-                    <Text style={styles.badgeText}>
-                      Resolved
-                    </Text>
+                  <View style={[styles.badge, { backgroundColor: "#16A34A" }]}>
+                    <Text style={styles.badgeText}>Resolved</Text>
                   </View>
                 )}
               </View>
@@ -318,13 +361,9 @@ export default function ProblemOrdersScreen() {
               <View style={styles.buttonRow}>
                 <TouchableOpacity
                   style={styles.evidenceBtn}
-                  onPress={() =>
-                    router.push(`/admin-panel/evidence?id=${d.id}`)
-                  }
+                  onPress={() => router.push(`/admin-panel/evidence?id=${d.id}`)}
                 >
-                  <Text style={styles.buttonText}>
-                    View Evidence
-                  </Text>
+                  <Text style={styles.buttonText}>View Evidence</Text>
                 </TouchableOpacity>
               </View>
 
@@ -332,30 +371,31 @@ export default function ProblemOrdersScreen() {
                 <TouchableOpacity
                   style={[
                     styles.refundBtn,
-                    (locked || isRefunding) && styles.disabledBtn,
+                    (locked || busy) && styles.disabledBtn,
                   ]}
-                  disabled={locked || isRefunding}
+                  disabled={locked || busy}
                   onPress={() => handleRefund(d.id)}
                 >
                   {isRefunding ? (
                     <ActivityIndicator color="#FFFFFF" />
                   ) : (
-                    <Text style={styles.buttonText}>
-                      Refund Buyer
-                    </Text>
+                    <Text style={styles.buttonText}>Refund Buyer</Text>
                   )}
                 </TouchableOpacity>
 
                 <TouchableOpacity
                   style={[
                     styles.releaseBtn,
-                    locked && styles.disabledBtn,
+                    (locked || busy) && styles.disabledBtn,
                   ]}
-                  disabled={locked}
+                  disabled={locked || busy}
+                  onPress={() => handleReleaseEscrow(d.id)}
                 >
-                  <Text style={styles.buttonText}>
-                    Release Escrow
-                  </Text>
+                  {isReleasing ? (
+                    <ActivityIndicator color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.buttonText}>Release Escrow</Text>
+                  )}
                 </TouchableOpacity>
               </View>
             </View>
@@ -383,11 +423,7 @@ const styles = StyleSheet.create({
   reason: { fontSize: 14, fontWeight: "700", marginBottom: 4 },
   description: { fontSize: 13, color: "#555", marginBottom: 10 },
   badgeRow: { flexDirection: "row", gap: 8, marginBottom: 12 },
-  badge: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-  },
+  badge: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 },
   badgeText: { color: "#FFF", fontWeight: "700", fontSize: 12 },
   buttonRow: { flexDirection: "row", gap: 10, marginTop: 6 },
   evidenceBtn: {
@@ -411,20 +447,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
   },
-  disabledBtn: {
-    backgroundColor: "#BDBDBD",
-  },
+  disabledBtn: { backgroundColor: "#BDBDBD" },
   buttonText: { color: "#FFFFFF", fontWeight: "800" },
-  center: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  toggleRow: {
-    flexDirection: "row",
-    padding: 12,
-    gap: 10,
-  },
+  center: { flex: 1, justifyContent: "center", alignItems: "center" },
+  toggleRow: { flexDirection: "row", padding: 12, gap: 10 },
   toggleBtn: {
     flex: 1,
     paddingVertical: 12,
@@ -432,11 +458,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#E5E7EB",
     alignItems: "center",
   },
-  activeToggle: {
-    backgroundColor: MELO_GREEN,
-  },
-  toggleText: {
-    fontWeight: "800",
-    color: "#1A2B24",
-  },
+  activeToggle: { backgroundColor: MELO_GREEN },
+  toggleText: { fontWeight: "800", color: "#1A2B24" },
 })

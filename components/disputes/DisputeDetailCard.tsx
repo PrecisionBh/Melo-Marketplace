@@ -145,8 +145,8 @@ export default function DisputeDetailCard({
       const { data, error } = await supabase
   .from("disputes")
   .select("*")
-  .eq("order_id", disputeId)
-  .maybeSingle() // 🔥 FIX: prevents PGRST116 crash
+  .eq("id", disputeId)
+  .maybeSingle()
 
       if (error) throw error
 

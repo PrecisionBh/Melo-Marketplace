@@ -2,14 +2,15 @@ import * as ImagePicker from "expo-image-picker"
 import { useRouter } from "expo-router"
 import { useState } from "react"
 import {
-    ActivityIndicator,
-    Alert,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native"
 
 import { useAuth } from "@/context/AuthContext"
@@ -57,13 +58,11 @@ export default function DisputeIssueForm({
 
   if (!user) return null
 
-  /* ---------------- SAFE BACK (HEADER HANDLED BY PARENT SCREEN) ---------------- */
+  /* ---------------- SAFE BACK ---------------- */
   const safeBack = () => {
     try {
-      // Prefer natural back stack (since your screens already have AppHeader)
       router.back()
     } catch {
-      // Absolute fallback (never crash Melo navigation)
       if (role === "buyer") {
         router.replace(`/buyer-hub/orders/${orderId}` as any)
       } else {
@@ -72,19 +71,33 @@ export default function DisputeIssueForm({
     }
   }
 
-  /* ---------------- IMAGE PICKER ---------------- */
+  /* ---------------- IMAGE PICKER (UPGRADED TO MATCH WORKING UPLOADER) ---------------- */
   const pickImage = async () => {
     try {
+      const MAX = 7
+
+      if (images.length >= MAX) {
+        Alert.alert("Limit reached", `You can upload up to ${MAX} photos.`)
+        return
+      }
+
+      const remainingSlots = MAX - images.length
+
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        quality: 0.8,
+        mediaTypes: ["images"],
+        quality: 0.9,
         allowsMultipleSelection: true,
+        selectionLimit: remainingSlots,
       })
 
-      if (result.canceled) return
+      if (!result.canceled && result.assets?.length > 0) {
+        const newUris = result.assets.map((asset) => asset.uri)
 
-      const uris = result.assets.map((asset) => asset.uri)
-      setImages((prev) => [...prev, ...uris])
+        setImages((prev) => {
+          const combined = [...prev, ...newUris]
+          return combined.slice(0, MAX)
+        })
+      }
     } catch (err) {
       handleAppError(err, {
         context: "dispute_image_picker",
@@ -93,7 +106,11 @@ export default function DisputeIssueForm({
     }
   }
 
-  /* ---------------- UPLOAD EVIDENCE ---------------- */
+  const removeImage = (uri: string) => {
+    setImages((prev) => prev.filter((img) => img !== uri))
+  }
+
+  /* ---------------- UPLOAD EVIDENCE (UNCHANGED) ---------------- */
   const uploadEvidenceImages = async (disputeId: string) => {
     if (!images.length) return []
 
@@ -129,7 +146,7 @@ export default function DisputeIssueForm({
     return uploadedUrls
   }
 
-  /* ---------------- SUBMIT DISPUTE ---------------- */
+  /* ---------------- SUBMIT DISPUTE (UNCHANGED) ---------------- */
   const submitDispute = async () => {
     if (!orderId) {
       Alert.alert("Error", "Missing order reference.")
@@ -148,7 +165,6 @@ export default function DisputeIssueForm({
 
     try {
       setSubmitting(true)
-
       const { data: order, error: orderError } = await supabase
         .from("orders")
         .select(
@@ -159,13 +175,11 @@ export default function DisputeIssueForm({
 
       if (orderError || !order) throw orderError
 
-      /* -------- LIFECYCLE RULES (YOUR MELO FLOW) -------- */
       if (role === "buyer") {
         if (order.buyer_id !== user.id) {
           Alert.alert("Access denied", "You cannot dispute this order.")
           return
         }
-
         if (order.status !== "shipped") {
           Alert.alert(
             "Dispute Not Allowed",
@@ -180,8 +194,6 @@ export default function DisputeIssueForm({
           Alert.alert("Access denied", "You are not the seller.")
           return
         }
-
-        // Seller disputes ONLY during return_started (matches your return lifecycle memory)
         if (order.status !== "return_started") {
           Alert.alert(
             "Dispute Not Available",
@@ -199,7 +211,6 @@ export default function DisputeIssueForm({
         return
       }
 
-      /* -------- CREATE DISPUTE -------- */
       const { data: dispute, error: disputeError } = await supabase
         .from("disputes")
         .insert({
@@ -217,7 +228,6 @@ export default function DisputeIssueForm({
 
       if (disputeError || !dispute) throw disputeError
 
-      /* -------- EVIDENCE UPLOAD -------- */
       if (images.length > 0) {
         const urls = await uploadEvidenceImages(dispute.id)
 
@@ -234,7 +244,6 @@ export default function DisputeIssueForm({
         if (evidenceError) throw evidenceError
       }
 
-      /* -------- FREEZE ESCROW (CRITICAL) -------- */
       const newStatus =
         role === "buyer" ? "disputed" : "return_processing"
 
@@ -243,14 +252,13 @@ export default function DisputeIssueForm({
         .update({
           is_disputed: true,
           status: newStatus,
-          escrow_status: "held", // freezes escrow during dispute
+          escrow_status: "held",
           updated_at: new Date().toISOString(),
         })
         .eq("id", orderId)
 
       if (orderUpdateError) throw orderUpdateError
 
-      /* -------- NOTIFY OTHER PARTY -------- */
       const notifyUserId =
         role === "buyer" ? order.seller_id : order.buyer_id
 
@@ -276,7 +284,6 @@ export default function DisputeIssueForm({
         "Your dispute has been submitted. Escrow has been frozen while this issue is reviewed."
       )
 
-      // Clean navigation (no header conflicts, no backRoute bugs)
       safeBack()
     } catch (err) {
       handleAppError(err, {
@@ -323,14 +330,41 @@ export default function DisputeIssueForm({
           placeholder="Explain the issue in detail..."
         />
 
-        <TouchableOpacity
-          style={styles.imageBtn}
-          onPress={pickImage}
+        {/* NEW IMAGE UPLOADER (MATCHES YOUR WORKING COMPONENT) */}
+        <Text style={styles.label}>
+          Evidence Images ({images.length}/7)
+        </Text>
+
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.uploadRow}
         >
-          <Text style={styles.imageBtnText}>
-            Upload Evidence Images ({images.length})
-          </Text>
-        </TouchableOpacity>
+          {images.map((uri, index) => (
+            <View key={`${uri}-${index}`} style={styles.squareWrapper}>
+              <Image source={{ uri }} style={styles.squareImage} />
+              <TouchableOpacity
+                style={styles.deleteButton}
+                onPress={() => removeImage(uri)}
+              >
+                <Text style={styles.deleteText}>×</Text>
+              </TouchableOpacity>
+            </View>
+          ))}
+
+          {Array.from({ length: Math.max(7 - images.length, 0) }).map(
+            (_, i) => (
+              <TouchableOpacity
+                key={`empty-${i}`}
+                style={styles.addSquare}
+                onPress={pickImage}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.addPlus}>＋</Text>
+              </TouchableOpacity>
+            )
+          )}
+        </ScrollView>
 
         <TouchableOpacity
           style={styles.submitBtn}
@@ -395,19 +429,56 @@ const styles = StyleSheet.create({
     borderColor: "#DDEDE6",
     textAlignVertical: "top",
   },
-  imageBtn: {
-    marginTop: 18,
-    backgroundColor: "#FFFFFF",
+
+  /* NEW IMAGE STYLES (ONLY ADDITION) */
+  uploadRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 8,
+  },
+  squareWrapper: {
+    width: 110,
+    height: 110,
+    position: "relative",
+  },
+  squareImage: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 12,
+  },
+  addSquare: {
+    width: 110,
+    height: 110,
     borderWidth: 1,
     borderColor: "#DDEDE6",
-    paddingVertical: 14,
-    borderRadius: 14,
+    backgroundColor: "#FFFFFF",
     alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 12,
   },
-  imageBtnText: {
-    fontWeight: "800",
-    color: "#0F1E17",
+  addPlus: {
+    fontSize: 28,
+    fontWeight: "900",
+    color: "#7FAF9B",
   },
+  deleteButton: {
+    position: "absolute",
+    top: 6,
+    right: 6,
+    backgroundColor: "#E5484D",
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  deleteText: {
+    color: "#fff",
+    fontWeight: "900",
+    fontSize: 16,
+  },
+
   submitBtn: {
     marginTop: 28,
     backgroundColor: "#1F7A63",
