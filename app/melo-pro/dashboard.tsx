@@ -1,9 +1,10 @@
 import { useFocusEffect, useRouter } from "expo-router"
 import { useCallback, useState } from "react"
 import {
-    ActivityIndicator,
-    StyleSheet,
-    View,
+  ActivityIndicator,
+  ScrollView,
+  StyleSheet,
+  View,
 } from "react-native"
 
 import AppHeader from "@/components/app-header"
@@ -80,13 +81,17 @@ export default function MeloProDashboardScreen() {
           color="#7FAF9B"
         />
       ) : profile?.is_pro ? (
-        <>
-          {/* 👑 Premium Hero Banner (dark, premium top) */}
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          bounces={true}
+        >
+          {/* 👑 Premium Hero Banner */}
           <ProHeroBanner
             boostsRemaining={profile.boosts_remaining ?? 0}
           />
 
-          {/* 🚀 Core Feature Card (light shadow box) */}
+          {/* 🚀 Boost Power Card */}
           <BoostsCard
             userId={userId!}
             boostsRemaining={profile.boosts_remaining ?? 0}
@@ -97,9 +102,12 @@ export default function MeloProDashboardScreen() {
             }}
           />
 
-          {/* 🤍 Clean White Tools Container (no heavy shadow, scalable) */}
+          {/* 🤍 Scalable Tools Section */}
           <ProQuickActions />
-        </>
+
+          {/* Extra bottom padding so last card never hugs screen edge */}
+          <View style={styles.bottomSpacer} />
+        </ScrollView>
       ) : null}
     </View>
   )
@@ -110,7 +118,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#EAF4EF",
   },
+  scrollContent: {
+    paddingBottom: 40, // 🔥 prevents cutoff on smaller phones
+  },
   loader: {
     marginTop: 40,
+  },
+  bottomSpacer: {
+    height: 20,
   },
 })

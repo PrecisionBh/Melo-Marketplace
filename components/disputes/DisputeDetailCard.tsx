@@ -34,10 +34,11 @@ type Dispute = {
   resolved_at: string | null
   resolution: string | null
   admin_notes: string | null
+  dispute_type?: string | null
 }
 
 type Props = {
-  disputeId: string
+  disputeId: string // can be dispute UUID OR order_id (NOW SUPPORTED)
   role: Role
 }
 
@@ -142,30 +143,52 @@ export default function DisputeDetailCard({
     try {
       setLoading(true)
 
+      console.log("🔎 [DISPUTE] Incoming ID:", disputeId)
+      console.log("👤 [DISPUTE] User:", user.id)
+      console.log("🎭 [DISPUTE] Role:", role)
+
+      /**
+       * 🔥 MELO CRITICAL FIX:
+       * Support BOTH:
+       * - disputes.id (UUID)
+       * - order_id (from Orders screen navigation)
+       */
       const { data, error } = await supabase
-  .from("disputes")
-  .select("*")
-  .eq("id", disputeId)
-  .maybeSingle()
+        .from("disputes")
+        .select("*")
+        .or(`id.eq.${disputeId},order_id.eq.${disputeId}`)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      console.log("📦 [DISPUTE] Raw data:", data)
+      console.log("❌ [DISPUTE] Error:", error)
 
       if (error) throw error
 
-// 🛑 CRITICAL: handle null safely (maybeSingle can return null)
-if (!data) {
-  setDispute(null)
-  return
-}
+      if (!data) {
+        console.log("⚠️ [DISPUTE] No dispute found for ID:", disputeId)
+        setDispute(null)
+        return
+      }
 
-// 🔒 Role security gate (MELO CRITICAL)
-if (
-  (role === "buyer" && data.buyer_id !== user.id) ||
-  (role === "seller" && data.seller_id !== user.id)
-) {
-  setDispute(null)
-  return
-}
+      /**
+       * 🔒 MELO SECURITY GATE (DO NOT REMOVE)
+       * Prevents users from viewing disputes they don't own
+       */
+      if (
+        (role === "buyer" && data.buyer_id !== user.id) ||
+        (role === "seller" && data.seller_id !== user.id)
+      ) {
+        console.log("⛔ [DISPUTE] Blocked by role security")
+        console.log("DB buyer:", data.buyer_id)
+        console.log("DB seller:", data.seller_id)
+        setDispute(null)
+        return
+      }
 
-setDispute(data)
+      console.log("✅ [DISPUTE] Loaded successfully:", data.id)
+      setDispute(data)
     } catch (err) {
       handleAppError(err, {
         fallbackMessage: "Failed to load dispute details.",
@@ -191,7 +214,7 @@ setDispute(data)
     )
   }
 
-  const isReturnDispute = (dispute as any).dispute_type === "return"
+  const isReturnDispute = dispute.dispute_type === "return"
 
   const statusMeta = getStatusMeta(
     dispute.status,
@@ -200,7 +223,6 @@ setDispute(data)
     role
   )
 
-  /* 🧠 MELO ASYMMETRICAL RESPONSE LOGIC (CRITICAL FIX) */
   const otherPartyResponded =
     dispute.opened_by === "buyer"
       ? !!dispute.seller_responded_at
@@ -231,19 +253,16 @@ setDispute(data)
         : "The buyer has opened this dispute. Please submit your response and evidence. If no response is provided in a timely manner, a decision may be made based on the available evidence."
   } else if (showUnderReviewMessage) {
     guidanceMessage =
-      "Both parties have submitted their evidence. Our admins will now review the case. If no further responses are required, a final decision will be made based on the evidence gathered. Escrow will remain frozen during this process."
+      "Both parties have submitted their evidence. Our admins will now review the case. Escrow will remain frozen during this process."
   }
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      {/* 🔥 SUMMARY CARD */}
       <View style={styles.card}>
-        {/* 🧾 MELO ORDER NUMBER */}
         <Text style={styles.orderRef}>
           Order #{`Melo${dispute.order_id.slice(0, 6)}`}
         </Text>
 
-        {/* STATUS BADGE */}
         <View
           style={[
             styles.badge,
@@ -255,7 +274,6 @@ setDispute(data)
 
         <Text style={styles.subtext}>{statusMeta.subtext}</Text>
 
-        {/* 🧭 GUIDANCE MESSAGE */}
         {guidanceMessage ? (
           <View style={styles.guidanceBox}>
             <Text style={styles.guidanceText}>
@@ -264,7 +282,6 @@ setDispute(data)
           </View>
         ) : null}
 
-        {/* ---------- CLEAN DISPUTE DETAILS ---------- */}
         <View style={styles.detailsCard}>
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Dispute Reason</Text>
@@ -284,7 +301,6 @@ setDispute(data)
         </View>
       </View>
 
-      {/* 📸 BUYER EVIDENCE */}
       {dispute.buyer_evidence_urls?.length ? (
         <View style={styles.evidenceSection}>
           <Text style={styles.sectionTitle}>Buyer Evidence</Text>
@@ -300,7 +316,6 @@ setDispute(data)
         </View>
       ) : null}
 
-      {/* 📸 SELLER EVIDENCE */}
       {dispute.seller_evidence_urls?.length ? (
         <View style={styles.evidenceSection}>
           <Text style={styles.sectionTitle}>Seller Evidence</Text>

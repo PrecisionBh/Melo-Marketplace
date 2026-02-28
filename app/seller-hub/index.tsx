@@ -238,12 +238,6 @@ export default function SellerHubScreen() {
         />
 
         <MenuItem
-          icon="document-text-outline"
-          label="Payout History"
-          onPress={() => router.push("/seller-hub/payout-history")}
-        />
-
-        <MenuItem
           icon="chatbubble-ellipses-outline"
           label="Messages"
           badgeCount={unreadMessagesCount}
