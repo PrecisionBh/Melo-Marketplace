@@ -33,7 +33,7 @@ type Order = {
   } | null
 }
 
-type FilterType = "all" | "completed" | "returned" | "canceled"
+type FilterType = "all" | "completed" | "returned" | "canceled" 
 
 /* ---------------- SCREEN ---------------- */
 

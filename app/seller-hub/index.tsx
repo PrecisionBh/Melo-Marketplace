@@ -28,25 +28,97 @@ export default function SellerHubScreen() {
 
   /* ---------------- LOAD COUNTS ---------------- */
 
-  useFocusEffect(
-    useCallback(() => {
-      if (!sellerId) {
-        handleAppError(new Error("Missing seller session"), {
-          context: "seller_hub_no_session",
-          silent: true,
-        })
-        return
+useFocusEffect(
+  useCallback(() => {
+    const runEscrowReleaseTrigger = async () => {
+      try {
+        console.log("🔥 Triggering escrow auto release")
+
+        const res = await fetch(
+          `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/auto-release-escrow`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-cron-secret": "Auto_Release_Escrow_2026",
+            },
+            body: JSON.stringify({}),
+          }
+        )
+
+        console.log("Escrow release status:", res.status)
+        const text = await res.text()
+        console.log("Escrow release response:", text)
+      } catch (err) {
+        console.log("Escrow release trigger error:", err)
       }
+    }
 
-      loadOrdersToShipCount()
-      loadOrdersInProgressCount()
-      loadUnreadMessagesCount()
-      loadOffersActionCount()
-      loadProStatus()
-    }, [sellerId])
-  )
+    const runReturnAutoRefundTrigger = async () => {
+      try {
+        console.log("🔁 Triggering auto refund for returns")
 
-  /* ---------------- PRO STATUS ---------------- */
+        const res = await fetch(
+          `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/auto-release-return`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-cron-secret": "Auto_Release_Escrow_2026",
+            },
+            body: JSON.stringify({}),
+          }
+        )
+
+        console.log("Return auto refund status:", res.status)
+        const text = await res.text()
+        console.log("Return auto refund response:", text)
+      } catch (err) {
+        console.log("Return auto refund trigger error:", err)
+      }
+    }
+
+    const runNonReturnReleaseTrigger = async () => {
+      try {
+        console.log("⏱️ Triggering non-return escrow release (no tracking uploaded)")
+
+        const res = await fetch(
+          `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/auto-non-return-release`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-cron-secret": "Auto_Release_Escrow_2026",
+            },
+            body: JSON.stringify({}),
+          }
+        )
+
+        console.log("Non-return release status:", res.status)
+        const text = await res.text()
+        console.log("Non-return release response:", text)
+      } catch (err) {
+        console.log("Non-return release trigger error:", err)
+      }
+    }
+
+    // 🔥 Fire all – do not block UI
+    runEscrowReleaseTrigger()
+    runReturnAutoRefundTrigger()
+    runNonReturnReleaseTrigger()
+
+    // Existing loads
+    loadOrdersToShipCount()
+    loadOrdersInProgressCount()
+    loadUnreadMessagesCount()
+    loadOffersActionCount()
+    loadProStatus()
+
+    return () => {}
+  }, [sellerId])
+)
+
+/* ---------------- PRO STATUS ---------------- */
 
   const loadProStatus = async () => {
     if (!sellerId) return
@@ -171,34 +243,24 @@ export default function SellerHubScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* 🔓 FREE SECTION */}
         <FreeDashboardSection
           totalOrdersBadge={totalOrdersBadge}
           offersActionCount={offersActionCount}
           unreadMessagesCount={unreadMessagesCount}
         />
 
-        {/* -------- TIGHT SECTION DIVIDER -------- */}
         <View style={styles.dividerWrap}>
           <View style={styles.dividerLine} />
           <Text style={styles.dividerText}>Pro Members</Text>
           <View style={styles.dividerLine} />
         </View>
 
-        {/* ✨ WHAT MELO PRO UNLOCKS (VALUE STACK) */}
         <ProBenefitsCard isPro={isPro} />
 
-        {/* 🚀 CONVERSION BUTTON (ONLY SHOW FOR FREE USERS) */}
         {!isPro && (
           <UpgradeToProButton style={styles.upgradeButton} />
         )}
 
-        {/* ✅ PRO SECTION */}
-        {/* IMPORTANT:
-           - NO pointerEvents
-           - NO opacity wrapper
-           - NO gray overlay
-           - Cards handle their own lock logic (like Create Listing) */}
         <View style={styles.proWrap}>
           <ProDashboardSection
             userId={sellerId || ""}
@@ -209,7 +271,6 @@ export default function SellerHubScreen() {
         </View>
       </ScrollView>
 
-      {/* 📌 STICKY FOOTER CREATE LISTING */}
       <TouchableOpacity
         style={styles.fab}
         onPress={() => router.push("/seller-hub/create-listing")}
@@ -230,12 +291,9 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: 120,
   },
-
   dividerWrap: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 0,
-    marginBottom: 0,
     paddingHorizontal: 16,
   },
   dividerLine: {
@@ -248,21 +306,15 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "900",
     color: "#5F7D71",
-    letterSpacing: 0.5,
   },
-
-  /* Matches Create Listing spacing exactly */
   upgradeButton: {
     marginHorizontal: 16,
     marginTop: 12,
     marginBottom: 6,
   },
-
-  /* CRITICAL: clean container (no opacity, no blocking, no tint) */
   proWrap: {
     marginTop: 4,
   },
-
   fab: {
     position: "absolute",
     bottom: 55,
@@ -275,11 +327,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 10,
-    shadowColor: "#000",
-    shadowOpacity: 0.18,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 6,
   },
   fabText: {
     fontSize: 15,

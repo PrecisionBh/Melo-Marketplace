@@ -104,6 +104,7 @@ export default function SellerOrderDetailScreen() {
   const [carrier, setCarrier] = useState("")
   const [tracking, setTracking] = useState("")
   const [saving, setSaving] = useState(false)
+  const [isPro, setIsPro] = useState(false)
 
   const [confirmReturnVisible, setConfirmReturnVisible] = useState(false)
   // 🆕 ACTIVE DISPUTE (non-return + return disputes)
@@ -164,6 +165,14 @@ const [activeDispute, setActiveDispute] = useState<any>(null)
       setOrder(data)
 setCarrier(data.carrier ?? "")
 setTracking(data.tracking_number ?? "")
+
+const { data: profile } = await supabase
+  .from("profiles")
+  .select("is_pro")
+  .eq("id", data.seller_id)
+  .single()
+
+setIsPro(!!profile?.is_pro)
 
 // 🧠 MELO CRITICAL: check if ANY dispute exists for this order
 const { data: disputeData } = await supabase
@@ -584,10 +593,13 @@ return (
         {/* RECEIPT (HIDDEN DURING RETURN FLOW, REFUNDS, OR CANCELLED) */}
         {!isInReturnFlow && !isRefunded && !isCancelled && (
           <SellerReceiptCard
-            itemPrice={itemPrice}
-            shipping={shipping}
-            status={order.status}
-          />
+  itemPrice={itemPrice}
+  shipping={shipping}
+  sellerFee={sellerFee}
+  sellerNet={sellerNet}
+  feePercent={isPro ? 3.5 : 5}
+  status={order.status}
+/>
         )}
 
         {/* 🧠 MASTER ACTION BAR (ALL NON-SHIPPING STATES INCLUDING RETURNS + DISPUTES) */}

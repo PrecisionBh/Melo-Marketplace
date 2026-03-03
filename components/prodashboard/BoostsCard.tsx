@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons"
+import { useRouter } from "expo-router"
 import { useEffect, useState } from "react"
 import {
   ActivityIndicator,
@@ -25,6 +26,8 @@ export default function BoostsCard({
   onPressBoost,
   disabled = false,
 }: Props) {
+  const router = useRouter()
+
   const [loading, setLoading] = useState(true)
   const [activeBoosts, setActiveBoosts] = useState(0)
   const [activeMegaBoosts, setActiveMegaBoosts] = useState(0)
@@ -85,6 +88,17 @@ export default function BoostsCard({
     }
   }
 
+  const onPressAddMore = () => {
+    // If they're not Pro (card locked), send to Pro marketing page
+    if (disabled) {
+      router.push("/melo-pro")
+      return
+    }
+
+    // Pro users -> Boost Store
+    router.push("/pro/packages")
+  }
+
   return (
     <View style={[styles.card, disabled && styles.locked]}>
       {/* Header (Mimics ProFeaturesCard style) */}
@@ -119,9 +133,7 @@ export default function BoostsCard({
           {loading ? (
             <ActivityIndicator style={{ marginTop: 6 }} size="small" />
           ) : (
-            <Text style={styles.activeText}>
-              {activeBoosts} active boosts
-            </Text>
+            <Text style={styles.activeText}>{activeBoosts} active boosts</Text>
           )}
         </View>
 
@@ -146,18 +158,35 @@ export default function BoostsCard({
       {/* Reset Timer */}
       <Text style={styles.resetText}>{getResetDaysText()}</Text>
 
-      {/* CTA (disabled like Switch/Input in ProFeaturesCard) */}
+      {/* Primary CTA */}
       <TouchableOpacity
-        style={[
-          styles.boostButton,
-          disabled && styles.boostButtonDisabled,
-        ]}
+        style={[styles.boostButton, disabled && styles.boostButtonDisabled]}
         activeOpacity={0.9}
         onPress={disabled ? undefined : onPressBoost}
         disabled={disabled}
       >
         <Ionicons name="flash" size={18} color="#CFAF4A" />
         <Text style={styles.boostButtonText}>Boost a Listing</Text>
+      </TouchableOpacity>
+
+      {/* Secondary CTA: Add More Boosts */}
+      <TouchableOpacity
+        style={[
+          styles.addMoreButton,
+          disabled && styles.addMoreButtonDisabled,
+        ]}
+        activeOpacity={0.9}
+        onPress={onPressAddMore}
+      >
+        <Ionicons
+          name={disabled ? "lock-closed" : "cart-outline"}
+          size={18}
+          color="#FFFFFF"
+        />
+        <Text style={styles.addMoreText}>
+          {disabled ? "Unlock Boost Packs (Go Pro)" : "Add more boosts"}
+        </Text>
+        <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
       </TouchableOpacity>
     </View>
   )
@@ -318,5 +347,30 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "900",
     color: "#CFAF4A",
+  },
+
+  /* NEW: Add More Boosts button */
+  addMoreButton: {
+    marginTop: 10,
+    height: 46,
+    borderRadius: 18,
+    backgroundColor: "#0F1E17",
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 10,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+  },
+
+  addMoreButtonDisabled: {
+    opacity: 0.95, // keep readable even when locked (card itself already dims)
+    borderColor: "rgba(214,179,90,0.45)",
+  },
+
+  addMoreText: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#FFFFFF",
   },
 })

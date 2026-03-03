@@ -24,8 +24,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { data, error } = await supabase
         .from("profiles")
         .select("is_banned")
-        .eq("id", userId) // ✅ CONFIRMED correct for your table
-        .single()
+        .eq("id", userId)
+        .maybeSingle() // ✅ safer than .single()
 
       if (error) {
         console.log("[AUTH] Ban check error:", error.message)
@@ -47,38 +47,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     console.log("[AUTH] Restoring session...")
 
     const restore = async () => {
-      const { data, error } = await supabase.auth.getSession()
+      try {
+        const { data, error } = await supabase.auth.getSession()
 
-      if (!mounted) return
+        if (!mounted) return
 
-      if (error) {
-        console.log("[AUTH] getSession error:", error.message)
-      }
-
-      const restoredSession = data.session
-      const userId = restoredSession?.user?.id
-
-      console.log(
-        "[AUTH] Session restored:",
-        !!restoredSession,
-        userId ?? "no-user"
-      )
-
-      // 🔒 HARD BAN BLOCK BEFORE SETTING SESSION
-      if (userId) {
-        const isBanned = await checkBanStatus(userId)
-
-        if (isBanned) {
-          console.log("[AUTH] 🚫 USER BANNED — BLOCKING SESSION & LOGGING OUT")
-          await supabase.auth.signOut()
-          setSession(null)
-          setLoading(false)
-          return // ❗ DO NOT SET SESSION
+        if (error) {
+          console.log("[AUTH] getSession error:", error.message)
         }
-      }
 
-      setSession(restoredSession)
-      setLoading(false)
+        const restoredSession = data.session
+        const userId = restoredSession?.user?.id
+
+        console.log(
+          "[AUTH] Session restored:",
+          !!restoredSession,
+          userId ?? "no-user"
+        )
+
+        // ✅ SET SESSION IMMEDIATELY (DO NOT BLOCK ON BAN CHECK)
+        setSession(restoredSession)
+        setLoading(false)
+
+        // 🔎 Run ban check in background
+        if (userId) {
+          checkBanStatus(userId).then(async (isBanned) => {
+            if (isBanned) {
+              console.log("[AUTH] 🚫 USER BANNED — FORCING LOGOUT")
+              await supabase.auth.signOut()
+              setSession(null)
+            }
+          })
+        }
+      } catch (err: any) {
+        console.log("[AUTH] Restore crashed:", err?.message ?? err)
+        setLoading(false)
+      }
     }
 
     restore()
@@ -87,20 +91,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       async (event, newSession) => {
         console.log("[AUTH] Auth state changed:", event)
 
+        setSession(newSession)
+
         const userId = newSession?.user?.id
 
         if (userId) {
-          const isBanned = await checkBanStatus(userId)
-
-          if (isBanned) {
-            console.log("[AUTH] 🚫 BANNED USER ATTEMPTED LOGIN — FORCING SIGN OUT")
-            await supabase.auth.signOut()
-            setSession(null)
-            return
-          }
+          checkBanStatus(userId).then(async (isBanned) => {
+            if (isBanned) {
+              console.log("[AUTH] 🚫 BANNED USER — FORCING SIGN OUT")
+              await supabase.auth.signOut()
+              setSession(null)
+            }
+          })
         }
-
-        setSession(newSession)
       }
     )
 

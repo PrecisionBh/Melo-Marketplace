@@ -1,30 +1,33 @@
 import { StyleSheet, Text, View } from "react-native"
 
 type Props = {
-  itemPrice: number
-  shipping: number
-  sellerFeePercent?: number // default 4%
-  status?: string
+  itemPrice?: number
+  shipping?: number
+  sellerFee?: number
+  sellerNet?: number
+  feePercent?: number
+  status: string
 }
 
 export default function SellerReceiptCard({
-  itemPrice,
-  shipping,
-  sellerFeePercent = 4,
+  itemPrice = 0,
+  shipping = 0,
+  sellerFee = 0,
+  sellerNet = 0,
+  feePercent = 0,
   status,
 }: Props) {
-  const grossTotal = itemPrice + shipping
-  const sellerFee = (grossTotal * sellerFeePercent) / 100
-  const netPayout = grossTotal - sellerFee
-
   const isRefunded =
     status === "returned" ||
     status === "refunded" ||
     status === "return_processing"
 
+  // Seller gross = item + shipping only
+  const gross = itemPrice + shipping
+
   return (
     <View style={styles.card}>
-      {/* 💸 REFUNDED HEADER (CRITICAL FOR SELLER TRUST) */}
+      {/* Refund Banner */}
       {isRefunded && (
         <View style={styles.refundedHeader}>
           <Text style={styles.refundedTitle}>Refund in Progress</Text>
@@ -35,11 +38,13 @@ export default function SellerReceiptCard({
       )}
 
       <View style={styles.receipt}>
+        {/* Item */}
         <ReceiptRow
           label="Item price"
           value={`$${itemPrice.toFixed(2)}`}
         />
 
+        {/* Always show shipping (even if 0.00) */}
         <ReceiptRow
           label="Shipping collected"
           value={`$${shipping.toFixed(2)}`}
@@ -47,24 +52,26 @@ export default function SellerReceiptCard({
 
         <View style={styles.receiptDivider} />
 
+        {/* Gross */}
         <ReceiptRow
-          label="Subtotal (Gross)"
-          value={`$${grossTotal.toFixed(2)}`}
+          label="Your gross (item + shipping)"
+          value={`$${gross.toFixed(2)}`}
           subtle
         />
 
+        {/* Seller Fee */}
         <ReceiptRow
-          label={`Melo seller fee (${sellerFeePercent}%)`}
+          label={`Melo seller fee (${feePercent}%)`}
           value={`-$${sellerFee.toFixed(2)}`}
           subtle
         />
 
         <View style={styles.receiptDivider} />
 
-        {/* 🔥 MOST IMPORTANT LINE FOR SELLERS */}
+        {/* Net Payout */}
         <ReceiptRow
           label="Your payout"
-          value={`$${netPayout.toFixed(2)}`}
+          value={`$${sellerNet.toFixed(2)}`}
           bold
         />
       </View>
@@ -107,7 +114,6 @@ function ReceiptRow({
 }
 
 const styles = StyleSheet.create({
-  /* 🔥 SAME CARD STYLE AS BUYER (UI CONSISTENCY) */
   card: {
     marginTop: 20,
     backgroundColor: "#FFFFFF",
@@ -115,18 +121,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#DDEDE6",
     padding: 16,
-
-    // iOS shadow
     shadowColor: "#000",
     shadowOpacity: 0.04,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
-
-    // Android shadow
     elevation: 2,
   },
 
-  /* 💸 REFUND / RETURN STATE */
   refundedHeader: {
     backgroundColor: "#FFF4E5",
     borderRadius: 12,
@@ -141,7 +142,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "900",
     color: "#B26A00",
-    letterSpacing: 0.3,
   },
 
   refundedSub: {

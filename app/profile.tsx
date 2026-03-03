@@ -161,14 +161,6 @@ export default function ProfileScreen() {
           label="Settings"
           onPress={() => router.push("/settings")}
         />
-
-        {showAdmin && (
-          <MenuItem
-            icon="shield-checkmark-outline"
-            label="Admin Panel"
-            onPress={handleAdminPress}
-          />
-        )}
       </View>
 
       {/* 🚀 BIG MELO ADMIN BUTTON (BOTTOM) */}

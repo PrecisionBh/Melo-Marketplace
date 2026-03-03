@@ -12,8 +12,6 @@ import {
 
 import AppHeader from "@/components/app-header"
 import ListingCard from "@/components/listing/ListingCard"
-import ProStatusCard from "@/components/pro/ProStatusCard"
-import UpgradeToProButton from "@/components/pro/UpgradeToProButton"
 import { useAuth } from "../../context/AuthContext"
 import { handleAppError } from "../../lib/errors/appError"
 import { supabase } from "../../lib/supabase"
@@ -86,9 +84,7 @@ export default function MyListingsScreen() {
 
       const { data, error } = await supabase
         .from("listings")
-        .select(
-          "id,title,price,image_urls,status,is_boosted,boost_expires_at"
-        )
+        .select("id,title,price,image_urls,status,is_boosted,boost_expires_at")
         .eq("user_id", session.user.id)
         .order("created_at", { ascending: false })
 
@@ -107,6 +103,16 @@ export default function MyListingsScreen() {
   const filteredListings = useMemo(() => {
     return listings.filter((l) => l.status === filter)
   }, [listings, filter])
+
+  const activeCount = useMemo(
+    () => listings.filter((l) => l.status === "active").length,
+    [listings]
+  )
+  const inactiveCount = useMemo(
+    () => listings.filter((l) => l.status === "inactive").length,
+    [listings]
+  )
+  const totalCount = listings.length
 
   const boostListing = async (listingId: string) => {
     if (!session?.user?.id) {
@@ -152,11 +158,7 @@ export default function MyListingsScreen() {
   const deactivateListing = async (id: string) => {
     try {
       // 🚀 OPTIMISTIC UI UPDATE (instant removal from Active tab)
-      setListings((prev) =>
-        prev.map((l) =>
-          l.id === id ? { ...l, status: "inactive" } : l
-        )
-      )
+      setListings((prev) => prev.map((l) => (l.id === id ? { ...l, status: "inactive" } : l)))
 
       const { error } = await supabase
         .from("listings")
@@ -272,91 +274,85 @@ export default function MyListingsScreen() {
 
   return (
     <View style={styles.screen}>
-      <AppHeader
-        title="My Listings"
-        backLabel="Seller Hub"
-        backRoute="/seller-hub"
-      />
+      <AppHeader title="My Listings" backLabel="Seller Hub" backRoute="/seller-hub" />
 
-      <View style={styles.topSection}>
-        {!isPro ? (
-          <UpgradeToProButton />
-        ) : (
-          <ProStatusCard boostsRemaining={boostRemaining} />
-        )}
+      {/* Premium workspace header (universal; not selling Pro) */}
+      <View style={styles.workspaceCard}>
+        <View style={styles.workspaceTopRow}>
+          <Text style={styles.workspaceTitle}>Inventory</Text>
+          <Text style={styles.workspaceSub}>Manage, edit, pause, and relist your items.</Text>
+        </View>
+
+        <View style={styles.metricsRow}>
+          <Metric label="Active" value={String(activeCount)} />
+          <View style={styles.metricDivider} />
+          <Metric label="Inactive" value={String(inactiveCount)} />
+          <View style={styles.metricDivider} />
+          <Metric label="Total" value={String(totalCount)} />
+        </View>
       </View>
 
-      <View style={styles.toggleOuter}>
-        <View style={styles.toggleContainer}>
-          <TouchableOpacity
-            style={[
-              styles.segment,
-              filter === "active" && styles.segmentActive,
-            ]}
-            onPress={() => setFilter("active")}
-            activeOpacity={0.85}
-          >
-            <Text
-              style={[
-                styles.segmentText,
-                filter === "active" && styles.segmentTextActive,
-              ]}
-            >
-              Active
-            </Text>
-          </TouchableOpacity>
+      {/* Clean underline tabs */}
+      <View style={styles.tabsWrap}>
+        <TouchableOpacity
+          style={styles.tab}
+          onPress={() => setFilter("active")}
+          activeOpacity={0.85}
+        >
+          <Text style={[styles.tabText, filter === "active" && styles.tabTextActive]}>
+            ACTIVE <Text style={styles.tabCount}>({activeCount})</Text>
+          </Text>
+          {filter === "active" && <View style={styles.tabUnderline} />}
+        </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[
-              styles.segment,
-              filter === "inactive" && styles.segmentActive,
-            ]}
-            onPress={() => setFilter("inactive")}
-            activeOpacity={0.85}
-          >
-            <Text
-              style={[
-                styles.segmentText,
-                filter === "inactive" && styles.segmentTextActive,
-              ]}
-            >
-              Inactive
-            </Text>
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity
+          style={styles.tab}
+          onPress={() => setFilter("inactive")}
+          activeOpacity={0.85}
+        >
+          <Text style={[styles.tabText, filter === "inactive" && styles.tabTextActive]}>
+            INACTIVE <Text style={styles.tabCount}>({inactiveCount})</Text>
+          </Text>
+          {filter === "inactive" && <View style={styles.tabUnderline} />}
+        </TouchableOpacity>
       </View>
 
       {filteredListings.length === 0 ? (
         <View style={styles.empty}>
+          <Text style={styles.emptyTitle}>Nothing here yet</Text>
           <Text style={styles.emptyText}>
-            No {filter} listings found.
+            {filter === "active"
+              ? "Your active listings will appear here."
+              : "Listings you pause will appear here."}
           </Text>
         </View>
       ) : (
         <FlatList
           data={filteredListings}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={{ padding: 16, paddingBottom: 160 }}
+          contentContainerStyle={styles.listContent}
           initialNumToRender={8}
           windowSize={5}
           removeClippedSubviews
           renderItem={({ item }) => (
-            <ListingCard
-              item={item}
-              isPro={isPro}
-              boostRemaining={boostRemaining}
-              onPress={() => router.push(`/listing/${item.id}`)}
-              onEdit={() =>
-                router.push({
-                  pathname: "/edit-listing/[id]" as any,
-                  params: { id: item.id },
-                } as any)
-              }
-              onDelete={() => deleteListing(item.id)}
-              onDeactivate={() => deactivateListing(item.id)}
-              onDuplicate={() => duplicateListing(item.id)}
-              onBoost={() => boostListing(item.id)}
-            />
+            <View style={styles.cardWrap}>
+              <ListingCard
+                item={item}
+                isPro={isPro}
+                boostRemaining={boostRemaining}
+                onPress={() => router.push(`/listing/${item.id}`)}
+                onEdit={() =>
+                  router.push({
+                    pathname: "/edit-listing/[id]" as any,
+                    params: { id: item.id },
+                  } as any)
+                }
+                onDelete={() => deleteListing(item.id)}
+                onDeactivate={() => deactivateListing(item.id)}
+                onDuplicate={() => duplicateListing(item.id)}
+                onBoost={() => boostListing(item.id)}
+              />
+            </View>
           )}
         />
       )}
@@ -364,73 +360,158 @@ export default function MyListingsScreen() {
   )
 }
 
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.metric}>
+      <Text style={styles.metricValue}>{value}</Text>
+      <Text style={styles.metricLabel}>{label}</Text>
+    </View>
+  )
+}
+
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#EAF4EF" },
+  screen: { flex: 1, backgroundColor: "#F7F9F8" },
 
   loaderWrap: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#EAF4EF",
+    backgroundColor: "#F7F9F8",
   },
 
-  topSection: {
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 2,
+  /* Workspace header */
+  workspaceCard: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    padding: 14,
+    borderRadius: 18,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E6EFEA",
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 2,
+  },
+  workspaceTopRow: {
+    marginBottom: 10,
+  },
+  workspaceTitle: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#0F1E17",
+    letterSpacing: 0.2,
+  },
+  workspaceSub: {
+    marginTop: 4,
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#557566",
+    opacity: 0.9,
+    lineHeight: 16,
   },
 
-  toggleOuter: {
-    paddingHorizontal: 16,
-    marginTop: 6,
-    marginBottom: 4,
-  },
-
-  toggleContainer: {
+  metricsRow: {
     flexDirection: "row",
-    backgroundColor: "#E3F2EC",
-    borderRadius: 999,
-    padding: 4,
+    alignItems: "center",
+    backgroundColor: "#F2F6F4",
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: "rgba(15,30,23,0.06)",
   },
-
-  segment: {
+  metric: {
     flex: 1,
-    paddingVertical: 8,
-    borderRadius: 999,
     alignItems: "center",
     justifyContent: "center",
   },
-
-  segmentActive: {
-    backgroundColor: "#7FAF9B",
-    shadowColor: "#7FAF9B",
-    shadowOpacity: 0.18,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
+  metricValue: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#0F1E17",
   },
-
-  segmentText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#6F9C8A",
+  metricLabel: {
+    marginTop: 2,
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#557566",
     letterSpacing: 0.3,
   },
-
-  segmentTextActive: {
-    color: "#0F1E17",
-    fontWeight: "800",
+  metricDivider: {
+    width: 1,
+    height: 26,
+    backgroundColor: "rgba(15,30,23,0.10)",
+    marginHorizontal: 6,
   },
 
+  /* Tabs */
+  tabsWrap: {
+    marginTop: 12,
+    paddingHorizontal: 16,
+    flexDirection: "row",
+    gap: 14,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E6EFEA",
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  tabText: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#6B8F7D",
+    letterSpacing: 1.1,
+  },
+  tabCount: {
+    fontWeight: "900",
+    color: "rgba(107,143,125,0.85)",
+  },
+  tabTextActive: {
+    color: "#0F1E17",
+  },
+  tabUnderline: {
+    marginTop: 8,
+    height: 3,
+    width: "42%",
+    borderRadius: 99,
+    backgroundColor: "#7FAF9B",
+  },
+
+  /* List */
+  listContent: {
+    padding: 16,
+    paddingBottom: 160,
+  },
+  cardWrap: {
+    marginBottom: 12,
+  },
+
+  /* Empty */
   empty: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
+    paddingHorizontal: 26,
   },
-
-  emptyText: {
+  emptyTitle: {
     fontSize: 16,
+    fontWeight: "900",
+    color: "#0F1E17",
+  },
+  emptyText: {
+    marginTop: 6,
+    fontSize: 13,
     fontWeight: "700",
-    color: "#6B8F7D",
+    color: "#557566",
+    textAlign: "center",
+    lineHeight: 18,
   },
 })

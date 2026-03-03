@@ -1,18 +1,22 @@
+import { Ionicons } from "@expo/vector-icons"
+import { useMemo } from "react"
 import {
-    Image,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Alert,
+  Image,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native"
 
-type Listing = {
+export type Listing = {
   id: string
   title: string
   price: number
   image_urls: string[] | null
   status: "active" | "inactive"
   is_boosted?: boolean
+  boost_expires_at?: string | null
 }
 
 type Props = {
@@ -38,265 +42,383 @@ export default function ListingCard({
   onDuplicate,
   onBoost,
 }: Props) {
+  const thumbnail = item.image_urls?.[0] ?? null
   const isActive = item.status === "active"
-  const isBoosted = item.is_boosted === true
+
+  const boostDisabled = !isPro || boostRemaining <= 0 || !isActive
+
+  const boostBadge = useMemo(() => {
+    if (!item.is_boosted || !item.boost_expires_at) return null
+
+    try {
+      const expires = new Date(item.boost_expires_at).getTime()
+      const now = Date.now()
+      const diff = expires - now
+      if (diff <= 0) return "BOOST EXPIRED"
+
+      const days = Math.ceil(diff / (1000 * 60 * 60 * 24))
+      return `BOOSTED · ${days}d left`
+    } catch {
+      return "BOOSTED"
+    }
+  }, [item.is_boosted, item.boost_expires_at])
+
+  const confirmDelete = () => {
+    Alert.alert(
+      "Delete Listing",
+      "This action cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Delete", style: "destructive", onPress: onDelete },
+      ]
+    )
+  }
+
+  const confirmDeactivate = () => {
+    Alert.alert(
+      isActive ? "Pause Listing?" : "Relist Listing?",
+      isActive
+        ? "This listing will no longer be visible."
+        : "This listing will become active again.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: isActive ? "Pause" : "Relist",
+          onPress: isActive ? onDeactivate : onDuplicate,
+        },
+      ]
+    )
+  }
+
+  const confirmBoost = () => {
+    if (item.is_boosted && item.boost_expires_at) {
+      const expires = new Date(item.boost_expires_at)
+      const formatted = expires.toLocaleDateString()
+
+      Alert.alert(
+        "Already Boosted",
+        `This listing is boosted until ${formatted}.`,
+        [{ text: "OK" }]
+      )
+      return
+    }
+
+    if (!isPro) {
+      Alert.alert(
+        "Pro Required",
+        "Boosting is available for Melo Pro members only.",
+        [{ text: "OK" }]
+      )
+      return
+    }
+
+    if (boostRemaining <= 0) {
+      Alert.alert(
+        "No Boosts Remaining",
+        "You’ve used all available boosts for this cycle.",
+        [{ text: "OK" }]
+      )
+      return
+    }
+
+    Alert.alert(
+      "Boost Listing",
+      "Boost this listing for maximum visibility?",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Boost", onPress: onBoost },
+      ]
+    )
+  }
 
   return (
-    <View style={styles.shadowBox}>
-      <View style={styles.card}>
-        {/* MAIN ROW */}
-        <TouchableOpacity style={styles.row} onPress={onPress}>
-          <Image
-            source={{
-              uri:
-                item.image_urls?.[0] ??
-                "https://via.placeholder.com/150",
-            }}
-            style={styles.image}
-          />
-
-          <View style={{ flex: 1 }}>
-            <Text style={styles.title} numberOfLines={2}>
-              {item.title}
-            </Text>
-
-            <Text style={styles.price}>
-              ${item.price.toFixed(2)}
-            </Text>
-
-            {/* STATUS + BOOST BADGES */}
-            <View style={styles.badgeRow}>
-              <View
-                style={[
-                  styles.statusPill,
-                  isActive
-                    ? styles.activePill
-                    : styles.inactivePill,
-                ]}
-              >
-                <Text style={styles.statusText}>
-                  {isActive ? "ACTIVE" : "INACTIVE"}
-                </Text>
-              </View>
-
-              {isBoosted && (
-                <View style={styles.boostedBadge}>
-                  <Text style={styles.boostedText}>
-                    ⭐ BOOSTED
-                  </Text>
-                </View>
-              )}
-            </View>
-          </View>
-        </TouchableOpacity>
-
-        {/* BOOST BUTTON (PRO ONLY + NOT ALREADY BOOSTED) */}
-        {isPro && isActive && !isBoosted && (
-          <TouchableOpacity
-            style={[
-              styles.boostBtn,
-              boostRemaining <= 0 && styles.boostDisabled,
-            ]}
-            disabled={boostRemaining <= 0}
-            onPress={onBoost}
-          >
-            <Text style={styles.boostBtnText}>
-              🚀 Boost Listing
-            </Text>
-          </TouchableOpacity>
-        )}
-
-        {/* TOGGLE ACTIVE / DEACTIVE */}
-        <View style={styles.actionsRow}>
-          {isActive ? (
-            <TouchableOpacity
-              style={styles.smallBtn}
-              onPress={onDeactivate}
-            >
-              <Text style={styles.smallBtnText}>
-                Deactivate
-              </Text>
-            </TouchableOpacity>
+    <TouchableOpacity
+      style={[styles.card, !isActive && styles.cardInactive]}
+      onPress={onPress}
+      activeOpacity={0.95}
+    >
+      {/* Top Section */}
+      <View style={styles.topRow}>
+        <View style={styles.thumbWrap}>
+          {thumbnail ? (
+            <Image source={{ uri: thumbnail }} style={styles.thumb} />
           ) : (
-            <TouchableOpacity
-              style={styles.smallBtn}
-              onPress={onDuplicate}
-            >
-              <Text style={styles.smallBtnText}>
-                Reactivate
-              </Text>
-            </TouchableOpacity>
+            <View style={styles.thumbPlaceholder}>
+              <Ionicons name="image-outline" size={20} color="#7A8F84" />
+            </View>
           )}
-
-          <TouchableOpacity
-            style={[styles.smallBtn, styles.deleteBtn]}
-            onPress={onDelete}
-          >
-            <Text style={styles.deleteText}>Delete</Text>
-          </TouchableOpacity>
         </View>
 
-        {/* EDIT BUTTON */}
-        <TouchableOpacity style={styles.editBtn} onPress={onEdit}>
-          <Text style={styles.editText}>EDIT</Text>
-        </TouchableOpacity>
+        <View style={styles.content}>
+          <Text numberOfLines={1} style={styles.title}>
+            {item.title || "Untitled listing"}
+          </Text>
+
+          <Text style={styles.price}>
+            ${Number(item.price ?? 0).toFixed(2)}
+          </Text>
+
+          <View style={styles.badgeRow}>
+            <View
+              style={[
+                styles.statusPill,
+                isActive ? styles.pillActive : styles.pillInactive,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.statusText,
+                  isActive
+                    ? styles.statusTextActive
+                    : styles.statusTextInactive,
+                ]}
+              >
+                {isActive ? "ACTIVE" : "INACTIVE"}
+              </Text>
+            </View>
+
+            {!!boostBadge && (
+              <View style={styles.boostBadge}>
+                <Ionicons name="flash" size={14} color="#CFAF4A" />
+                <Text style={styles.boostBadgeText}>{boostBadge}</Text>
+              </View>
+            )}
+          </View>
+        </View>
       </View>
-    </View>
+
+      {/* Bottom Buttons */}
+      <View style={styles.buttonRow}>
+        <BottomBtn icon="create-outline" label="Edit" onPress={onEdit} />
+        <BottomBtn
+          icon={isActive ? "pause-outline" : "refresh-outline"}
+          label={isActive ? "Pause" : "Relist"}
+          onPress={confirmDeactivate}
+        />
+        <BottomBtn
+          icon="flash-outline"
+          label={item.is_boosted ? "Boosted" : "Boost"}
+          onPress={confirmBoost}
+          variant="gold"
+          disabled={boostDisabled}
+        />
+        <BottomBtn
+          icon="trash-outline"
+          label="Delete"
+          onPress={confirmDelete}
+          variant="danger"
+        />
+      </View>
+    </TouchableOpacity>
+  )
+}
+
+function BottomBtn({
+  icon,
+  label,
+  onPress,
+  disabled = false,
+  variant = "neutral",
+}: {
+  icon: any
+  label: string
+  onPress: () => void
+  disabled?: boolean
+  variant?: "neutral" | "gold" | "danger"
+}) {
+  return (
+    <TouchableOpacity
+      style={[
+        styles.bottomBtn,
+        variant === "gold" && styles.bottomBtnGold,
+        variant === "danger" && styles.bottomBtnDanger,
+        disabled && styles.bottomBtnDisabled,
+      ]}
+      onPress={disabled ? undefined : onPress}
+      activeOpacity={0.9}
+      disabled={disabled}
+    >
+      <Ionicons
+        name={icon}
+        size={18}
+        color={
+          variant === "gold"
+            ? "#CFAF4A"
+            : variant === "danger"
+            ? "#D9544D"
+            : "#0F1E17"
+        }
+      />
+      <Text
+        style={[
+          styles.bottomText,
+          variant === "gold" && styles.bottomTextGold,
+          variant === "danger" && styles.bottomTextDanger,
+        ]}
+      >
+        {label}
+      </Text>
+    </TouchableOpacity>
   )
 }
 
 const styles = StyleSheet.create({
-  /* TRUE SHADOW BOX CONTAINER */
-  shadowBox: {
-    marginBottom: 18,
-    borderRadius: 20,
-    backgroundColor: "#FFFFFF",
-
-    // iOS Shadow (soft premium)
-    shadowColor: "#0F1E17",
-    shadowOpacity: 0.08,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 6 },
-
-    // Android Shadow
-    elevation: 6,
-  },
-
-  /* INNER CARD (keeps padding clean inside shadow) */
   card: {
-    padding: 16,
-    borderRadius: 20,
     backgroundColor: "#FFFFFF",
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: "#F0F4F2",
+    borderColor: "#E6EFEA",
+    padding: 14,
+    marginBottom: 14,
   },
 
-  row: {
+  cardInactive: {
+    opacity: 0.9,
+  },
+
+  topRow: {
     flexDirection: "row",
-    gap: 14,
+    marginBottom: 14,
   },
 
-  image: {
-    width: 96,
-    height: 96,
+  thumbWrap: {
+    width: 90,
+    marginRight: 12,
+  },
+
+  thumb: {
+    width: 90,
+    height: 90,
     borderRadius: 16,
-    backgroundColor: "#D6E6DE",
+    backgroundColor: "#F2F6F4",
+  },
+
+  thumbPlaceholder: {
+    width: 90,
+    height: 90,
+    borderRadius: 16,
+    backgroundColor: "#F2F6F4",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  content: {
+    flex: 1,
+    justifyContent: "center",
   },
 
   title: {
     fontSize: 15,
-    fontWeight: "800",
+    fontWeight: "900",
     color: "#0F1E17",
   },
 
   price: {
     marginTop: 4,
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: "900",
     color: "#0F1E17",
   },
 
   badgeRow: {
-    flexDirection: "row",
-    gap: 8,
     marginTop: 8,
+    flexDirection: "row",
     alignItems: "center",
+    gap: 8,
   },
 
   statusPill: {
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 5,
     borderRadius: 999,
+    borderWidth: 1,
   },
 
-  activePill: {
-    backgroundColor: "#E8F8F0",
+  pillActive: {
+    backgroundColor: "#F2FBF6",
+    borderColor: "rgba(127,175,155,0.45)",
   },
 
-  inactivePill: {
-    backgroundColor: "#ECECEC",
+  pillInactive: {
+    backgroundColor: "#F5F6F6",
+    borderColor: "rgba(15,30,23,0.12)",
   },
 
   statusText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "900",
-    color: "#0F1E17",
+    letterSpacing: 0.8,
   },
 
-  boostedBadge: {
-    backgroundColor: "#0F1E17",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
+  statusTextActive: {
+    color: "#2C6E55",
   },
 
-  boostedText: {
-    fontSize: 11,
-    fontWeight: "900",
-    color: "#7FAF9B", // Melo brand color
+  statusTextInactive: {
+    color: "rgba(15,30,23,0.55)",
   },
 
-  boostBtn: {
-    marginTop: 14,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "#0F1E17",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  boostDisabled: {
-    opacity: 0.4,
-  },
-
-  boostBtnText: {
-    fontWeight: "900",
-    fontSize: 14,
-    color: "#7FAF9B",
-  },
-
-  actionsRow: {
+  boostBadge: {
     flexDirection: "row",
-    gap: 12,
-    marginTop: 12,
-  },
-
-  smallBtn: {
-    flex: 1,
-    height: 38,
-    borderRadius: 20,
-    backgroundColor: "#EAF4EF",
     alignItems: "center",
-    justifyContent: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "#0B0F0D",
+    borderWidth: 1,
+    borderColor: "rgba(207,175,74,0.55)",
   },
 
-  smallBtnText: {
-    fontWeight: "800",
-    color: "#0F1E17",
-  },
-
-  deleteBtn: {
-    backgroundColor: "#FCEAEA",
-  },
-
-  deleteText: {
-    fontWeight: "800",
-    color: "#C0392B",
-  },
-
-  editBtn: {
-    marginTop: 14,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: "#7FAF9B",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  editText: {
-    fontSize: 16,
+  boostBadgeText: {
+    fontSize: 12,
     fontWeight: "900",
+    color: "#CFAF4A",
+  },
+
+  buttonRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+
+  bottomBtn: {
+    flex: 1,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: "#F2F6F4",
+    borderWidth: 1,
+    borderColor: "rgba(15,30,23,0.08)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginHorizontal: 4,
+  },
+
+  bottomBtnGold: {
+    backgroundColor: "#0B0F0D",
+    borderColor: "rgba(207,175,74,0.55)",
+  },
+
+  bottomBtnDanger: {
+    backgroundColor: "#FFF3F2",
+    borderColor: "rgba(217,84,77,0.30)",
+  },
+
+  bottomBtnDisabled: {
+    opacity: 0.35,
+  },
+
+  bottomText: {
+    fontSize: 11,
+    fontWeight: "900",
+    marginTop: 2,
     color: "#0F1E17",
-    letterSpacing: 1,
+  },
+
+  bottomTextGold: {
+    color: "#CFAF4A",
+  },
+
+  bottomTextDanger: {
+    color: "#D9544D",
   },
 })

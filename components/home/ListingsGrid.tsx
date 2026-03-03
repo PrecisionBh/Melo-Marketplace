@@ -63,8 +63,6 @@ export default function ListingsGrid({
     })
   }
 
-  console.log("🧱 Base rows built:", baseRows.length)
-
   // 👑 Inject Mega Boost rows every Nth row (without breaking grid)
   const rows: GridRowItem[] = []
   let megaIndex = 0
@@ -81,9 +79,6 @@ export default function ListingsGrid({
       const sliceEnd = sliceStart + 6
       const megaSlice = megaBoostListings.slice(sliceStart, sliceEnd)
 
-      console.log("👑 Checking Mega Boost insertion at row:", index)
-      console.log("👑 Mega slice length:", megaSlice.length)
-
       if (megaSlice.length > 0) {
         rows.push({
           type: "mega_boost",
@@ -98,11 +93,8 @@ export default function ListingsGrid({
   // ✅ Insert Upgrade row at 5th row position (index 4)
   if (showUpgradeRow) {
     const insertAt = Math.min(4, rows.length)
-    console.log("⭐ Inserting Upgrade Row at index:", insertAt)
     rows.splice(insertAt, 0, { type: "upgrade_row", id: "upgrade-row" })
   }
-
-  console.log("📦 Final rows count:", rows.length)
 
   /* 🧠 RESTORE SCROLL POSITION AFTER DATA IS READY (MARKETPLACE-GRADE FIX) */
   useEffect(() => {
@@ -110,8 +102,6 @@ export default function ListingsGrid({
     if (hasRestoredScroll.current) return
     if (rows.length === 0) return
     if (!initialScrollOffset || initialScrollOffset <= 0) return
-
-    console.log("🧠 Restoring scroll to:", initialScrollOffset)
 
     // Delay ensures FlatList layout is calculated
     const timeout = setTimeout(() => {

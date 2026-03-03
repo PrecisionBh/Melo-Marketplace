@@ -57,7 +57,11 @@ export default function SellerOrdersHubScreen() {
         .from("orders")
         .select("id", { count: "exact", head: true })
         .eq("seller_id", sellerId)
-        .in("status", ["shipped", "delivered"])
+        .in("status", [
+  "shipped",
+  "return_started",
+  "return_processing",
+])
 
       if (error) throw error
 
