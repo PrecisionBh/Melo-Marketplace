@@ -183,6 +183,8 @@ export default function PackagesScreen() {
         }
       )
 
+    console.log("Invoke result:", { data, error })
+
       if (error) throw error
 
       if (data?.url) {
@@ -196,6 +198,7 @@ export default function PackagesScreen() {
       setBuyingId(null)
     }
   }
+
 
   return (
   <View style={styles.screen}>
@@ -500,7 +503,7 @@ const styles = StyleSheet.create({
 },
 
 packCard: {
-  flex: 1,
+  width: (width - 16 * 2 - 12) / 2, // 2 cards per row
   borderRadius: 18,
   padding: 12,
   backgroundColor: "rgba(255,255,255,0.06)",

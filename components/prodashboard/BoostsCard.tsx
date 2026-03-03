@@ -14,14 +14,16 @@ import { supabase } from "@/lib/supabase"
 type Props = {
   userId: string
   boostsRemaining: number
+  megaBoostsRemaining: number // ✅ NEW
   lastBoostReset: string | null
   onPressBoost: () => void
-  disabled?: boolean // 🔒 mirrors isPro=false behavior (like ProFeaturesCard)
+  disabled?: boolean
 }
 
 export default function BoostsCard({
   userId,
   boostsRemaining,
+  megaBoostsRemaining, // ✅ NEW
   lastBoostReset,
   onPressBoost,
   disabled = false,
@@ -71,58 +73,30 @@ export default function BoostsCard({
     loadActiveBoosts()
   }, [userId])
 
-  const getResetDaysText = () => {
-    if (!lastBoostReset) return "Boosts reset monthly"
-
-    try {
-      const last = new Date(lastBoostReset)
-      const next = new Date(last)
-      next.setMonth(next.getMonth() + 1)
-
-      const diffMs = next.getTime() - Date.now()
-      const days = Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)))
-
-      return `${days} day${days === 1 ? "" : "s"} until boosts replenish`
-    } catch {
-      return "Boosts reset monthly"
-    }
-  }
-
   const onPressAddMore = () => {
-    // If they're not Pro (card locked), send to Pro marketing page
     if (disabled) {
       router.push("/melo-pro")
       return
     }
 
-    // Pro users -> Boost Store
     router.push("/pro/packages")
   }
 
   return (
     <View style={[styles.card, disabled && styles.locked]}>
-      {/* Header (Mimics ProFeaturesCard style) */}
       <View style={styles.headerRow}>
         <Ionicons name="sparkles" size={18} color="#CFAF4A" />
         <Text style={styles.title}>Boost Power</Text>
-
-        {disabled && (
-          <View style={styles.proPill}>
-            <Text style={styles.proPillText}>PRO</Text>
-          </View>
-        )}
       </View>
 
-      {/* Subtext (like Create Listing) */}
       <Text style={styles.subtitle}>
         {disabled
           ? "Upgrade to Melo Pro to unlock Boost & Mega Boost visibility"
           : `${boostsRemaining} boosts available`}
       </Text>
 
-      {/* Pills Row */}
       <View style={styles.pillsRow}>
-        {/* Boost Pill */}
+        {/* Boost Credits */}
         <View style={styles.pillContainer}>
           <View style={styles.boostPill}>
             <Ionicons name="flash-outline" size={16} color="#0F1E17" />
@@ -133,15 +107,19 @@ export default function BoostsCard({
           {loading ? (
             <ActivityIndicator style={{ marginTop: 6 }} size="small" />
           ) : (
-            <Text style={styles.activeText}>{activeBoosts} active boosts</Text>
+            <Text style={styles.activeText}>
+              {activeBoosts} active boosts
+            </Text>
           )}
         </View>
 
-        {/* Mega Boost Pill */}
+        {/* Mega Credits */}
         <View style={styles.pillContainer}>
           <View style={styles.megaPill}>
             <Ionicons name="star-outline" size={16} color="#CFAF4A" />
-            <Text style={styles.megaPillNumber}>{activeMegaBoosts}</Text>
+            <Text style={styles.megaPillNumber}>
+              {megaBoostsRemaining}
+            </Text>
             <Text style={styles.megaPillLabel}>Mega</Text>
           </View>
 
@@ -155,10 +133,6 @@ export default function BoostsCard({
         </View>
       </View>
 
-      {/* Reset Timer */}
-      <Text style={styles.resetText}>{getResetDaysText()}</Text>
-
-      {/* Primary CTA */}
       <TouchableOpacity
         style={[styles.boostButton, disabled && styles.boostButtonDisabled]}
         activeOpacity={0.9}
@@ -169,7 +143,6 @@ export default function BoostsCard({
         <Text style={styles.boostButtonText}>Boost a Listing</Text>
       </TouchableOpacity>
 
-      {/* Secondary CTA: Add More Boosts */}
       <TouchableOpacity
         style={[
           styles.addMoreButton,
@@ -184,9 +157,8 @@ export default function BoostsCard({
           color="#FFFFFF"
         />
         <Text style={styles.addMoreText}>
-          {disabled ? "Unlock Boost Packs (Go Pro)" : "Add more boosts"}
+          {disabled ? "Unlock Boost Packs" : "Add more boosts"}
         </Text>
-        <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
       </TouchableOpacity>
     </View>
   )

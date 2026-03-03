@@ -25,100 +25,60 @@ export default function SellerHubScreen() {
   const [proLoading, setProLoading] = useState(true)
   const [isPro, setIsPro] = useState(false)
   const [boostsRemaining, setBoostsRemaining] = useState<number>(0)
+  const [megaBoostsRemaining, setMegaBoostsRemaining] = useState<number>(0)
 
-  /* ---------------- LOAD COUNTS ---------------- */
+/* ---------------- LOAD COUNTS ---------------- */
 
 useFocusEffect(
   useCallback(() => {
-    const runEscrowReleaseTrigger = async () => {
+    if (!sellerId) return
+
+    console.log("🔄 SellerHub focused — refreshing everything")
+
+    // 🔥 Fire escrow/return triggers (non-blocking)
+    ;(async () => {
       try {
-        console.log("🔥 Triggering escrow auto release")
+        const base = process.env.EXPO_PUBLIC_SUPABASE_URL
 
-        const res = await fetch(
-          `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/auto-release-escrow`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "x-cron-secret": "Auto_Release_Escrow_2026",
-            },
-            body: JSON.stringify({}),
-          }
-        )
+        fetch(`${base}/functions/v1/auto-release-escrow`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-cron-secret": "Auto_Release_Escrow_2026",
+          },
+        })
 
-        console.log("Escrow release status:", res.status)
-        const text = await res.text()
-        console.log("Escrow release response:", text)
+        fetch(`${base}/functions/v1/auto-release-return`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-cron-secret": "Auto_Release_Escrow_2026",
+          },
+        })
+
+        fetch(`${base}/functions/v1/auto-non-return-release`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-cron-secret": "Auto_Release_Escrow_2026",
+          },
+        })
       } catch (err) {
-        console.log("Escrow release trigger error:", err)
+        console.log("⚠ Escrow trigger error:", err)
       }
-    }
+    })()
 
-    const runReturnAutoRefundTrigger = async () => {
-      try {
-        console.log("🔁 Triggering auto refund for returns")
+    // 🔥 CRITICAL: Reload Pro status (this updates boostsRemaining)
+    loadProStatus()
 
-        const res = await fetch(
-          `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/auto-release-return`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "x-cron-secret": "Auto_Release_Escrow_2026",
-            },
-            body: JSON.stringify({}),
-          }
-        )
-
-        console.log("Return auto refund status:", res.status)
-        const text = await res.text()
-        console.log("Return auto refund response:", text)
-      } catch (err) {
-        console.log("Return auto refund trigger error:", err)
-      }
-    }
-
-    const runNonReturnReleaseTrigger = async () => {
-      try {
-        console.log("⏱️ Triggering non-return escrow release (no tracking uploaded)")
-
-        const res = await fetch(
-          `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/auto-non-return-release`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "x-cron-secret": "Auto_Release_Escrow_2026",
-            },
-            body: JSON.stringify({}),
-          }
-        )
-
-        console.log("Non-return release status:", res.status)
-        const text = await res.text()
-        console.log("Non-return release response:", text)
-      } catch (err) {
-        console.log("Non-return release trigger error:", err)
-      }
-    }
-
-    // 🔥 Fire all – do not block UI
-    runEscrowReleaseTrigger()
-    runReturnAutoRefundTrigger()
-    runNonReturnReleaseTrigger()
-
-    // Existing loads
+    // Other dashboard loads
     loadOrdersToShipCount()
     loadOrdersInProgressCount()
     loadUnreadMessagesCount()
     loadOffersActionCount()
-    loadProStatus()
 
-    return () => {}
   }, [sellerId])
 )
-
-/* ---------------- PRO STATUS ---------------- */
 
   const loadProStatus = async () => {
     if (!sellerId) return
@@ -128,7 +88,7 @@ useFocusEffect(
     try {
       const { data, error } = await supabase
         .from("profiles")
-        .select("is_pro, boosts_remaining")
+        .select("is_pro, boosts_remaining, mega_boosts_remaining")
         .eq("id", sellerId)
         .single()
 
@@ -136,9 +96,11 @@ useFocusEffect(
 
       setIsPro(!!data?.is_pro)
       setBoostsRemaining(Number(data?.boosts_remaining ?? 0))
+      setMegaBoostsRemaining(Number(data?.mega_boosts_remaining ?? 0))
     } catch (err) {
       setIsPro(false)
       setBoostsRemaining(0)
+      setMegaBoostsRemaining(0)
       handleAppError(err, {
         context: "seller_hub_load_pro_status",
         silent: true,
@@ -263,11 +225,12 @@ useFocusEffect(
 
         <View style={styles.proWrap}>
           <ProDashboardSection
-            userId={sellerId || ""}
-            boostsRemaining={boostsRemaining}
-            lastBoostReset={null}
-            isPro={isPro}
-          />
+  userId={sellerId || ""}
+  boostsRemaining={boostsRemaining}
+  megaBoostsRemaining={megaBoostsRemaining}
+  lastBoostReset={null}
+  isPro={isPro}
+/>
         </View>
       </ScrollView>
 

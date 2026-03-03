@@ -405,6 +405,83 @@ async function activateMeloPro(params: {
   return json(200, { received: true })
 }
 
+async function fulfillBoostPack(params: {
+  userId: string
+  packageId: string
+}) {
+  const { userId, packageId } = params
+
+  console.log("🚀 Fulfilling Boost Pack", { userId, packageId })
+
+  const { data: profile, error: fetchError } = await supabase
+    .from("profiles")
+    .select("boosts_remaining, mega_boosts_remaining")
+    .eq("id", userId)
+    .single()
+
+  if (fetchError || !profile) {
+    console.error("❌ Profile not found for boost pack", fetchError)
+    return json(500, { error: "Profile not found" })
+  }
+
+  const currentBoosts = profile.boosts_remaining ?? 0
+  const currentMega = profile.mega_boosts_remaining ?? 0
+
+  let addBoosts = 0
+  let addMega = 0
+
+  switch (packageId) {
+    case "boost_3":
+      addBoosts = 3
+      break
+    case "boost_10":
+      addBoosts = 10
+      break
+    case "boost_25":
+      addBoosts = 25
+      break
+    case "mega_1":
+      addMega = 1
+      break
+    case "mega_3":
+      addMega = 3
+      break
+    case "mega_8":
+      addMega = 8
+      break
+    default:
+      console.error("❌ Unknown boost package:", packageId)
+      return json(400, { error: "Invalid package" })
+  }
+
+  const newBoostTotal = currentBoosts + addBoosts
+  const newMegaTotal = currentMega + addMega
+
+  const { error: updateError } = await supabase
+    .from("profiles")
+    .update({
+      boosts_remaining: newBoostTotal,
+      mega_boosts_remaining: newMegaTotal,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", userId)
+
+  if (updateError) {
+    console.error("❌ Failed to update boost credits", updateError)
+    return json(500, { error: "Boost update failed" })
+  }
+
+  console.log("✅ Boost credits added", {
+    userId,
+    added_boosts: addBoosts,
+    added_mega: addMega,
+    final_boost_total: newBoostTotal,
+    final_mega_total: newMegaTotal,
+  })
+
+  return json(200, { received: true })
+}
+
 // ---------------- HANDLER ----------------
 serve(async (req) => {
   if (req.method !== "POST") {
@@ -448,6 +525,14 @@ serve(async (req) => {
         subscriptionId: session.subscription as string | null,
       })
     }
+
+    // 🎯 BOOST PACK PURCHASE
+if (type === "boost_pack" && userId && metadata.package_id) {
+  return await fulfillBoostPack({
+    userId,
+    packageId: metadata.package_id,
+  })
+}
 
     if (orderId) {
       return await markOrderPaid({
