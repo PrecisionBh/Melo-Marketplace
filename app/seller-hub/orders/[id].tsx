@@ -41,8 +41,9 @@ type Order = {
   seller_id: string
   buyer_id: string
   status: OrderStatus | string
+  quantity: number | null
+  title: string | null
 
-  // 💰 Ledger fields (source of truth)
   amount_cents: number
   item_price_cents: number | null
   shipping_amount_cents: number | null
@@ -107,12 +108,10 @@ export default function SellerOrderDetailScreen() {
   const [isPro, setIsPro] = useState(false)
 
   const [confirmReturnVisible, setConfirmReturnVisible] = useState(false)
-  // 🆕 ACTIVE DISPUTE (non-return + return disputes)
-const [activeDispute, setActiveDispute] = useState<any>(null)
+  const [activeDispute, setActiveDispute] = useState<any>(null)
 
   useEffect(() => {
     if (id) loadOrder()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
   const loadOrder = async () => {
@@ -124,7 +123,6 @@ const [activeDispute, setActiveDispute] = useState<any>(null)
 
       setLoading(true)
 
-      // 🔐 CRITICAL FIX: Get fresh auth user (prevents hydration race)
       const {
         data: { user },
         error: userError,
@@ -143,14 +141,16 @@ const [activeDispute, setActiveDispute] = useState<any>(null)
         .single()
 
       if (error) throw error
-
       if (!data) {
         Alert.alert("Order not found")
         router.back()
         return
       }
 
-      // 🔒 HYDRATION-SAFE SELLER OWNERSHIP CHECK
+      console.log("FULL ORDER OBJECT:", data)
+      console.log("ORDER KEYS:", Object.keys(data))
+      console.log("ORDER TITLE FIELD:", data?.title)
+
       if (data.seller_id !== user.id) {
         console.log("[SELLER ORDER ACCESS BLOCKED]", {
           orderSeller: data.seller_id,
@@ -162,26 +162,30 @@ const [activeDispute, setActiveDispute] = useState<any>(null)
         return
       }
 
-      setOrder(data)
+      setOrder({
+  ...data,
+  title: data.listing_snapshot?.title ?? null,
+})
+
 setCarrier(data.carrier ?? "")
 setTracking(data.tracking_number ?? "")
 
-const { data: profile } = await supabase
-  .from("profiles")
-  .select("is_pro")
-  .eq("id", data.seller_id)
-  .single()
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("is_pro")
+        .eq("id", data.seller_id)
+        .single()
 
-setIsPro(!!profile?.is_pro)
+      setIsPro(!!profile?.is_pro)
 
-// 🧠 MELO CRITICAL: check if ANY dispute exists for this order
-const { data: disputeData } = await supabase
-  .from("disputes")
-  .select("id, opened_by, seller_responded_at, resolved_at")
-  .eq("order_id", data.id)
-  .maybeSingle()
+      const { data: disputeData } = await supabase
+        .from("disputes")
+        .select("id, opened_by, seller_responded_at, resolved_at")
+        .eq("order_id", data.id)
+        .maybeSingle()
 
-setActiveDispute(disputeData ?? null)
+      setActiveDispute(disputeData ?? null)
+
     } catch (err) {
       handleAppError(err, {
         fallbackMessage: "Failed to load order details.",
@@ -193,6 +197,7 @@ setActiveDispute(disputeData ?? null)
   }
 
   /* ---------------- ACTIONS ---------------- */
+
 
   const submitTracking = async () => {
     if (!order) {
@@ -363,7 +368,9 @@ const showShippingAddress =
   // - 5% for Free sellers
   // and stored them in ledger fields below (source of truth).
 
-  const itemPrice = (order.item_price_cents ?? 0) / 100
+  const quantity = order.quantity ?? 1
+const itemTotal = (order.item_price_cents ?? 0) / 100
+const itemUnitPrice = quantity > 0 ? itemTotal / quantity : itemTotal
   const shipping = (order.shipping_amount_cents ?? 0) / 100
   const tax = (order.tax_cents ?? 0) / 100
 
@@ -452,13 +459,13 @@ return (
     <ScrollView contentContainerStyle={{ paddingBottom: 140 }}>
       {/* HEADER CARD */}
       <SellerOrderHeaderCard
-        imageUrl={order.image_url}
-        orderId={order.public_order_number ?? order.id}
-        title={"Order"}
-        status={order.status}
-        isDisputed={isReturnProcessing}
-        hasReturnTracking={hasReturnTracking}
-      />
+  imageUrl={order.image_url}
+  orderId={order.public_order_number ?? order.id}
+  title={order.title}
+  status={order.status}
+  isDisputed={isReturnProcessing}
+  hasReturnTracking={hasReturnTracking}
+/>
 
       {/* 💸 REFUND STATUS (HIGHEST PRIORITY - ESCROW RESOLVED) */}
       {isRefunded && (
@@ -592,8 +599,9 @@ return (
 
         {/* RECEIPT (HIDDEN DURING RETURN FLOW, REFUNDS, OR CANCELLED) */}
         {!isInReturnFlow && !isRefunded && !isCancelled && (
-          <SellerReceiptCard
-  itemPrice={itemPrice}
+         <SellerReceiptCard
+  itemPrice={itemUnitPrice}
+  quantity={quantity}
   shipping={shipping}
   sellerFee={sellerFee}
   sellerNet={sellerNet}

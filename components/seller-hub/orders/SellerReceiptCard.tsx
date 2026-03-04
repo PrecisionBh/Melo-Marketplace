@@ -2,6 +2,7 @@ import { StyleSheet, Text, View } from "react-native"
 
 type Props = {
   itemPrice?: number
+  quantity?: number
   shipping?: number
   sellerFee?: number
   sellerNet?: number
@@ -11,6 +12,7 @@ type Props = {
 
 export default function SellerReceiptCard({
   itemPrice = 0,
+  quantity = 1,
   shipping = 0,
   sellerFee = 0,
   sellerNet = 0,
@@ -22,8 +24,10 @@ export default function SellerReceiptCard({
     status === "refunded" ||
     status === "return_processing"
 
-  // Seller gross = item + shipping only
-  const gross = itemPrice + shipping
+  const itemTotal = itemPrice * quantity
+
+  // Seller gross = item + shipping
+  const gross = itemTotal + shipping
 
   return (
     <View style={styles.card}>
@@ -38,13 +42,20 @@ export default function SellerReceiptCard({
       )}
 
       <View style={styles.receipt}>
-        {/* Item */}
-        <ReceiptRow
-          label="Item price"
-          value={`$${itemPrice.toFixed(2)}`}
-        />
+        {/* Item price breakdown */}
+        {quantity > 1 ? (
+          <ReceiptRow
+            label="Item price"
+            value={`$${itemPrice.toFixed(2)} x ${quantity} = $${itemTotal.toFixed(2)}`}
+          />
+        ) : (
+          <ReceiptRow
+            label="Item price"
+            value={`$${itemPrice.toFixed(2)}`}
+          />
+        )}
 
-        {/* Always show shipping (even if 0.00) */}
+        {/* Shipping */}
         <ReceiptRow
           label="Shipping collected"
           value={`$${shipping.toFixed(2)}`}
@@ -68,7 +79,7 @@ export default function SellerReceiptCard({
 
         <View style={styles.receiptDivider} />
 
-        {/* Net Payout */}
+        {/* Net payout */}
         <ReceiptRow
           label="Your payout"
           value={`$${sellerNet.toFixed(2)}`}
@@ -121,6 +132,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#DDEDE6",
     padding: 16,
+
     shadowColor: "#000",
     shadowOpacity: 0.04,
     shadowRadius: 8,

@@ -294,16 +294,28 @@ export default function BuyerOfferDetailScreen() {
     }
 
     await notify({
-      userId: offer.seller_id,
-      type: "offer",
-      title: "Offer declined",
-      body: "The buyer declined your offer.",
-      data: {
-        route: "/seller-hub/offers",
-      },
-    })
+  userId: offer.seller_id,
+  type: "offer",
+  title: "Offer declined",
+  body: "The buyer declined your offer.",
+  data: {
+    route: "/seller-hub/offers",
+  },
+})
 
-    loadOffer()
+/* 🔥 UPDATE LOCAL STATE IMMEDIATELY */
+setOffer((prev) =>
+  prev
+    ? {
+        ...prev,
+        status: "declined",
+        last_actor: "buyer",
+      }
+    : prev
+)
+
+/* optional refresh */
+loadOffer()
   }
 
   const submitCounter = async () => {

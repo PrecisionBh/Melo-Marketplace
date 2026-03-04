@@ -7,6 +7,7 @@ import ProQuickActions from "@/components/prodashboard/ProQuickActions"
 type Props = {
   userId: string
   boostsRemaining: number
+  megaBoostsRemaining: number // ✅ ADDED
   lastBoostReset: string | null
   isPro: boolean
 }
@@ -14,6 +15,7 @@ type Props = {
 export default function ProDashboardSection({
   userId,
   boostsRemaining,
+  megaBoostsRemaining, // ✅ ADDED
   lastBoostReset,
   isPro,
 }: Props) {
@@ -25,6 +27,7 @@ export default function ProDashboardSection({
       <BoostsCard
         userId={userId}
         boostsRemaining={boostsRemaining}
+        megaBoostsRemaining={megaBoostsRemaining} // ✅ PASS IT DOWN
         lastBoostReset={lastBoostReset}
         disabled={!isPro}
         onPressBoost={() => {

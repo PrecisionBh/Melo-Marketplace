@@ -186,7 +186,8 @@ serve(async (req) => {
     const { error: updateErr } = await supabase
       .from("orders")
       .update({
-        status: cancelledBy === "seller" ? "cancelled_by_seller" : "cancelled",
+        status: "cancelled",
+        cancelled_by: cancelledBy,
         escrow_status: "refunded",
         wallet_credited: false,
         updated_at: now,

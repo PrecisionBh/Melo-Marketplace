@@ -2,15 +2,17 @@ import { StyleSheet, Text, View } from "react-native"
 
 type Props = {
   itemPrice: number
+  quantity?: number
   shipping: number
   tax: number
   buyerFee: number
   totalPaid: number
-  status?: string // 🔥 ADDED (for refunded badge logic)
+  status?: string
 }
 
 export default function BuyerReceiptCard({
   itemPrice,
+  quantity = 1,
   shipping,
   tax,
   buyerFee,
@@ -18,6 +20,8 @@ export default function BuyerReceiptCard({
   status,
 }: Props) {
   const isRefunded = status === "returned"
+
+  const itemTotal = itemPrice * quantity
 
   return (
     <View style={styles.card}>
@@ -32,9 +36,26 @@ export default function BuyerReceiptCard({
       )}
 
       <View style={styles.receipt}>
-        <ReceiptRow label="Item price" value={`$${itemPrice.toFixed(2)}`} />
 
-        <ReceiptRow label="Shipping" value={`$${shipping.toFixed(2)}`} />
+        {/* 🔥 ITEM PRICE BREAKDOWN */}
+        {quantity > 1 ? (
+          <ReceiptRow
+            label="Item price"
+            value={`$${itemPrice.toFixed(2)} x ${quantity} = $${itemTotal.toFixed(
+              2
+            )}`}
+          />
+        ) : (
+          <ReceiptRow
+            label="Item price"
+            value={`$${itemPrice.toFixed(2)}`}
+          />
+        )}
+
+        <ReceiptRow
+          label="Shipping"
+          value={`$${shipping.toFixed(2)}`}
+        />
 
         <ReceiptRow
           label="Sales Tax and Compliance Fee (7.5%)"
@@ -56,7 +77,7 @@ export default function BuyerReceiptCard({
           bold
         />
 
-        {/* 💸 REFUND LINE (ALIGNED WITH TOTAL COLUMN) */}
+        {/* 💸 REFUND LINE */}
         {isRefunded && (
           <>
             <View style={styles.receiptDivider} />
@@ -111,7 +132,6 @@ function ReceiptRow({
 }
 
 const styles = StyleSheet.create({
-  /* 🔥 LIGHT BOX CARD */
   card: {
     marginTop: 20,
     backgroundColor: "#FFFFFF",
@@ -120,17 +140,14 @@ const styles = StyleSheet.create({
     borderColor: "#DDEDE6",
     padding: 16,
 
-    // iOS shadow
     shadowColor: "#000",
     shadowOpacity: 0.04,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
 
-    // Android shadow
     elevation: 2,
   },
 
-  /* 🟢 REFUNDED HEADER */
   refundedHeader: {
     backgroundColor: "#E8F7EF",
     borderRadius: 12,
@@ -193,7 +210,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
 
-  /* 💸 REFUND STYLING */
   refundedText: {
     color: "#1F7A63",
     fontWeight: "800",

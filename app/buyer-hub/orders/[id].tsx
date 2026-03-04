@@ -39,6 +39,7 @@ type Order = {
   buyer_id: string
   seller_id: string
   status: OrderStatus
+  quantity: number | null
   amount_cents: number
   item_price_cents: number | null
   shipping_amount_cents: number | null
@@ -110,6 +111,7 @@ export default function BuyerOrderDetailScreen() {
           buyer_id,
           seller_id,
           status,
+          quantity, 
           amount_cents,
           item_price_cents,
           shipping_amount_cents,
@@ -361,7 +363,9 @@ export default function BuyerOrderDetailScreen() {
     ? order.return_tracking_url
     : order.tracking_url
 
-  const itemPrice = (order.item_price_cents ?? 0) / 100
+  const quantity = order.quantity ?? 1
+const itemTotal = (order.item_price_cents ?? 0) / 100
+const itemUnitPrice = quantity > 0 ? itemTotal / quantity : itemTotal
   const shipping = (order.shipping_amount_cents ?? 0) / 100
   const tax = (order.tax_cents ?? 0) / 100
   const buyerFee = (order.buyer_fee_cents ?? 0) / 100
@@ -390,13 +394,14 @@ export default function BuyerOrderDetailScreen() {
         <View style={styles.content}>
           {!isInReturnFlow && (
             <BuyerReceiptCard
-              itemPrice={itemPrice}
-              shipping={shipping}
-              tax={tax}
-              buyerFee={buyerFee}
-              totalPaid={totalPaid}
-              status={order.status}
-            />
+  itemPrice={itemUnitPrice}
+  quantity={quantity}
+  shipping={shipping}
+  tax={tax}
+  buyerFee={buyerFee}
+  totalPaid={totalPaid}
+  status={order.status}
+/>
           )}
 
           {/* 🔥 ONLY ADDITION: DISPUTE LOCK + SEE DISPUTE BUTTON */}
