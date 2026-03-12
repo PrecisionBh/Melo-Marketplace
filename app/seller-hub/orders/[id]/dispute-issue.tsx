@@ -103,7 +103,6 @@ export default function SellerDisputeIssue() {
     }
   }
 
-  /* ---------------- IMAGE PICKER (MATCHES WORKING UPLOADER) ---------------- */
   const pickImage = async () => {
     try {
       const MAX = 7
@@ -142,54 +141,52 @@ export default function SellerDisputeIssue() {
     setImages((prev) => prev.filter((img) => img !== uri))
   }
 
-  /* ---------------- UPLOAD SELLER EVIDENCE (FAIL-SAFE - NO SILENT SUCCESS) ---------------- */
   const uploadImages = async (): Promise<string[]> => {
-  if (!dispute || images.length === 0) return []
+    if (!dispute || images.length === 0) return []
 
-  const uploaded: string[] = []
+    const uploaded: string[] = []
 
-  for (let i = 0; i < images.length; i++) {
-    const uri = images[i]
+    for (let i = 0; i < images.length; i++) {
+      const uri = images[i]
 
-    try {
-      const ext = uri.split(".").pop() || "jpg"
-      const fileName = `${dispute.order_id}/seller-${i}.${ext}`
+      try {
+        const ext = uri.split(".").pop() || "jpg"
+        const fileName = `${dispute.order_id}/seller-${i}.${ext}`
 
-      const formData = new FormData()
-      formData.append("file", {
-        uri,
-        name: fileName,
-        type: `image/${ext === "jpg" ? "jpeg" : ext}`,
-      } as any)
+        const formData = new FormData()
+        formData.append("file", {
+          uri,
+          name: fileName,
+          type: `image/${ext === "jpg" ? "jpeg" : ext}`,
+        } as any)
 
-      const { error } = await supabase.storage
-        .from("dispute-images")
-        .upload(fileName, formData, { upsert: false })
+        const { error } = await supabase.storage
+          .from("dispute-images")
+          .upload(fileName, formData, { upsert: false })
 
-      if (error) {
-        console.error("Supabase storage error:", error)
-        throw error
+        if (error) {
+          console.error("Supabase storage error:", error)
+          throw error
+        }
+
+        const { data } = supabase.storage
+          .from("dispute-images")
+          .getPublicUrl(fileName)
+
+        if (!data?.publicUrl) {
+          throw new Error("Failed to generate public URL")
+        }
+
+        uploaded.push(data.publicUrl)
+      } catch (err) {
+        console.error("🚨 SELLER DISPUTE IMAGE UPLOAD FAILED:", err)
+        throw err
       }
-
-      const { data } = supabase.storage
-        .from("dispute-images")
-        .getPublicUrl(fileName)
-
-      if (!data?.publicUrl) {
-        throw new Error("Failed to generate public URL")
-      }
-
-      uploaded.push(data.publicUrl)
-    } catch (err) {
-      console.error("🚨 SELLER DISPUTE IMAGE UPLOAD FAILED:", err)
-      throw err
     }
+
+    return uploaded
   }
 
-  return uploaded
-}
-
-  /* ---------------- SUBMIT SELLER RESPONSE ---------------- */
   const submitResponse = async () => {
     if (!response.trim()) {
       Alert.alert("Please enter a response")
@@ -242,10 +239,16 @@ export default function SellerDisputeIssue() {
 
       Alert.alert(
         "Response submitted",
-        "Your response and evidence have been sent for review."
+        "Your response and evidence have been sent for review.",
+        [
+          {
+            text: "OK",
+            onPress: () => {
+              router.replace(`/seller-hub/orders/${id}`)
+            },
+          },
+        ]
       )
-
-      router.back()
     } catch (err) {
       handleAppError(err, {
         fallbackMessage: "Unable to submit response.",
@@ -255,7 +258,6 @@ export default function SellerDisputeIssue() {
     }
   }
 
-  /* ---------------- UI ---------------- */
   if (loading) {
     return (
       <View style={styles.center}>

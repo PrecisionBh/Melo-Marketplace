@@ -287,21 +287,21 @@ export default function DisputeDetailCard({
       ) : null}
 
       {needsToRespond ? (
-        <TouchableOpacity
-          style={styles.respondButton}
-          onPress={() =>
-            router.push(
-              role === "buyer"
-                ? `/buyer-hub/orders/disputes/respond/${dispute.id}`
-                : `/seller-hub/orders/disputes/respond/${dispute.id}`
-            )
-          }
-        >
-          <Text style={styles.respondButtonText}>
-            Respond to Dispute
-          </Text>
-        </TouchableOpacity>
-      ) : null}
+  <TouchableOpacity
+    style={styles.respondButton}
+    onPress={() =>
+      router.push(
+        role === "buyer"
+          ? `/buyer-hub/orders/${dispute.order_id}/dispute-issue`
+          : `/seller-hub/orders/${dispute.order_id}/dispute-issue`
+      )
+    }
+  >
+    <Text style={styles.respondButtonText}>
+      Respond to Dispute
+    </Text>
+  </TouchableOpacity>
+) : null}
 
       <View style={styles.detailsCard}>
         <View style={styles.detailRow}>

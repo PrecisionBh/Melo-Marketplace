@@ -58,7 +58,6 @@ export default function DisputeIssueForm({
 
   if (!user) return null
 
-  /* ---------------- SAFE BACK ---------------- */
   const safeBack = () => {
     try {
       router.back()
@@ -71,7 +70,6 @@ export default function DisputeIssueForm({
     }
   }
 
-  /* ---------------- IMAGE PICKER (UPGRADED TO MATCH WORKING UPLOADER) ---------------- */
   const pickImage = async () => {
     try {
       const MAX = 7
@@ -110,7 +108,6 @@ export default function DisputeIssueForm({
     setImages((prev) => prev.filter((img) => img !== uri))
   }
 
-  /* ---------------- UPLOAD EVIDENCE (UNCHANGED) ---------------- */
   const uploadEvidenceImages = async (disputeId: string) => {
     if (!images.length) return []
 
@@ -146,7 +143,6 @@ export default function DisputeIssueForm({
     return uploadedUrls
   }
 
-  /* ---------------- SUBMIT DISPUTE (UNCHANGED) ---------------- */
   const submitDispute = async () => {
     if (!orderId) {
       Alert.alert("Error", "Missing order reference.")
@@ -281,10 +277,20 @@ export default function DisputeIssueForm({
 
       Alert.alert(
         "Dispute Submitted",
-        "Your dispute has been submitted. Escrow has been frozen while this issue is reviewed."
+        "Your dispute has been submitted. Escrow has been frozen while this issue is reviewed.",
+        [
+          {
+            text: "OK",
+            onPress: () => {
+              if (role === "buyer") {
+                router.replace(`/buyer-hub/orders/${orderId}` as any)
+              } else {
+                router.replace(`/seller-hub/orders/${orderId}` as any)
+              }
+            },
+          },
+        ]
       )
-
-      safeBack()
     } catch (err) {
       handleAppError(err, {
         context: "unified_dispute_submit",

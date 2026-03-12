@@ -107,6 +107,11 @@ serve(async (req) => {
       return json(404, { error: "Dispute not found" })
     }
 
+    // 🔒 Guard: dispute already resolved
+    if (dispute.resolved_at) {
+      return json(400, { error: "Dispute already resolved" })
+    }
+
     if (dispute.status === "resolved_buyer" || dispute.status === "resolved_seller") {
       return json(400, { error: "Dispute already resolved" })
     }
@@ -142,7 +147,7 @@ serve(async (req) => {
       return json(400, { error: "Cannot refund — escrow already released" })
     }
 
-    /* ---------------- STRIPE REFUND (ITEM + SHIPPING + TAX, EXCLUDES BUYER FEE) ---------------- */
+    /* ---------------- STRIPE REFUND ---------------- */
     const refundableAmount =
       (order.item_price_cents ?? 0) +
       (order.shipping_amount_cents ?? 0) +
@@ -172,7 +177,6 @@ serve(async (req) => {
       return json(500, { error: "Stripe refund error" })
     }
 
-    // accept succeeded OR pending
     if (!refund || (refund.status !== "succeeded" && refund.status !== "pending")) {
       console.error("❌ Refund failed:", refund)
       return json(500, { error: "Refund failed", status: refund?.status ?? null })
@@ -180,7 +184,7 @@ serve(async (req) => {
 
     const now = new Date().toISOString()
 
-    /* ---------------- REVERSE SELLER PENDING WALLET (THIS ORDER ONLY) ---------------- */
+    /* ---------------- REVERSE SELLER WALLET ---------------- */
     if (order.wallet_credited && typeof order.seller_net_cents === "number") {
       console.log("↩️ Reversing seller pending wallet (per-order):", {
         seller_id: order.seller_id,
@@ -208,6 +212,7 @@ serve(async (req) => {
         updated_at: now,
       })
       .eq("id", order.id)
+      .eq("status", "paid") // 🔒 prevents duplicate updates
 
     if (orderUpdateErr) {
       console.error("❌ Order update failed:", orderUpdateErr)
@@ -219,12 +224,13 @@ serve(async (req) => {
       .from("disputes")
       .update({
         status: "resolved_buyer",
-        resolution: "refund", // must match CHECK constraint
+        resolution: "refund",
         resolved_at: now,
         resolved_by: user.id,
         admin_notes,
       })
       .eq("id", dispute.id)
+      .is("resolved_at", null) // 🔒 prevents duplicate resolution
 
     if (disputeUpdateErr) {
       console.error("❌ Dispute update failed:", disputeUpdateErr)

@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react"
 import {
-    ActivityIndicator,
-    ScrollView,
-    StyleSheet,
-    Text,
-    View,
+  ActivityIndicator,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from "react-native"
 
 import AppHeader from "@/components/app-header"
@@ -12,7 +12,6 @@ import { useAuth } from "@/context/AuthContext"
 import { handleAppError } from "@/lib/errors/appError"
 import { supabase } from "@/lib/supabase"
 
-/* 🔹 COMPONENTS (you already built these) */
 import PayoutHistoryList from "@/components/seller-hub/payouts/PayoutHistoryList"
 import PayoutSummaryCard from "@/components/seller-hub/payouts/PayoutStatsCard"
 
@@ -59,23 +58,20 @@ export default function PayoutHistoryScreen() {
     try {
       setLoading(true)
 
-      /* 🔹 1. GET WALLET (SOURCE OF TRUTH FOR EARNINGS) */
+      /* WALLET */
       const { data: walletData, error: walletError } = await supabase
         .from("wallets")
         .select("*")
         .eq("user_id", userId)
         .single()
 
-      // PGRST116 = no rows (brand new seller, no wallet yet)
       if (walletError && walletError.code !== "PGRST116") {
         throw walletError
       }
 
-      if (walletData) {
-        setWallet(walletData)
-      }
+      if (walletData) setWallet(walletData)
 
-      /* 🔹 2. GET PAYOUT HISTORY (WITHDRAWALS) */
+      /* PAYOUT HISTORY */
       const { data: payoutsData, error: payoutsError } = await supabase
         .from("payouts")
         .select("*")
@@ -95,17 +91,16 @@ export default function PayoutHistoryScreen() {
     }
   }
 
-  /* ---------------- DERIVED METRICS (MVP SIMPLE + ACCURATE) ---------------- */
+  /* ---------------- DERIVED METRICS ---------------- */
 
-  // From wallets table (confirmed schema)
   const lifetimeEarnings = wallet?.lifetime_earnings_cents ?? 0
 
-  // Only count ACTUAL completed withdrawals
-  // (pending should NOT count as withdrawn)
   const totalWithdrawn = useMemo(() => {
-    return payouts
-      .filter((p) => p.status === "paid")
-      .reduce((sum, p) => sum + (p.net_cents ?? 0), 0)
+    return payouts.reduce((sum, p) => sum + (p.net_cents ?? 0), 0)
+  }, [payouts])
+
+  const totalFees = useMemo(() => {
+    return payouts.reduce((sum, p) => sum + (p.fee_cents ?? 0), 0)
   }, [payouts])
 
   /* ---------------- LOADING ---------------- */
@@ -123,26 +118,26 @@ export default function PayoutHistoryScreen() {
 
   return (
     <View style={styles.screen}>
-      {/* 🔥 GLOBAL HEADER (MELO CONSISTENCY) */}
       <AppHeader title="Payout History" backRoute="/seller-hub" />
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* 💰 FINANCIAL SUMMARY (HISTORY ONLY — NOT WALLET PAGE) */}
+        {/* SUMMARY */}
         <PayoutSummaryCard
           lifetimeEarningsCents={lifetimeEarnings}
           totalWithdrawnCents={totalWithdrawn}
+          totalFeesPaidCents={totalFees}
         />
 
-        {/* 📜 PAYOUT HISTORY LIST */}
+        {/* HISTORY LIST */}
         <PayoutHistoryList payouts={payouts} />
 
-        {/* 📌 EMPTY STATE (POLISHED UX) */}
+        {/* EMPTY STATE */}
         {payouts.length === 0 && (
           <View style={styles.emptyState}>
             <Text style={styles.emptyTitle}>No Payouts Yet</Text>
             <Text style={styles.emptyText}>
-              Once you withdraw funds from your wallet, your payout history will
-              appear here for tracking and record purposes.
+              Once you withdraw funds from your wallet, your payout history
+              will appear here.
             </Text>
           </View>
         )}
@@ -156,7 +151,7 @@ export default function PayoutHistoryScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#EAF4EF", // Melo soft background
+    backgroundColor: "#EAF4EF",
   },
   scrollContent: {
     paddingBottom: 120,

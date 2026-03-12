@@ -17,7 +17,7 @@ type Props = {
   loading?: boolean
 }
 
-type FilterKey = "all" | "paid" | "pending" | "instant" | "standard"
+type FilterKey = "all" | "instant" | "standard"
 
 function formatMoney(cents: number, currency: string = "USD") {
   const dollars = (cents ?? 0) / 100
@@ -36,22 +36,7 @@ function formatDate(dateString: string) {
   })
 }
 
-function StatusBadge({ status }: { status: string }) {
-  const isPaid = status === "paid"
-  const isPending = status === "pending"
 
-  return (
-    <View
-      style={[
-        styles.badge,
-        isPaid && styles.badgePaid,
-        isPending && styles.badgePending,
-      ]}
-    >
-      <Text style={styles.badgeText}>{status.toUpperCase()}</Text>
-    </View>
-  )
-}
 
 function Pill({
   label,
@@ -108,8 +93,6 @@ function PayoutRow({ payout, currency }: { payout: Payout; currency: string }) {
           )}
         </View>
       </View>
-
-      <StatusBadge status={payout.status} />
     </View>
   )
 }
@@ -125,10 +108,6 @@ export default function PayoutHistoryList({
     if (!payouts) return []
 
     switch (filter) {
-      case "paid":
-        return payouts.filter((p) => p.status === "paid")
-      case "pending":
-        return payouts.filter((p) => p.status === "pending")
       case "instant":
         return payouts.filter((p) => p.method === "instant")
       case "standard":
@@ -177,16 +156,6 @@ export default function PayoutHistoryList({
       {/* FILTER PILLS */}
       <View style={styles.pillsRow}>
         <Pill label="All" active={filter === "all"} onPress={() => setFilter("all")} />
-        <Pill
-          label="Paid"
-          active={filter === "paid"}
-          onPress={() => setFilter("paid")}
-        />
-        <Pill
-          label="Pending"
-          active={filter === "pending"}
-          onPress={() => setFilter("pending")}
-        />
         <Pill
           label="Instant"
           active={filter === "instant"}

@@ -1,13 +1,13 @@
 import { useRouter } from "expo-router"
 import { useEffect, useState } from "react"
 import {
-    ActivityIndicator,
-    Alert,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native"
 
 import AppHeader from "@/components/app-header"
@@ -286,16 +286,21 @@ export default function ProblemOrdersScreen() {
   }
 
   const adminActionLocked = (d: Dispute) => {
-    if (d.opened_by === "buyer") {
-      return !d.seller_responded_at
-    }
-
-    if (d.opened_by === "seller") {
-      return !d.buyer_responded_at
-    }
-
+  // Dispute already resolved → lock permanently
+  if (d.resolved_at) {
     return true
   }
+
+  if (d.opened_by === "buyer") {
+    return !d.seller_responded_at
+  }
+
+  if (d.opened_by === "seller") {
+    return !d.buyer_responded_at
+  }
+
+  return true
+}
 
   if (loading) {
     return (

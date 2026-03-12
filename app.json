@@ -7,14 +7,14 @@
     "scheme": "melomp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-
     "icon": "./assets/images/icon.png",
-
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.bhoffman4.MeloMP"
+      "bundleIdentifier": "com.bhoffman4.MeloMP",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
-
     "android": {
       "package": "com.bhoffman4.MeloMP",
       "googleServicesFile": "./google-services.json",
@@ -27,12 +27,10 @@
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
     },
-
     "web": {
       "output": "static",
       "favicon": "./assets/images/favicon.png"
     },
-
     "plugins": [
       "expo-router",
       [
@@ -54,12 +52,10 @@
         }
       ]
     ],
-
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
     },
-
     "extra": {
       "stripePublishableKey": "pk_test_51SpqdDDrYUL6FG4RCzhN6GkOapTn3rscgruuDDHeSJPfLFwY8LlSDNtZhXRrXXEkZKjj1GJs4GOrtILeSCcMd0OR00Bx8vmJCf",
       "router": {},
@@ -67,7 +63,6 @@
         "projectId": "d3c5c61c-a428-41f5-b2cd-ce9bc35b2f3c"
       }
     },
-
     "owner": "bhoffman4"
   }
 }
