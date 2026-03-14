@@ -69,7 +69,7 @@ export default function ListingCard({
       >
         {imageUri ? (
           <Image
-            source={{ uri: imageUri, cache: "force-cache" }}
+            source={{ uri: imageUri }}
             style={styles.image}
             resizeMode="cover"
             fadeDuration={0}

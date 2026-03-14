@@ -160,6 +160,13 @@ export default function ListingsGrid({
       keyExtractor={(item) => item.id}
       contentContainerStyle={styles.grid}
       showsVerticalScrollIndicator={false}
+
+      /* 🔧 STABILIZE IMAGE RENDERING */
+      initialNumToRender={12}
+      maxToRenderPerBatch={12}
+      windowSize={10}
+      removeClippedSubviews={false}
+
       scrollEventThrottle={16}
       onScroll={(e: NativeSyntheticEvent<NativeScrollEvent>) => {
         const y = e.nativeEvent.contentOffset.y

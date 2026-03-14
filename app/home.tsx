@@ -58,7 +58,7 @@ export default function HomeScreen() {
   const [listings, setListings] = useState<Listing[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
-  const [scrollOffset, setScrollOffset] = useState(0) // 🧠 CACHE SCROLL POSITION
+  const [scrollOffset, setScrollOffset] = useState(0)
 
   const [search, setSearch] = useState("")
   const [activeCategory, setActiveCategory] =
@@ -80,20 +80,18 @@ export default function HomeScreen() {
     setupPushTokenIfNeeded()
   }, [])
 
-
   useFocusEffect(
-  useCallback(() => {
-    if (listings.length === 0) {
-      loadListings()
-    }
+    useCallback(() => {
+      if (listings.length === 0) {
+        loadListings()
+      }
 
-    checkUnreadMessages()
-    checkUnreadNotifications()
-  }, [listings.length])
-)
+      checkUnreadMessages()
+      checkUnreadNotifications()
+    }, [listings.length])
+  )
 
   const loadListings = async () => {
-    // 🔥 Only show spinner on cold start (keeps UI visible on refresh)
     if (listings.length === 0) {
       setLoading(true)
     }
@@ -129,7 +127,6 @@ export default function HomeScreen() {
         setIsPro(false)
       }
 
-      // 🔵 ORIGINAL MARKETPLACE FEED (SINGLE DATA SOURCE — STABLE)
       const { data, error } = await supabase
         .from("listings")
         .select(
@@ -153,18 +150,17 @@ export default function HomeScreen() {
           Number(l.price) > 0
       )
 
-      // 👑 ACTIVE MEGA BOOSTS (highest tier visibility)
       const activeMegaBoostRows = validRows.filter(
-  (l) => l.is_mega_boost === true
-)
+        (l) => l.is_mega_boost === true
+      )
 
       const boostedRows = validRows.filter(
-  (l) => l.is_boosted === true
-)
+        (l) => l.is_boosted === true
+      )
 
-     const nonBoostedRows = validRows.filter(
-  (l) => !l.is_boosted
-)
+      const nonBoostedRows = validRows.filter(
+        (l) => !l.is_boosted
+      )
 
       const followedRows = nonBoostedRows.filter((l) =>
         followedSellerIds.includes(l.user_id ?? "")
@@ -234,7 +230,12 @@ export default function HomeScreen() {
         shipping_type: l.shipping_type ?? null,
       }))
 
-      setListings(normalized)
+      /* 🔧 REMOVE DUPLICATE LISTINGS (FIXES IMAGE RENDER BUGS) */
+      const uniqueListings = Array.from(
+        new Map(normalized.map((item) => [item.id, item])).values()
+      )
+
+      setListings(uniqueListings)
 
       const normalizedMegaBoosts: Listing[] =
         activeMegaBoostRows.map((l) => ({

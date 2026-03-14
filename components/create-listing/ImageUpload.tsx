@@ -46,9 +46,9 @@ export default function ImageUpload({
           result.assets.map(async (asset) => {
             const converted = await ImageManipulator.manipulateAsync(
               asset.uri,
-              [{ resize: { width: 1600 } }],
+              [{ resize: { width: 1200 } }],
               {
-                compress: 0.7,
+                compress: 0.25,
                 format: ImageManipulator.SaveFormat.JPEG,
               }
             )
