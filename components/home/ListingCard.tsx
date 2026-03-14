@@ -48,7 +48,7 @@ export default function ListingCard({
       ? listing.image_url
       : null
 
-  // ✅ DEBUG LOG
+  // DEBUG LOG
   console.log("MELO IMAGE URI:", imageUri)
 
   return (
@@ -69,10 +69,16 @@ export default function ListingCard({
       >
         {imageUri ? (
           <Image
-            source={{ uri: imageUri }}
+            source={{ uri: imageUri, cache: "force-cache" }}
             style={styles.image}
             resizeMode="cover"
             fadeDuration={0}
+            onError={(e) => {
+              console.log("IMAGE FAILED:", imageUri, e.nativeEvent)
+            }}
+            onLoad={() => {
+              console.log("IMAGE LOADED:", imageUri)
+            }}
           />
         ) : (
           <View style={styles.placeholder}>
