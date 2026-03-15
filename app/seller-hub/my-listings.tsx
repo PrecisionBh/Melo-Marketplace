@@ -28,7 +28,7 @@ type Listing = {
   is_boosted?: boolean
   boost_expires_at?: string | null
 
-  is_mega_boost?: boolean
+  is_mega_boosted?: boolean
   mega_boost_expires_at?: string | null
 }
 
@@ -93,7 +93,7 @@ export default function MyListingsScreen() {
 
       const { data, error } = await supabase
         .from("listings")
-        .select("id,title,price,image_urls,status,is_boosted,boost_expires_at,is_mega_boost,mega_boost_expires_at")
+        .select("id,title,price,image_urls,status,is_boosted,boost_expires_at,is_mega_boosted,mega_boost_expires_at")
         .eq("user_id", session.user.id)
         .order("created_at", { ascending: false })
 
@@ -168,9 +168,10 @@ export default function MyListingsScreen() {
 
   try {
     const { error } = await supabase.rpc("boost_listing", {
-      listing_id: listingId,
-      user_id: session.user.id,
-    })
+  listing_id: listingId,
+  user_id: session.user.id,
+  boost_type: "regular",
+})
 
     if (error) throw error
 
@@ -212,9 +213,10 @@ const megaBoostListing = async (listingId: string) => {
   }
 
   try {
-    const { error } = await supabase.rpc("mega_boost_listing", {
+    const { error } = await supabase.rpc("boost_listing", {
   listing_id: listingId,
   user_id: session.user.id,
+  boost_type: "mega",
 })
 
     if (error) throw error

@@ -241,19 +241,36 @@ export default function EditListingScreen() {
       if (error) throw error
 
       if (isPro && id) {
-        if (isMegaBoosted) {
-          await supabase.rpc("mega_boost_listing", {
-            listing_id: id,
-            user_id: session.user.id,
-          })
-        } else if (isBoosted) {
-          await supabase.rpc("boost_listing", {
-            listing_id: id,
-            user_id: session.user.id,
-          })
-        }
+  try {
+
+    if (isMegaBoosted) {
+      const { error: megaError } = await supabase.rpc("boost_listing", {
+        listing_id: id,
+        user_id: session.user.id,
+        boost_type: "mega",
+      })
+
+      if (megaError) {
+        console.warn("Mega Boost failed:", megaError.message)
       }
 
+    } else if (isBoosted) {
+      const { error: boostError } = await supabase.rpc("boost_listing", {
+        listing_id: id,
+        user_id: session.user.id,
+        boost_type: "regular",
+      })
+
+      if (boostError) {
+        console.warn("Boost failed:", boostError.message)
+      }
+
+    }
+
+  } catch (err) {
+    console.warn("Boost RPC error:", err)
+  }
+}
       Alert.alert("Success", "Listing updated successfully!")
       router.back()
 

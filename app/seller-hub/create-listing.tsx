@@ -224,143 +224,149 @@ const handleCreateListing = async () => {
 
     if (error) throw error
 
-    /* ---------------- BOOST LOGIC ---------------- */
+   /* ---------------- BOOST LOGIC ---------------- */
 
-    if (isPro && data?.id) {
-      if (isMegaBoosted) {
-        const { error: megaError } = await supabase.rpc("mega_boost_listing", {
-          listing_id: data.id,
-          user_id: session.user.id,
-        })
+if (isPro && data?.id) {
+  try {
+    if (isMegaBoosted) {
+      const { error: megaError } = await supabase.rpc("boost_listing", {
+        listing_id: data.id,
+        user_id: session.user.id,
+        boost_type: "mega",
+      })
 
-        if (megaError) {
-          console.warn("Mega Boost failed:", megaError.message)
-        }
-      } else if (isBoosted) {
-        const { error: boostError } = await supabase.rpc("boost_listing", {
-          listing_id: data.id,
-          user_id: session.user.id,
-        })
+      if (megaError) {
+        console.warn("Mega Boost failed:", megaError.message)
+      }
+    } else if (isBoosted) {
+      const { error: boostError } = await supabase.rpc("boost_listing", {
+        listing_id: data.id,
+        user_id: session.user.id,
+        boost_type: "regular",
+      })
 
-        if (boostError) {
-          console.warn("Boost failed:", boostError.message)
-        }
+      if (boostError) {
+        console.warn("Boost failed:", boostError.message)
       }
     }
-
-    Alert.alert("Success", "Your listing has been created!")
-    router.replace("/seller-hub")
   } catch (err) {
-    handleAppError(err, {
-      context: "create_listing_insert",
-      fallbackMessage: "Failed to create listing. Please try again.",
-    })
-  } finally {
-    setSubmitting(false)
+    console.warn("Boost RPC error:", err)
   }
 }
 
-  useFocusEffect(
-    useCallback(() => {
-      const loadGuards = async () => {
-        if (!session?.user) {
-          setCheckingAddress(false)
-          setCheckingPro(false)
-          return
-        }
+Alert.alert("Success", "Your listing has been created!")
+router.replace("/seller-hub")
+} catch (err) {
+handleAppError(err, {
+  context: "create_listing_insert",
+  fallbackMessage: "Failed to create listing. Please try again.",
+})
+} finally {
+setSubmitting(false)
+}
+}
 
-        try {
-          setCheckingAddress(true)
-          setCheckingPro(true)
+useFocusEffect(
+useCallback(() => {
+  const loadGuards = async () => {
+    if (!session?.user) {
+      setCheckingAddress(false)
+      setCheckingPro(false)
+      return
+    }
 
-          const { data: addressData } = await supabase
-            .from("seller_return_addresses")
-            .select("id")
-            .eq("user_id", session.user.id)
-            .maybeSingle()
+    try {
+      setCheckingAddress(true)
+      setCheckingPro(true)
 
-          setHasReturnAddress(!!addressData)
-          setShowAddressModal(!addressData)
+      const { data: addressData } = await supabase
+        .from("seller_return_addresses")
+        .select("id")
+        .eq("user_id", session.user.id)
+        .maybeSingle()
 
-          const { data: profile } = await supabase
-            .from("profiles")
-            .select("is_pro, boosts_remaining, mega_boosts_remaining") // 👑 UPDATED
-            .eq("id", session.user.id)
-            .single<ProfileRow>()
+      setHasReturnAddress(!!addressData)
+      setShowAddressModal(!addressData)
 
-          setIsPro(Boolean(profile?.is_pro))
-          setBoostsRemaining(profile?.boosts_remaining ?? 0)
-          setMegaBoostsRemaining(profile?.mega_boosts_remaining ?? 0) // 👑 NEW
-        } finally {
-          setCheckingAddress(false)
-          setCheckingPro(false)
-        }
-      }
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("is_pro, boosts_remaining, mega_boosts_remaining")
+        .eq("id", session.user.id)
+        .single<ProfileRow>()
 
-      loadGuards()
-    }, [session?.user?.id])
-  )
-
-  if (checkingAddress) {
-    return (
-      <View style={styles.screen}>
-        <AppHeader title="Create Listing" backRoute="/seller-hub" />
-        <View style={styles.loaderWrap}>
-          <ActivityIndicator size="large" color="#7FAF9B" />
-        </View>
-      </View>
-    )
+      setIsPro(Boolean(profile?.is_pro))
+      setBoostsRemaining(profile?.boosts_remaining ?? 0)
+      setMegaBoostsRemaining(profile?.mega_boosts_remaining ?? 0)
+    } finally {
+      setCheckingAddress(false)
+      setCheckingPro(false)
+    }
   }
 
-  return (
-    <View style={styles.screen}>
-      <AppHeader title="Create Listing" backRoute="/seller-hub" />
+  loadGuards()
+}, [session?.user?.id])
+)
 
-      {!checkingPro && !isPro && (
-        <UpgradeToProButton
-          style={{ marginHorizontal: 16, marginTop: 12, marginBottom: 4 }}
+if (checkingAddress) {
+return (
+  <View style={styles.screen}>
+    <AppHeader title="Create Listing" backRoute="/seller-hub" />
+    <View style={styles.loaderWrap}>
+      <ActivityIndicator size="large" color="#7FAF9B" />
+    </View>
+  </View>
+)
+}
+
+return (
+<View style={styles.screen}>
+  <AppHeader title="Create Listing" backRoute="/seller-hub" />
+
+  {!checkingPro && !isPro && (
+    <UpgradeToProButton
+      style={{ marginHorizontal: 16, marginTop: 12, marginBottom: 4 }}
+    />
+  )}
+
+  {hasReturnAddress && (
+    <ScrollView contentContainerStyle={styles.content}>
+      <ImageUpload images={images} setImages={setImages} max={5} />
+
+      <TitleDescriptionSection
+        title={title}
+        setTitle={setTitle}
+        description={description}
+        setDescription={setDescription}
+      />
+
+      <CategoryBrandConditionSection
+        category={category}
+        brand={brand}
+        condition={condition}
+        onPressCategory={() => setShowCategoryModal(true)}
+        onPressBrand={() => setShowBrandModal(true)}
+        onPressCondition={() => setShowConditionModal(true)}
+      />
+
+      <View style={styles.sectionSpacing}>
+        <ProFeaturesSection
+          isPro={isPro}
+          boostsRemaining={boostsRemaining}
+          megaBoostsRemaining={megaBoostsRemaining}
+          isBoosted={isBoosted}
+          setIsBoosted={(val: boolean) => {
+            setIsBoosted(val)
+            if (val) setIsMegaBoosted(false) // prevent dual selection
+          }}
+          isMegaBoosted={isMegaBoosted}
+          setIsMegaBoosted={(val: boolean) => {
+            setIsMegaBoosted(val)
+            if (val) setIsBoosted(false) // prevent dual selection
+          }}
+          megaBoostDescription="Take over the home page in one listing."
+          quantity={quantity}
+          setQuantity={setQuantity}
         />
-      )}
-
-      {hasReturnAddress && (
-        <ScrollView contentContainerStyle={styles.content}>
-          <ImageUpload images={images} setImages={setImages} max={5} />
-
-          <TitleDescriptionSection
-            title={title}
-            setTitle={setTitle}
-            description={description}
-            setDescription={setDescription}
-          />
-
-          <CategoryBrandConditionSection
-            category={category}
-            brand={brand}
-            condition={condition}
-            onPressCategory={() => setShowCategoryModal(true)}
-            onPressBrand={() => setShowBrandModal(true)}
-            onPressCondition={() => setShowConditionModal(true)}
-          />
-
-          <View style={styles.sectionSpacing}>
-            <ProFeaturesSection
-              isPro={isPro}
-              boostsRemaining={boostsRemaining}
-              megaBoostsRemaining={megaBoostsRemaining} // 👑 NEW
-              isBoosted={isBoosted}
-              setIsBoosted={(val: boolean) => {
-                setIsBoosted(val)
-                if (val) setIsMegaBoosted(false) // 🔒 prevent dual selection
-              }}
-              isMegaBoosted={isMegaBoosted} // 👑 NEW
-              setIsMegaBoosted={(val: boolean) => {
-                setIsMegaBoosted(val)
-                if (val) setIsBoosted(false) // 🔒 prevent dual selection
-              }}
-              megaBoostDescription="Take over the home page in one listing." // 👑 NEW
-              quantity={quantity}
-              setQuantity={setQuantity}
-            />
           </View>
 
           <View style={styles.sectionSpacing}>
