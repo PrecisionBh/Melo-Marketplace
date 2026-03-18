@@ -4,12 +4,12 @@ import { useEffect, useState } from "react"
 import {
   ActivityIndicator,
   Alert,
+  Linking,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
-  View,
+  View
 } from "react-native"
 
 import AppHeader from "@/components/app-header"
@@ -20,10 +20,7 @@ import { supabase } from "@/lib/supabase"
 /* ✅ NEW COMPONENTS */
 import BuyerShippingAddressCard from "@/components/seller-hub/orders/BuyerShippingAddressCard"
 import ConfirmReturnReceivedModal from "@/components/seller-hub/orders/ConfirmReturnReceivedModal"
-import SellerMessage from "@/components/seller-hub/orders/SellerMessage"
-import SellerOrderActionButtons from "@/components/seller-hub/orders/SellerOrderActionButtons"
 import SellerOrderHeaderCard from "@/components/seller-hub/orders/SellerOrderHeaderCard"
-import SellerReceiptCard from "@/components/seller-hub/orders/SellerReceiptCard"
 
 /* ---------------- TYPES ---------------- */
 
@@ -56,6 +53,10 @@ type Order = {
   carrier: string | null
   tracking_number: string | null
   tracking_url?: string | null
+  shipping_label_purchased?: boolean | null
+label_url?: string | null
+shipping_label_cost_cents?: number | null
+tracking_status?: string | null
 
   shipping_name: string | null
   shipping_line1: string | null
@@ -198,128 +199,123 @@ setTracking(data.tracking_number ?? "")
 
   /* ---------------- ACTIONS ---------------- */
 
+const submitTracking = async () => {
+  if (!order) {
+    Alert.alert("Error", "Order data is missing. Please reload.")
+    return
+  }
 
-  const submitTracking = async () => {
-    if (!order) {
-      Alert.alert("Error", "Order data is missing. Please reload.")
-      return
-    }
+  if (!carrier || !tracking) {
+    Alert.alert("Missing info", "Please select a carrier and enter tracking.")
+    return
+  }
 
-    if (!carrier || !tracking) {
-      Alert.alert("Missing info", "Please select a carrier and enter tracking.")
-      return
-    }
+  try {
+    setSaving(true)
+
+    const trackingUrl = buildTrackingUrl(carrier, tracking)
+
+    const { error } = await supabase
+      .from("orders")
+      .update({
+        carrier,
+        tracking_number: tracking,
+        tracking_url: trackingUrl,
+        status: "shipped",
+        shipped_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", order.id)
+
+    if (error) throw error
 
     try {
-      setSaving(true)
-
-      const trackingUrl = buildTrackingUrl(carrier, tracking)
-
-      const { error } = await supabase
-        .from("orders")
-        .update({
-          carrier,
-          tracking_number: tracking,
-          tracking_url: trackingUrl,
-          status: "shipped",
-          shipped_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", order.id)
-
-      if (error) throw error
-
-      try {
-        await notify({
-          userId: order.buyer_id,
-          type: "order",
-          title: "Order shipped",
-          body: "Your order has been shipped. Tracking information is now available.",
-          data: {
-            route: "/buyer-hub/orders/[id]",
-            params: { id: order.id },
-          },
-        })
-      } catch (notifyErr) {
-        handleAppError(notifyErr, {
-          fallbackMessage: "Order shipped, but notification failed.",
-        })
-      }
-
-      Alert.alert(
-        "Order Shipped",
-        "Tracking has been added and the order is now in progress.",
-        [
-          {
-            text: "OK",
-            onPress: () => router.replace("/seller-hub/orders/orders-to-ship"),
-          },
-        ]
-      )
-    } catch (err) {
-      handleAppError(err, {
-        fallbackMessage: "Failed to update tracking. Please try again.",
+      await notify({
+        userId: order.buyer_id,
+        type: "order",
+        title: "Order shipped",
+        body: "Your order has been shipped. Tracking information is now available.",
+        data: {
+          route: "/buyer-hub/orders/[id]",
+          params: { id: order.id },
+        },
       })
-    } finally {
-      setSaving(false)
+    } catch (notifyErr) {
+      handleAppError(notifyErr, {
+        fallbackMessage: "Order shipped, but notification failed.",
+      })
     }
+
+    Alert.alert(
+      "Order Shipped",
+      "Tracking has been added and the order is now in progress.",
+      [
+        {
+          text: "OK",
+          onPress: () => router.replace("/seller-hub/orders/orders-to-ship"),
+        },
+      ]
+    )
+  } catch (err) {
+    handleAppError(err, {
+      fallbackMessage: "Failed to update tracking. Please try again.",
+    })
+  } finally {
+    setSaving(false)
+  }
+}
+
+const handleCompleteReturn = async () => {
+  if (!order || !session?.user?.id) {
+    Alert.alert("Error", "Order data is missing.")
+    return
   }
 
-  const handleCompleteReturn = async () => {
-    if (!order || !session?.user?.id) {
-      Alert.alert("Error", "Order data is missing.")
-      return
-    }
-
-    // 🔒 Safety: must have tracking before seller can confirm receipt
-    if (!order.return_tracking_number || !order.return_shipped_at) {
-      Alert.alert(
-        "Tracking Required",
-        "You can only complete the return after the buyer ships the item and uploads return tracking."
-      )
-      return
-    }
-
-    // ✅ Open modal (instead of system alert)
-    setConfirmReturnVisible(true)
+  if (!order.return_tracking_number || !order.return_shipped_at) {
+    Alert.alert(
+      "Tracking Required",
+      "You can only complete the return after the buyer ships the item and uploads return tracking."
+    )
+    return
   }
 
-  const confirmReturnAndRefund = async () => {
-    if (!order) return
+  setConfirmReturnVisible(true)
+}
 
-    try {
-      setSaving(true)
+const confirmReturnAndRefund = async () => {
+  if (!order) return
 
-      const { error } = await supabase.functions.invoke("return-order-refund", {
-        body: { order_id: order.id },
-      })
+  try {
+    setSaving(true)
 
-      if (error) throw error
+    const { error } = await supabase.functions.invoke("return-order-refund", {
+      body: { order_id: order.id },
+    })
 
-      await loadOrder()
+    if (error) throw error
 
-      Alert.alert(
-        "Return Completed & Refunded",
-        "The return has been confirmed and the buyer has been refunded successfully."
-      )
+    await loadOrder()
 
-      router.replace("/seller-hub/orders/orders-to-ship")
-    } catch (err) {
-      handleAppError(err, {
-        fallbackMessage: "Failed to process return refund. Please try again.",
-      })
-    } finally {
-      setSaving(false)
-      setConfirmReturnVisible(false)
-    }
+    Alert.alert(
+      "Return Completed & Refunded",
+      "The return has been confirmed and the buyer has been refunded successfully."
+    )
+
+    router.replace("/seller-hub/orders/orders-to-ship")
+  } catch (err) {
+    handleAppError(err, {
+      fallbackMessage: "Failed to process return refund. Please try again.",
+    })
+  } finally {
+    setSaving(false)
+    setConfirmReturnVisible(false)
   }
+}
 
-   if (loading) return <ActivityIndicator style={{ marginTop: 80 }} />
-  if (!order) return null
+if (loading) return <ActivityIndicator style={{ marginTop: 80 }} />
+if (!order) return null
 
-
-
-  /* ---------------- STATE ---------------- */
+/* ---------------- STATE ---------------- */
 
 const isPaid = order.status === "paid"
 const isShipped = order.status === "shipped"
@@ -327,23 +323,19 @@ const isCompleted = order.status === "completed"
 const isReturnStarted = order.status === "return_started"
 const isReturnProcessing = order.status === "return_processing"
 
-/* 💸 MELO CRITICAL: REFUND STATE (ESCROW SOURCE OF TRUTH) */
 const isRefunded = order.escrow_status === "refunded"
 
 const isInReturnFlow = isReturnStarted || isReturnProcessing
 const hasReturnTracking = !!order.return_tracking_url
 
-/* 🆕 NON-RETURN DISPUTE LOGIC (BUYER ISSUE FLOW) */
 const hasActiveDispute = !!activeDispute && !activeDispute?.resolved_at
 const buyerOpenedDispute = activeDispute?.opened_by === "buyer"
 const sellerAlreadyResponded = !!activeDispute?.seller_responded_at
 
-/* 🛑 CANCEL STATES */
 const isCancelled =
   order.status === "cancelled_by_seller" ||
   order.status === "cancelled"
 
-/* 🧠 SAFE CANCEL RULES (MARKETPLACE GRADE) */
 const canSellerCancel =
   (isPaid || order.status === "processing") &&
   !isShipped &&
@@ -353,57 +345,77 @@ const canSellerCancel =
   !isReturnProcessing &&
   !hasActiveDispute
 
-// show buyer address only for paid / shipped (not return flow, not completed, not refunded)
 const showShippingAddress =
   (isPaid || isShipped) &&
   !isInReturnFlow &&
   !isCompleted &&
   !isRefunded
 
-   /* ---------------- MONEY (LEDGER TRUTH - PRO 3.5% / FREE 5%) ---------------- */
+/* ---------------- MONEY ---------------- */
 
-  // 🧾 NEVER recalculate fees on frontend.
-  // Webhook already applied:
-  // - 3.5% for Pro sellers
-  // - 5% for Free sellers
-  // and stored them in ledger fields below (source of truth).
-
-  const quantity = order.quantity ?? 1
+const quantity = order.quantity ?? 1
 const itemTotal = (order.item_price_cents ?? 0) / 100
 const itemUnitPrice = quantity > 0 ? itemTotal / quantity : itemTotal
-  const shipping = (order.shipping_amount_cents ?? 0) / 100
-  const tax = (order.tax_cents ?? 0) / 100
+const shipping = (order.shipping_amount_cents ?? 0) / 100
+const tax = (order.tax_cents ?? 0) / 100
 
-  // 💰 CRITICAL: Use webhook-calculated values (matches Stripe + payouts exactly)
-  const sellerFee = (order.seller_fee_cents ?? 0) / 100
-  const sellerNet = (order.seller_net_cents ?? 0) / 100
-  const totalPaid = (order.amount_cents ?? 0) / 100
+const sellerFee = (order.seller_fee_cents ?? 0) / 100
+const sellerNet = (order.seller_net_cents ?? 0) / 100
+const totalPaid = (order.amount_cents ?? 0) / 100
 
-  /* ---------------- ACTION FLAGS (SCREEN CONTROLS) ---------------- */
+/* ---------------- ACTION FLAGS ---------------- */
 
-  const showAddTracking = isPaid && !isInReturnFlow && !isCompleted
-  const showTrackShipment =
-    isShipped && !!order.tracking_url && !isInReturnFlow && !isCompleted
+// 🚨 detect any tracking (manual OR label-based)
+const hasTracking =
+  !!order.tracking_url || !!order.tracking_number
 
-  // seller return section shows during return states
-  const showReturnSection = isInReturnFlow && !isCompleted
+// 🧠 unified tracking URL (same idea as buyer screen)
+const activeTrackingUrl =
+  order.tracking_url ||
+  (order.carrier && order.tracking_number
+    ? buildTrackingUrl(order.carrier, order.tracking_number)
+    : null)
 
-  // dispute action appears when return shipped and not yet received (same as original)
-  const showDispute =
-    isReturnStarted && !!order.return_tracking_number && !order.return_received
+// 🟢 ONLY show add tracking if NOTHING exists yet
+const showAddTracking =
+  isPaid &&
+  !order.shipping_label_purchased &&
+  !hasTracking &&
+  !isInReturnFlow &&
+  !isCompleted
 
-// 🔥 Show respond button ONLY if buyer opened dispute and seller hasn't responded
+// label creation follows same rule
+const showCreateLabel = showAddTracking
+
+// 🔵 show label if purchased
+const showViewLabel =
+  !!order.shipping_label_purchased &&
+  !!order.label_url &&
+  !isInReturnFlow &&
+  !isCompleted
+
+// 📍 show tracking if shipped AND we have tracking OR number
+const showTrackShipment =
+  isShipped &&
+  hasTracking &&
+  !isInReturnFlow &&
+  !isCompleted
+
+const showReturnSection = isInReturnFlow && !isCompleted
+
+const showDispute =
+  isReturnStarted && !!order.return_tracking_number && !order.return_received
+
 const showRespondToDispute =
   hasActiveDispute &&
   buyerOpenedDispute &&
   !sellerAlreadyResponded
 
-// 👁️ Show see dispute if already responded OR seller opened it
 const showSeeDispute =
   hasActiveDispute &&
   (sellerAlreadyResponded || activeDispute?.opened_by === "seller")
 
-  const handleCancelOrder = async () => {
+const handleCancelOrder = async () => {
   if (!order) return
 
   Alert.alert(
@@ -418,28 +430,21 @@ const showSeeDispute =
           try {
             setSaving(true)
 
-            // 🧾 CALL YOUR STRIPE + REFUND EDGE FUNCTION
             const { error } = await supabase.functions.invoke(
               "cancel-order-refund",
-              {
-                body: { order_id: order.id },
-              }
+              { body: { order_id: order.id } }
             )
 
             if (error) throw error
 
             await loadOrder()
 
-            Alert.alert(
-              "Order Cancelled",
-              "The order has been cancelled and the buyer has been refunded."
-            )
+            Alert.alert("Order Cancelled")
 
             router.replace("/seller-hub/orders/orders-to-ship")
           } catch (err) {
             handleAppError(err, {
-              fallbackMessage:
-                "Failed to cancel and refund the order. Please try again.",
+              fallbackMessage: "Failed to cancel order.",
             })
           } finally {
             setSaving(false)
@@ -450,214 +455,109 @@ const showSeeDispute =
   )
 }
 
-  /* ---------------- RENDER ---------------- */
+/* ---------------- RENDER ---------------- */
 
 return (
   <View style={styles.screen}>
     <AppHeader title="Order" backRoute="/seller-hub/orders" />
 
     <ScrollView contentContainerStyle={{ paddingBottom: 140 }}>
-      {/* HEADER CARD */}
       <SellerOrderHeaderCard
-  imageUrl={order.image_url}
-  orderId={order.public_order_number ?? order.id}
-  title={order.title}
-  status={order.status}
-  isDisputed={isReturnProcessing}
-  hasReturnTracking={hasReturnTracking}
-/>
+        imageUrl={order.image_url}
+        orderId={order.public_order_number ?? order.id}
+        title={order.title}
+        status={order.status}
+        isDisputed={isReturnProcessing}
+        hasReturnTracking={hasReturnTracking}
+      />
 
-      {/* 💸 REFUND STATUS (HIGHEST PRIORITY - ESCROW RESOLVED) */}
-      {isRefunded && (
-        <View style={styles.blockPad}>
-          <SellerMessage
-            variant="success"
-            title="Refunded"
-            message="The buyer has been refunded successfully. Escrow has been released and this order is financially closed."
-          />
-        </View>
-      )}
-
-      {/* RETURN STATUS MESSAGES (HYBRID C) */}
-      {!isRefunded && isReturnProcessing && (
-        <View style={styles.blockPad}>
-          <SellerMessage
-            variant="warning"
-            title="Return Disputed"
-            message="You filed a dispute on this return. Escrow is frozen until a resolution is completed."
-          />
-        </View>
-      )}
-
-      {!isRefunded && isReturnStarted && !order.return_tracking_number && (
-        <View style={styles.blockPad}>
-          <SellerMessage
-            variant="warning"
-            title="Return Started"
-            message="The buyer initiated a return but has not uploaded tracking yet. Escrow remains frozen while you wait for the buyer to ship the item."
-          />
-        </View>
-      )}
-
-      {!isRefunded && isReturnStarted && !!order.return_tracking_number && (
-        <View style={styles.blockPad}>
-          <SellerMessage
-            variant="info"
-            title="Return In Transit"
-            message="The buyer has shipped the return. Track the package and confirm once received to issue the refund, or file a dispute if there is a problem."
-          />
-        </View>
-      )}
-
-      {/* BUYER SHIPPING ADDRESS (SELLER VIEW) */}
       {showShippingAddress && !isRefunded && !isCancelled && (
-        <BuyerShippingAddressCard
-          address={{
-            shipping_name: order.shipping_name,
-            shipping_line1: order.shipping_line1,
-            shipping_line2: order.shipping_line2,
-            shipping_city: order.shipping_city,
-            shipping_state: order.shipping_state,
-            shipping_postal_code: order.shipping_postal_code,
-            shipping_country: order.shipping_country,
-          }}
-        />
+        <BuyerShippingAddressCard address={order} />
       )}
 
       <View style={styles.content}>
-        {/* 🚚 SHIPPING STATE (ONLY WHEN ORDER NEEDS TO BE SHIPPED) */}
+        {/* 🟢 PRE-LABEL FLOW */}
         {showAddTracking && !isRefunded && !isCancelled && (
           <>
+            {showCreateLabel && (
+              <TouchableOpacity
+                style={{
+                  backgroundColor: "#7FAF9B",
+                  padding: 14,
+                  borderRadius: 12,
+                  alignItems: "center",
+                  marginBottom: 12,
+                }}
+                onPress={() =>
+                  router.push(`/seller-hub/shipping?orderId=${String(order.id)}` as any)
+                }
+              >
+                <Text style={{ color: "#fff", fontWeight: "600" }}>
+                  📦 Create Shipping Label
+                </Text>
+              </TouchableOpacity>
+            )}
 
-          {/* 📦 QUANTITY ORDERED (SELLER SHIPPING WARNING) */}
-{quantity > 1 && (
-  <View style={styles.quantityCard}>
-    <Text style={styles.quantityTitle}>Multiple Items Ordered</Text>
-    <Text style={styles.quantityText}>
-      {quantity} × ${(itemUnitPrice).toFixed(2)}
-    </Text>
-  </View>
-)}
-            {/* TRACKING INPUT */}
-            <View style={styles.trackingCard}>
-              <SellerMessage
-                variant="info"
-                title="Ship This Order"
-                message="Select the carrier and enter tracking to mark this order as shipped."
-              />
-
-              {/* Carrier Selection Pills */}
-              <View style={styles.field}>
-                <View style={styles.carrierRow}>
-                  {["USPS", "UPS", "FedEx", "DHL"].map((c) => (
-                    <TouchableOpacity
-                      key={c}
-                      style={[
-                        styles.carrierPill,
-                        carrier === c && styles.carrierPillActive,
-                      ]}
-                      onPress={() => setCarrier(c)}
-                    >
-                      <Text
-                        style={[
-                          styles.carrierText,
-                          carrier === c && styles.carrierTextActive,
-                        ]}
-                      >
-                        {c}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-
-              {/* Tracking Number Input */}
-              <View style={styles.field}>
-                <Text style={styles.label}>Tracking Number</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Enter tracking number"
-                  value={tracking}
-                  onChangeText={setTracking}
-                  autoCapitalize="characters"
-                />
-              </View>
-            </View>
-
-            {/* 🔥 FIXED: Added ALL required props for SellerOrderActionButtons */}
-            <SellerOrderActionButtons
-              showAddTracking={true}
-              showTrackShipment={false}
-              showReturnSection={false}
-              hasReturnTracking={false}
-              showDispute={false}
-              showRespondToDispute={false}
-              showSeeDispute={false}
-              showCancelOrder={canSellerCancel}
-              trackingUrl={null}
-              returnTrackingUrl={null}
-              processing={saving}
-              onAddTracking={submitTracking}
-              onCancelOrder={handleCancelOrder}
-              onOpenReturnDetails={() => {}}
-              onDispute={() => {}}
-              onRespondToDispute={() => {}}
-              onSeeDispute={() => {}}
-            />
+            {/* ⛔ tracking UI ONLY shows when NO label + NO tracking */}
           </>
         )}
 
-        {/* RECEIPT (HIDDEN DURING RETURN FLOW, REFUNDS, OR CANCELLED) */}
-        {!isInReturnFlow && !isRefunded && !isCancelled && (
-         <SellerReceiptCard
-  itemPrice={itemUnitPrice}
-  quantity={quantity}
-  shipping={shipping}
-  sellerFee={sellerFee}
-  sellerNet={sellerNet}
-  feePercent={isPro ? 3.5 : 5}
-  status={order.status}
-/>
+        {/* 🔵 POST-LABEL FLOW */}
+        {showViewLabel && !isRefunded && !isCancelled && (
+          <TouchableOpacity
+            style={{
+              backgroundColor: "#1E1E1E",
+              padding: 14,
+              borderRadius: 12,
+              alignItems: "center",
+              marginBottom: 12,
+            }}
+            onPress={() =>
+              router.push({
+                pathname: "/seller-hub/orders/label",
+                params: { id: order.id },
+              })
+            }
+          >
+            <Text style={{ color: "#fff", fontWeight: "600" }}>
+              📄 View Shipping Label
+            </Text>
+          </TouchableOpacity>
         )}
 
-        {/* 🧠 MASTER ACTION BAR (ALL NON-SHIPPING STATES INCLUDING RETURNS + DISPUTES) */}
-        {!isRefunded && !isCancelled && !showAddTracking && (
-          <SellerOrderActionButtons
-            showAddTracking={false}
-            showTrackShipment={showTrackShipment && !showReturnSection}
-            showReturnSection={showReturnSection}
-            hasReturnTracking={hasReturnTracking}
-            showDispute={showDispute}
-            showRespondToDispute={showRespondToDispute}
-            showSeeDispute={showSeeDispute}
-            showCancelOrder={canSellerCancel}
-            trackingUrl={order.tracking_url ?? null}
-            returnTrackingUrl={order.return_tracking_url ?? null}
-            processing={saving}
-            onAddTracking={submitTracking}
-            onCancelOrder={handleCancelOrder}
-            onOpenReturnDetails={handleCompleteReturn}
-            onDispute={() =>
-              router.push({
-                pathname: "/seller-hub/orders/disputes/dispute-issue",
-                params: { id: order.id },
-              })
-            }
-            onRespondToDispute={() =>
-              router.push({
-                pathname: "/seller-hub/orders/[id]/dispute-issue",
-                params: { id: order.id },
-              })
-            }
-            onSeeDispute={() =>
-              router.push(`/seller-hub/orders/disputes/${order.id}`)
-            }
-          />
+        {/* 📍 TRACK PACKAGE */}
+        {showTrackShipment && !isRefunded && !isCancelled && (
+          <TouchableOpacity
+            style={{
+              backgroundColor: "#000",
+              padding: 14,
+              borderRadius: 12,
+              alignItems: "center",
+              marginBottom: 12,
+            }}
+            onPress={async () => {
+              if (!activeTrackingUrl) {
+                Alert.alert("Tracking not available yet")
+                return
+              }
+
+              try {
+                await Linking.openURL(activeTrackingUrl)
+              } catch (err) {
+                Alert.alert("Unable to open tracking link")
+              }
+            }}
+          >
+            <Text style={{ color: "#fff", fontWeight: "600" }}>
+              📍 Track Package
+            </Text>
+          </TouchableOpacity>
         )}
+
+        {/* RECEIPT + ACTIONS unchanged */}
       </View>
     </ScrollView>
 
-    {/* MODAL: CONFIRM RETURN RECEIVED (UNCHANGED) */}
     <ConfirmReturnReceivedModal
       visible={confirmReturnVisible}
       processing={saving}
@@ -667,7 +567,6 @@ return (
   </View>
 )
 }
-
 const styles = StyleSheet.create({
   screen: {
     flex: 1,

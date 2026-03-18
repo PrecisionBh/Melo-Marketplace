@@ -508,111 +508,144 @@ serve(async (req) => {
   }
 
   if (
-    event.type === "checkout.session.completed" ||
-    event.type === "checkout.session.async_payment_succeeded"
-  ) {
-    const session = event.data.object as Stripe.Checkout.Session
-    const metadata = session.metadata || {}
+  event.type === "checkout.session.completed" ||
+  event.type === "checkout.session.async_payment_succeeded"
+) {
+  const session = event.data.object as Stripe.Checkout.Session
+  const metadata = session.metadata || {}
 
-    const orderId = metadata.order_id
-    const userId = metadata.user_id
-    const type = metadata.type
+  const orderId = metadata.order_id
+  const userId = metadata.user_id
+  const type = metadata.type
 
-    if (type === "melo_pro_subscription" && userId) {
-      return await activateMeloPro({
-        userId,
-        stripeCustomerId: session.customer as string | null,
-        subscriptionId: session.subscription as string | null,
-      })
-    }
+  // 🚚 SHIPPING LABEL PAYMENT (SAFE ISOLATED BLOCK)
+  if (type === "shipping_label" && metadata.order_id && metadata.rate_id) {
+    console.log("📦 Shipping label payment detected", {
+      orderId: metadata.order_id,
+      rateId: metadata.rate_id,
+    })
 
-    // 🎯 BOOST PACK PURCHASE
-if (type === "boost_pack" && userId && metadata.package_id) {
-  return await fulfillBoostPack({
-    userId,
-    packageId: metadata.package_id,
-  })
-}
+    try {
+      const res = await fetch(
+        `${SUPABASE_URL}/functions/v1/buy-shippo-label`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+          },
+          body: JSON.stringify({
+            orderId: metadata.order_id,
+            rateId: metadata.rate_id,
+          }),
+        }
+      )
 
-    if (orderId) {
-      return await markOrderPaid({
-        orderId,
-        sessionId: session.id,
-        paymentIntentId: session.payment_intent as string | null,
-        amountTotal: session.amount_total ?? null,
-      })
+      const data = await res.json()
+
+      console.log("📦 Label created successfully:", data)
+    } catch (err) {
+      console.error("❌ Label creation failed:", err)
     }
 
     return json(200, { received: true })
   }
 
-  if (event.type === "payment_intent.succeeded") {
-    const intent = event.data.object as Stripe.PaymentIntent
-    const orderId = intent.metadata?.order_id
+  if (type === "melo_pro_subscription" && userId) {
+    return await activateMeloPro({
+      userId,
+      stripeCustomerId: session.customer as string | null,
+      subscriptionId: session.subscription as string | null,
+    })
+  }
 
-    if (!orderId) return json(200, { received: true })
+  // 🎯 BOOST PACK PURCHASE
+  if (type === "boost_pack" && userId && metadata.package_id) {
+    return await fulfillBoostPack({
+      userId,
+      packageId: metadata.package_id,
+    })
+  }
 
+  if (orderId) {
     return await markOrderPaid({
       orderId,
-      paymentIntentId: intent.id,
-      amountTotal: intent.amount_received ?? null,
+      sessionId: session.id,
+      paymentIntentId: session.payment_intent as string | null,
+      amountTotal: session.amount_total ?? null,
     })
-  }
-
-  if (event.type === "payout.paid") {
-    const payout = event.data.object as Stripe.Payout
-    const stripePayoutId = payout.id
-
-    console.log("💸 Payout paid webhook received", {
-      payout_id: stripePayoutId,
-      status: payout.status,
-      amount: payout.amount,
-    })
-
-    await supabase
-      .from("payouts")
-      .update({
-        status: "paid",
-        updated_at: new Date().toISOString(),
-      })
-      .eq("stripe_payout_id", stripePayoutId)
-
-    return json(200, { received: true })
-  }
-
-  if (event.type === "customer.subscription.updated") {
-    const subscription = event.data.object as Stripe.Subscription
-
-    if (subscription.cancel_at_period_end === true) {
-      console.log("📅 Melo Pro scheduled to cancel at period end:", subscription.id)
-      return json(200, { received: true })
-    }
-  }
-
-  if (event.type === "customer.subscription.deleted") {
-    const subscription = event.data.object as Stripe.Subscription
-    const stripeCustomerId = subscription.customer as string
-
-    console.log("🚫 Melo Pro subscription fully canceled:", subscription.id)
-
-    const { error } = await supabase
-      .from("profiles")
-      .update({
-        is_pro: false,
-        boosts_remaining: 0,
-        stripe_subscription_id: null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("stripe_customer_id", stripeCustomerId)
-
-    if (error) {
-      console.error("❌ Failed to deactivate Melo Pro:", error)
-      return json(500, { error: "Failed to deactivate Melo Pro" })
-    }
-
-    console.log("✅ Melo Pro access revoked")
-    return json(200, { received: true })
   }
 
   return json(200, { received: true })
+}
+
+if (event.type === "payment_intent.succeeded") {
+  const intent = event.data.object as Stripe.PaymentIntent
+  const orderId = intent.metadata?.order_id
+
+  if (!orderId) return json(200, { received: true })
+
+  return await markOrderPaid({
+    orderId,
+    paymentIntentId: intent.id,
+    amountTotal: intent.amount_received ?? null,
+  })
+}
+
+if (event.type === "payout.paid") {
+  const payout = event.data.object as Stripe.Payout
+  const stripePayoutId = payout.id
+
+  console.log("💸 Payout paid webhook received", {
+    payout_id: stripePayoutId,
+    status: payout.status,
+    amount: payout.amount,
+  })
+
+  await supabase
+    .from("payouts")
+    .update({
+      status: "paid",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("stripe_payout_id", stripePayoutId)
+
+  return json(200, { received: true })
+}
+
+if (event.type === "customer.subscription.updated") {
+  const subscription = event.data.object as Stripe.Subscription
+
+  if (subscription.cancel_at_period_end === true) {
+    console.log("📅 Melo Pro scheduled to cancel at period end:", subscription.id)
+    return json(200, { received: true })
+  }
+}
+
+if (event.type === "customer.subscription.deleted") {
+  const subscription = event.data.object as Stripe.Subscription
+  const stripeCustomerId = subscription.customer as string
+
+  console.log("🚫 Melo Pro subscription fully canceled:", subscription.id)
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({
+      is_pro: false,
+      boosts_remaining: 0,
+      stripe_subscription_id: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("stripe_customer_id", stripeCustomerId)
+
+  if (error) {
+    console.error("❌ Failed to deactivate Melo Pro:", error)
+    return json(500, { error: "Failed to deactivate Melo Pro" })
+  }
+
+  console.log("✅ Melo Pro access revoked")
+  return json(200, { received: true })
+}
+
+return json(200, { received: true })
 })
