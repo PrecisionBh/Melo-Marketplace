@@ -1,20 +1,13 @@
 import {
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native"
 
 export type SportKey =
   | "all"
   | "billiards"
-  | "golf"
-  | "baseball_softball"
-  | "cornhole"
-  | "darts"
-  | "disc_golf"
-  | "bowling"
 
 type Props = {
   active: SportKey
@@ -24,22 +17,12 @@ type Props = {
 const SPORTS: { key: SportKey; label: string }[] = [
   { key: "all", label: "All Sports" },
   { key: "billiards", label: "Billiards" },
-  { key: "golf", label: "Golf" },
-  { key: "baseball_softball", label: "Baseball" },
-  { key: "cornhole", label: "Cornhole" },
-  { key: "darts", label: "Darts" },
-  { key: "disc_golf", label: "Disc Golf" },
-  { key: "bowling", label: "Bowling" },
 ]
 
 export default function SportFilterBar({ active, onChange }: Props) {
   return (
     <View style={styles.wrap}>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.scroll}
-      >
+      <View style={styles.row}>
         {SPORTS.map((s) => {
           const isActive = active === s.key
 
@@ -60,7 +43,7 @@ export default function SportFilterBar({ active, onChange }: Props) {
             </TouchableOpacity>
           )
         })}
-      </ScrollView>
+      </View>
     </View>
   )
 }
@@ -68,22 +51,22 @@ export default function SportFilterBar({ active, onChange }: Props) {
 const styles = StyleSheet.create({
   wrap: {
     backgroundColor: "#7FAF9B", // Melo header sage
-    paddingVertical: 8,
-    paddingLeft: 12,
+    paddingVertical: 10,
   },
 
-  scroll: {
-    gap: 8,
-    paddingRight: 12,
+  row: {
+    flexDirection: "row",
+    justifyContent: "center", // 🔥 centers pills
+    alignItems: "center",
+    gap: 10,
   },
 
   pill: {
     backgroundColor: "#FFFFFF",
-    paddingHorizontal: 14,
-    paddingVertical: 6,
+    paddingHorizontal: 18,
+    paddingVertical: 8,
     borderRadius: 999,
 
-    // Light depth
     shadowColor: "#000",
     shadowOpacity: 0.06,
     shadowRadius: 4,
@@ -104,7 +87,7 @@ const styles = StyleSheet.create({
   },
 
   text: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "700",
     color: "#1E1E1E",
   },
