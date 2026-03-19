@@ -108,11 +108,14 @@ serve(async (req) => {
 
       orders = [data]
     } else {
+      // ✅ OPTIMIZED FILTER (ONLY CHANGE)
       const { data, error } = await supabase
         .from("orders")
         .select("*")
-        .not("tracking_number", "is", null)
-        .neq("tracking_status", "delivered")
+        .or(`
+          and(tracking_number.not.is.null,tracking_status.neq.delivered,escrow_released.eq.false),
+          and(return_tracking_number.not.is.null,return_tracking_status.neq.delivered)
+        `)
 
       if (error) {
         console.log("❌ FETCH ERROR:", error)
@@ -126,7 +129,7 @@ serve(async (req) => {
     for (const order of orders) {
       try {
         /* =======================================================
-           📦 FORWARD SHIPPING (BLOCKED DURING RETURNS)
+           📦 FORWARD SHIPPING
         ======================================================= */
 
         if (
@@ -175,6 +178,10 @@ serve(async (req) => {
             updated_at: new Date().toISOString(),
           }
 
+          if (tracker.id && !order.easypost_tracker_id) {
+            updateData.easypost_tracker_id = tracker.id
+          }
+
           if (publicUrl && publicUrl !== order.tracking_url) {
             updateData.tracking_url = publicUrl
           }
@@ -208,7 +215,7 @@ serve(async (req) => {
         }
 
         /* =======================================================
-           🔁 RETURN FLOW (CORRECTED + TIMER ADDED)
+           🔁 RETURN FLOW
         ======================================================= */
 
         if (
@@ -243,7 +250,10 @@ serve(async (req) => {
             updated_at: new Date().toISOString(),
           }
 
-          // 🔥 RETURN DELIVERED → START REFUND TIMER
+          if (tracker.id && !order.return_easypost_tracker_id) {
+            updateData.return_easypost_tracker_id = tracker.id
+          }
+
           if (
             newStatus === "delivered" &&
             !order.return_delivered_at
@@ -259,7 +269,6 @@ serve(async (req) => {
             console.log("🔁 RETURN DELIVERED → REFUND TIMER STARTED")
           }
 
-          // 🔔 Notifications
           if (oldStatus !== newStatus) {
             if (newStatus === "in_transit") {
               await sendNotification({

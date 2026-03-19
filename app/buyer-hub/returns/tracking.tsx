@@ -2,14 +2,14 @@ import { notify } from "@/lib/notifications/notify"
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { useEffect, useState } from "react"
 import {
-    ActivityIndicator,
-    Alert,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native"
 
 import AppHeader from "@/components/app-header"
@@ -136,89 +136,98 @@ if (
     }
   }
 
-  /* ---------------- SUBMIT RETURN TRACKING (HARDENED) ---------------- */
+ /* ---------------- SUBMIT RETURN TRACKING (HARDENED) ---------------- */
 
-  const submitReturnTracking = async () => {
-    if (!order || !session?.user?.id) {
-      Alert.alert("Error", "Order data missing. Please reload.")
-      return
-    }
-
-    // Rule C enforcement: block edits after tracking exists
-    if (order.return_tracking_number) {
-      Alert.alert(
-        "Tracking Locked",
-        "Return tracking has already been submitted and cannot be changed."
-      )
-      return
-    }
-
-    if (!carrier || !tracking.trim()) {
-      Alert.alert(
-        "Missing Information",
-        "Please select a carrier and enter a valid tracking number."
-      )
-      return
-    }
-
-    try {
-      setSaving(true)
-
-      const trackingUrl = buildTrackingUrl(carrier, tracking)
-
-      const { error } = await supabase
-  .from("orders")
-  .update({
-    // DO NOT override status — keep current return state
-    return_tracking_number: tracking.trim(),
-    return_tracking_url: trackingUrl,
-    return_shipped_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  })
-  .eq("id", order.id)
-  .eq("buyer_id", session.user.id)
-  .in("status", ["return_started", "return_processing"]) // 🛡️ lifecycle safety
-
-
-      if (error) throw error
-
-      // 🔔 Notify seller (non-blocking)
-      try {
-        await notify({
-          userId: order.seller_id,
-          type: "order",
-          title: "Return Shipped",
-          body: "The buyer has shipped the return. Tracking is now available.",
-          data: {
-            route: "/seller-hub/orders/[id]",
-            params: { id: order.id },
-          },
-        })
-      } catch (notifyErr) {
-        handleAppError(notifyErr, {
-          fallbackMessage: "Tracking saved, but notification failed.",
-        })
-      }
-
-      Alert.alert(
-        "Return Tracking Submitted",
-        "Your return has been marked as shipped. The seller will be notified and the refund process will begin after the item is received.",
-        [
-          {
-            text: "OK",
-            onPress: () => router.replace(`/buyer-hub/orders/${order.id}` as any),
-          },
-        ]
-      )
-    } catch (err) {
-      handleAppError(err, {
-        fallbackMessage: "Failed to submit return tracking. Please try again.",
-      })
-    } finally {
-      setSaving(false)
-    }
+const submitReturnTracking = async () => {
+  if (!order || !session?.user?.id) {
+    Alert.alert("Error", "Order data missing. Please reload.")
+    return
   }
 
+  // Rule C enforcement: block edits after tracking exists
+  if (order.return_tracking_number) {
+    Alert.alert(
+      "Tracking Locked",
+      "Return tracking has already been submitted and cannot be changed."
+    )
+    return
+  }
+
+  if (!carrier || !tracking.trim()) {
+    Alert.alert(
+      "Missing Information",
+      "Please select a carrier and enter a valid tracking number."
+    )
+    return
+  }
+
+  try {
+    setSaving(true)
+
+    const trackingUrl = buildTrackingUrl(carrier, tracking)
+
+    // ✅ SAFETY: ensure valid carrier mapping
+    if (!trackingUrl) {
+      Alert.alert(
+        "Invalid Carrier",
+        "Please select a valid shipping carrier."
+      )
+      return
+    }
+
+    const { error } = await supabase
+      .from("orders")
+      .update({
+        // DO NOT override status — keep current return state
+        return_tracking_number: tracking.trim(),
+        return_tracking_url: trackingUrl,
+        return_carrier: carrier, // ✅ ADDED (CRITICAL)
+        return_shipped_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", order.id)
+      .eq("buyer_id", session.user.id)
+      .in("status", ["return_started", "return_processing"]) // 🛡️ lifecycle safety
+
+    if (error) throw error
+
+    // 🔔 Notify seller (non-blocking)
+    try {
+      await notify({
+        userId: order.seller_id,
+        type: "order",
+        title: "Return Shipped",
+        body: "The buyer has shipped the return. Tracking is now available.",
+        data: {
+          route: "/seller-hub/orders/[id]",
+          params: { id: order.id },
+        },
+      })
+    } catch (notifyErr) {
+      handleAppError(notifyErr, {
+        fallbackMessage: "Tracking saved, but notification failed.",
+      })
+    }
+
+    Alert.alert(
+      "Return Tracking Submitted",
+      "Your return has been marked as shipped. The seller will be notified and the refund process will begin after the item is received.",
+      [
+        {
+          text: "OK",
+          onPress: () =>
+            router.replace(`/buyer-hub/orders/${order.id}` as any),
+        },
+      ]
+    )
+  } catch (err) {
+    handleAppError(err, {
+      fallbackMessage: "Failed to submit return tracking. Please try again.",
+    })
+  } finally {
+    setSaving(false)
+  }
+}
   /* ---------------- LOADING ---------------- */
 
   if (loading) {

@@ -261,9 +261,16 @@ export default function ReturnInitiateScreen() {
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 80 : 20}
       >
-        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
+        <ScrollView
+          contentContainerStyle={{
+            padding: 16,
+            paddingBottom: 120, // 🔥 extra space so input clears keyboard
+          }}
+          keyboardShouldPersistTaps="handled"
+        >
           {/* Order Info */}
           <View
             style={{
@@ -282,7 +289,14 @@ export default function ReturnInitiateScreen() {
               {order.id}
             </Text>
 
-            <Text style={{ fontSize: 12, color: "#777", fontWeight: "600", marginTop: 10 }}>
+            <Text
+              style={{
+                fontSize: 12,
+                color: "#777",
+                fontWeight: "600",
+                marginTop: 10,
+              }}
+            >
               Item
             </Text>
             <Text style={{ fontSize: 15, fontWeight: "500", marginTop: 2 }}>
@@ -305,12 +319,18 @@ export default function ReturnInitiateScreen() {
               Important
             </Text>
             <Text style={{ fontSize: 13, lineHeight: 18, color: "#5A4A2F" }}>
-              Starting a return will freeze the escrow and notify the seller. Please ensure the item is securely packaged and returned in the same condition it was received. You must upload a valid return tracking number within 72 hours of submitting the return request, or the escrowed payment will be released to the seller.
+              Starting a return will freeze the escrow and notify the seller.
+              Please ensure the item is securely packaged and returned in the
+              same condition it was received. You must upload a valid return
+              tracking number within 72 hours of submitting the return request,
+              or the escrowed payment will be released to the seller.
             </Text>
           </View>
 
           {/* Reason Selection */}
-          <Text style={{ fontSize: 16, fontWeight: "700", marginBottom: 10 }}>
+          <Text
+            style={{ fontSize: 16, fontWeight: "700", marginBottom: 10 }}
+          >
             Reason for Return
           </Text>
 
@@ -349,7 +369,9 @@ export default function ReturnInitiateScreen() {
           </View>
 
           {/* Notes */}
-          <Text style={{ fontSize: 16, fontWeight: "700", marginBottom: 10 }}>
+          <Text
+            style={{ fontSize: 16, fontWeight: "700", marginBottom: 10 }}
+          >
             Additional Details (Optional)
           </Text>
 
@@ -386,7 +408,13 @@ export default function ReturnInitiateScreen() {
             {submitting ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={{ color: "#fff", fontSize: 16, fontWeight: "700" }}>
+              <Text
+                style={{
+                  color: "#fff",
+                  fontSize: 16,
+                  fontWeight: "700",
+                }}
+              >
                 Initiate Return
               </Text>
             )}

@@ -26,25 +26,29 @@ Deno.serve(async (req) => {
 
   console.log("🔎 Checking eligible return refunds...")
 
-  const now = new Date().toISOString()
-  console.log("🧪 CURRENT TIME:", now)
+  const now = new Date()
+  const nowISO = now.toISOString()
 
+  console.log("🧪 CURRENT TIME:", nowISO)
+
+  // ✅ REAL QUERY
   const { data: orders, error } = await supabase
     .from("orders")
     .select("*")
     .eq("status", "return_started")
     .eq("is_disputed", false)
-    .eq("return_received", false)
+    .eq("return_received", true)
     .eq("escrow_released", false)
     .eq("escrow_status", "held")
-    .eq("return_tracking_status", "delivered") // 🔥 MUST BE DELIVERED
     .not("return_refund_at", "is", null)
-    .lte("return_refund_at", now)
+    .lte("return_refund_at", nowISO)
 
   if (error) {
     console.error("❌ Fetch failed:", error)
     return new Response("Error", { status: 500 })
   }
+
+  console.log("🧪 QUERY RESULT COUNT:", orders?.length || 0)
 
   if (!orders?.length) {
     console.log("🚫 No eligible return refunds")
@@ -91,8 +95,30 @@ Deno.serve(async (req) => {
       processed++
       console.log("🎉 Return auto-refunded:", order.id)
 
-    } catch (err) {
+    } catch (err: any) {
       console.error("❌ Order error:", order.id, err)
+
+      // 🔥 HANDLE ALREADY REFUNDED (CRITICAL FIX)
+      if (err?.code === "charge_already_refunded") {
+        console.warn("⚠️ Already refunded — syncing DB:", order.id)
+
+        const { error: rpcError } = await supabase.rpc(
+          "return_order_refund",
+          {
+            p_order_id: order.id,
+            p_stripe_refund_id: "already_refunded",
+          }
+        )
+
+        if (rpcError) {
+          console.error("❌ RPC failed after already refunded:", rpcError)
+          continue
+        }
+
+        processed++
+        console.log("✅ Synced already-refunded order:", order.id)
+        continue
+      }
     }
   }
 
