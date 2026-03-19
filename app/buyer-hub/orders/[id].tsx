@@ -1,13 +1,12 @@
 import { notify } from "@/lib/notifications/notify"
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router"
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import {
   ActivityIndicator,
   Alert,
   ScrollView,
   StyleSheet,
-  Text,
-  View,
+  View
 } from "react-native"
 
 import AppHeader from "@/components/app-header"
@@ -17,6 +16,7 @@ import { supabase } from "@/lib/supabase"
 
 import BuyerOrderHeaderCard from "@/components/buyer-hub/orders/BuyerOrderHeaderCard"
 import BuyerReceiptCard from "@/components/buyer-hub/orders/BuyerReceiptCard"
+import BuyerTrackingCard from "@/components/buyer-hub/orders/BuyerTrackingCard"
 import ConfirmDeliveryModal from "@/components/buyer-hub/orders/ConfirmDeliveryModal"
 import OrderActionButtons from "@/components/buyer-hub/orders/OrderActionButtons"
 import ReturnWarning from "@/components/buyer-hub/orders/ReturnWarning"
@@ -54,11 +54,11 @@ type Order = {
   carrier: string | null
   completed_at: string | null
   is_disputed: boolean | null
-  last_tracking_status?: string | null
   delivered_at?: string | null
   listing_snapshot: {
-    title?: string | null
-  } | null
+  title?: string | null
+  image_urls?: string[] | null
+} | null
 }
 
 type SellerReturnAddress = {
@@ -86,9 +86,11 @@ export default function BuyerOrderDetailScreen() {
   const [loading, setLoading] = useState(true)
   const [confirmVisible, setConfirmVisible] = useState(false)
   const [processing, setProcessing] = useState(false)
-  const [cancelReturnVisible, setCancelReturnVisible] = useState(false)
 
   const [hasReviewed, setHasReviewed] = useState(false)
+
+  // ✅ prevents tracking loop
+  const hasCheckedTracking = useRef(false)
 
   useEffect(() => {
     if (id) loadOrder()
@@ -100,9 +102,15 @@ export default function BuyerOrderDetailScreen() {
     }, [id])
   )
 
-  // 🔥 EASYPOST TRIGGER
+  /* 🔥 EASYPOST TRIGGER (FIXED) */
   useEffect(() => {
-    if (order?.id && order?.tracking_url) {
+    if (
+      order?.id &&
+      order?.tracking_url &&
+      !hasCheckedTracking.current
+    ) {
+      hasCheckedTracking.current = true
+
       fetch(
         `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/check-tracking`,
         {
@@ -113,13 +121,7 @@ export default function BuyerOrderDetailScreen() {
           },
           body: JSON.stringify({ orderId: order.id }),
         }
-      )
-        .then(() => {
-          setTimeout(() => {
-            loadOrder()
-          }, 1500)
-        })
-        .catch(() => {})
+      ).catch(() => {})
     }
   }, [order?.id])
 
@@ -157,7 +159,6 @@ export default function BuyerOrderDetailScreen() {
           carrier,
           completed_at,
           is_disputed,
-          last_tracking_status,
           delivered_at,
           listing_snapshot
         `)
@@ -430,13 +431,14 @@ export default function BuyerOrderDetailScreen() {
 
       <ScrollView contentContainerStyle={{ paddingBottom: 140 }}>
         <BuyerOrderHeaderCard
-          imageUrl={order.image_url}
-          orderId={order.public_order_number ?? order.id}
-          title={order.listing_snapshot?.title}
-          status={order.status}
-          isDisputed={order.is_disputed}
-          hasReturnTracking={hasReturnTracking}
-        />
+  imageUrls={order.listing_snapshot?.image_urls}
+  imageUrl={order.image_url}
+  orderId={order.public_order_number ?? order.id}
+  title={order.listing_snapshot?.title}
+  status={order.status}
+  isDisputed={order.is_disputed}
+  hasReturnTracking={hasReturnTracking}
+/>
 
         <ReturnWarning visible={showReturnWarning} />
 
@@ -445,60 +447,14 @@ export default function BuyerOrderDetailScreen() {
         )}
 
         <View style={styles.content}>
-          {/* 📊 TRACKING STATUS BADGE */}
           {order.tracking_url && isShipped && !isInReturnFlow && !isCompleted && (
-            <View
-              style={{
-                backgroundColor:
-                  order.status === "delivered"
-                    ? "#E6F4EA"
-                    : order.status === "in_transit"
-                    ? "#E8F1FF"
-                    : "#F5F5F5",
-                padding: 10,
-                borderRadius: 10,
-                marginBottom: 10,
-                alignItems: "center",
-              }}
-            >
-              <Text
-                style={{
-                  fontWeight: "600",
-                  color:
-                    order.status === "delivered"
-                      ? "#1E7E34"
-                      : order.status === "in_transit"
-                      ? "#1A73E8"
-                      : "#666",
-                }}
-              >
-                {order.status === "delivered"
-                  ? "✅ Delivered"
-                  : order.status === "in_transit"
-                  ? "🚚 In Transit"
-                  : "⏳ Shipped"}
-              </Text>
-
-              {order.delivered_at && (
-                <Text style={{ fontSize: 12, color: "#666", marginTop: 4 }}>
-                  Delivered on{" "}
-                  {new Date(order.delivered_at).toLocaleDateString()}
-                </Text>
-              )}
-            </View>
-          )}
-
-          {!isInReturnFlow && (
-            <BuyerReceiptCard
-              itemPrice={itemUnitPrice}
-              quantity={quantity}
-              shipping={shipping}
-              tax={tax}
-              buyerFee={buyerFee}
-              totalPaid={totalPaid}
-              status={order.status}
-            />
-          )}
+  <View style={{ marginBottom: 12 }}>
+    <BuyerTrackingCard
+      status={order.status}
+      deliveredAt={order.delivered_at}
+    />
+  </View>
+)}
 
           <OrderActionButtons
             showTrack={canTrack}
@@ -549,6 +505,18 @@ export default function BuyerOrderDetailScreen() {
             }
           />
         </View>
+
+        {!isInReturnFlow && (
+            <BuyerReceiptCard
+              itemPrice={itemUnitPrice}
+              quantity={quantity}
+              shipping={shipping}
+              tax={tax}
+              buyerFee={buyerFee}
+              totalPaid={totalPaid}
+              status={order.status}
+            />
+          )}
       </ScrollView>
 
       <ConfirmDeliveryModal

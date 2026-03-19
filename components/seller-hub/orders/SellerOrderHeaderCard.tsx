@@ -1,25 +1,45 @@
-import { Image, StyleSheet, Text, View } from "react-native"
+import { Image } from "expo-image"
+import {
+  Dimensions,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native"
+
+const SCREEN_WIDTH = Dimensions.get("window").width
 
 type Props = {
-  imageUrl: string | null
+  imageUrls?: string[] | null
+  imageUrl?: string | null
   orderId: string
   title?: string | null
   status?: string
-  tracking_status?: string | null
   isDisputed?: boolean | null
   hasReturnTracking?: boolean
 }
 
 export default function SellerOrderHeaderCard({
+  imageUrls,
   imageUrl,
   orderId,
   title,
   status,
-  tracking_status,
   isDisputed,
   hasReturnTracking = false,
 }: Props) {
-  // 🔥 GLOBAL MELO ORDER NUMBER STANDARD
+  /* ---------------- IMAGE NORMALIZATION ---------------- */
+
+  const images =
+    imageUrls && imageUrls.length > 0
+      ? imageUrls
+      : imageUrl
+      ? [imageUrl]
+      : []
+
+  /* ---------------- ORDER NUMBER ---------------- */
+
   const displayOrderNumber =
     orderId?.startsWith("Melo")
       ? orderId
@@ -32,65 +52,58 @@ export default function SellerOrderHeaderCard({
   const getBadgeText = () => {
     if (!status) return ""
 
-    const ts = tracking_status
-
-    // 🟢 FINAL ESCROW STATES (HIGHEST PRIORITY)
-    if (status === "refunded") return "REFUND PAID"
     if (status === "completed") return "COMPLETED"
-    if (status === "cancelled" || status === "cancelled_by_seller")
+    if (status === "refunded") return "REFUND PAID"
+    if (status === "cancelled" || status === "cancelled_payment")
       return "CANCELLED"
 
-    // 🔁 RETURN FLOW
+    if (status === "disputed") return "ORDER DISPUTED"
+    if (status === "issue_open") return "ISSUE OPEN"
+
     if (status === "return_processing") {
       if (isDisputed) return "RETURN DISPUTED – UNDER REVIEW"
       return "RETURN UNDER REVIEW"
     }
 
     if (status === "return_started") {
-      if (hasReturnTracking) return "RETURN IN TRANSIT (BACK TO YOU)"
+      if (hasReturnTracking) return "RETURN IN TRANSIT"
       return "RETURN STARTED"
     }
 
-    // ⚠️ DISPUTE
-    if (status === "disputed") return "ORDER DISPUTED"
+    if (status === "returned") return "RETURNED"
 
-    // 🚚 SHIPPING STATES (FROM TRACKING)
-    if (ts === "delivered") return "DELIVERED"
-    if (ts === "in_transit" || ts === "out_for_delivery")
-      return "IN TRANSIT"
-    if (ts === "label_created") return "LABEL CREATED"
-
-    // 📦 BASE SHIPPING
+    if (status === "delivered") return "DELIVERED"
     if (status === "shipped") return "SHIPPED"
 
-    // 🟡 NEED ACTION
     if (status === "paid") return "PAID (ADD TRACKING)"
+    if (status === "pending_payment") return "AWAITING PAYMENT"
 
-    // 🔤 FALLBACK
     return status.replace(/_/g, " ").toUpperCase()
   }
 
   /* ---------------- BADGE STYLE ---------------- */
 
   const getBadgeStyle = () => {
+    if (!status) return styles.badge
+
     if (status === "completed") return styles.completedBadge
     if (status === "refunded") return styles.refundedBadge
-    if (status === "cancelled" || status === "cancelled_by_seller")
+
+    if (status === "cancelled" || status === "cancelled_payment")
       return styles.cancelledBadge
+
+    if (status === "disputed" || status === "issue_open")
+      return styles.disputeBadge
 
     if (status === "return_processing") return styles.returnBadge
     if (status === "return_started") return styles.returnStartedBadge
+    if (status === "returned") return styles.returnBadge
 
-    if (tracking_status === "delivered") return styles.deliveredBadge
-    if (
-      tracking_status === "in_transit" ||
-      tracking_status === "out_for_delivery"
-    )
-      return styles.transitBadge
-
-    if (tracking_status === "label_created") return styles.labelBadge
+    if (status === "delivered") return styles.deliveredBadge
+    if (status === "shipped") return styles.transitBadge
 
     if (status === "paid") return styles.actionRequiredBadge
+    if (status === "pending_payment") return styles.pendingBadge
 
     return styles.badge
   }
@@ -99,13 +112,35 @@ export default function SellerOrderHeaderCard({
 
   return (
     <>
-      <Image
-        source={{ uri: imageUrl ?? undefined }}
-        style={styles.image}
-      />
+      {/* 🔥 IMAGE CAROUSEL (MATCHES LISTING + BUYER) */}
+      {images.length === 0 ? (
+        <View style={styles.imagePage} />
+      ) : (
+        <ScrollView
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+        >
+          {images.map((uri, i) => (
+            <TouchableOpacity
+              key={i}
+              style={styles.imagePage}
+              activeOpacity={1}
+            >
+              <Image
+                source={uri}
+                style={styles.image}
+                contentFit="contain"
+                cachePolicy="memory-disk"
+                transition={100}
+              />
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
 
+      {/* CONTENT */}
       <View style={styles.content}>
-        {/* 🔥 TITLE + BADGE */}
         <View style={styles.topRow}>
           <Text
             style={styles.title}
@@ -122,7 +157,6 @@ export default function SellerOrderHeaderCard({
           ) : null}
         </View>
 
-        {/* 🔽 ORDER NUMBER */}
         <Text style={styles.orderNumber}>
           Order #{displayOrderNumber}
         </Text>
@@ -134,10 +168,17 @@ export default function SellerOrderHeaderCard({
 /* ---------------- STYLES ---------------- */
 
 const styles = StyleSheet.create({
+  imagePage: {
+    width: SCREEN_WIDTH,
+    height: 260,
+    backgroundColor: "#000",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
   image: {
     width: "100%",
-    height: 260,
-    resizeMode: "cover",
+    height: "100%",
   },
 
   content: {
@@ -168,7 +209,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 
-  /* 🟩 DEFAULT */
   badge: {
     backgroundColor: "#7FAF9B",
     paddingHorizontal: 10,
@@ -184,45 +224,18 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
 
-  /* 💰 COMPLETED */
-  completedBadge: {
-    backgroundColor: "#27AE60",
-  },
+  completedBadge: { backgroundColor: "#27AE60" },
+  refundedBadge: { backgroundColor: "#1F7A63" },
+  cancelledBadge: { backgroundColor: "#B91C1C" },
 
-  /* 🧾 REFUND */
-  refundedBadge: {
-    backgroundColor: "#1F7A63",
-  },
+  disputeBadge: { backgroundColor: "#DC2626" },
 
-  /* ❌ CANCELLED */
-  cancelledBadge: {
-    backgroundColor: "#B91C1C",
-  },
+  returnBadge: { backgroundColor: "#A855F7" },
+  returnStartedBadge: { backgroundColor: "#9333EA" },
 
-  /* 🔁 RETURN */
-  returnBadge: {
-    backgroundColor: "#A855F7",
-  },
+  deliveredBadge: { backgroundColor: "#1E7E34" },
+  transitBadge: { backgroundColor: "#1A73E8" },
 
-  returnStartedBadge: {
-    backgroundColor: "#9333EA",
-  },
-
-  /* 🚚 SHIPPING */
-  deliveredBadge: {
-    backgroundColor: "#1E7E34",
-  },
-
-  transitBadge: {
-    backgroundColor: "#1A73E8",
-  },
-
-  labelBadge: {
-    backgroundColor: "#6B7280",
-  },
-
-  /* ⚠️ ACTION NEEDED */
-  actionRequiredBadge: {
-    backgroundColor: "#F59E0B",
-  },
+  actionRequiredBadge: { backgroundColor: "#F59E0B" },
+  pendingBadge: { backgroundColor: "#9CA3AF" },
 })

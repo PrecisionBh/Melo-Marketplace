@@ -10,7 +10,7 @@ const supabase = createClient(
 
 const EASYPOST_API_KEY = Deno.env.get("EASYPOST_API_KEY")!
 
-// 🔥 Status mapping
+// 🔥 Status mapping (UNCHANGED)
 const mapStatus = (status: string) => {
   const s = status?.toLowerCase().trim()
 
@@ -34,18 +34,71 @@ const mapStatus = (status: string) => {
   return "label_created"
 }
 
+// 🔔 Notification helper
+const sendNotification = async ({
+  userId,
+  type,
+  title,
+  body,
+  data = {},
+}: {
+  userId: string
+  type: string
+  title: string
+  body: string
+  data?: any
+}) => {
+  try {
+    if (!userId) return
+
+    await supabase.from("notifications").insert({
+      user_id: userId,
+      type,
+      title,
+      body,
+      data,
+    })
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("expo_push_token, notifications_enabled")
+      .eq("id", userId)
+      .single()
+
+    if (
+      !profile?.expo_push_token ||
+      profile.notifications_enabled === false
+    ) {
+      return
+    }
+
+    await fetch("https://exp.host/--/api/v2/push/send", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        to: profile.expo_push_token,
+        title,
+        body,
+        data,
+      }),
+    })
+  } catch (err) {
+    console.log("⚠️ Notification error:", err)
+  }
+}
+
 serve(async (req) => {
   try {
     console.log("🚀 check-tracking started")
 
-    // 🧠 Detect UI vs CRON
     const body = await req.json().catch(() => null)
     const orderId = body?.orderId
 
     let orders: any[] = []
 
     if (orderId) {
-      // 🟢 UI MODE (single order)
       const { data, error } = await supabase
         .from("orders")
         .select("*")
@@ -59,12 +112,11 @@ serve(async (req) => {
 
       orders = [data]
     } else {
-      // 🔵 CRON MODE (bulk orders)
       const { data, error } = await supabase
         .from("orders")
         .select("*")
         .not("tracking_number", "is", null)
-        .neq("tracking_status", "delivered") // 🛑 stop re-checking delivered
+        .neq("tracking_status", "delivered")
 
       if (error) {
         console.log("❌ FETCH ERROR:", error)
@@ -81,7 +133,6 @@ serve(async (req) => {
 
         console.log("📦 Checking:", order.tracking_number)
 
-        // 🔥 Create / fetch tracker from EasyPost
         const res = await fetch("https://api.easypost.com/v2/trackers", {
           method: "POST",
           headers: {
@@ -111,12 +162,12 @@ serve(async (req) => {
 
         const easyPostStatus = tracker.status
         const newStatus = mapStatus(easyPostStatus)
+        const oldStatus = order.tracking_status
         const publicUrl = tracker.public_url || null
 
         console.log("📦 EasyPost:", easyPostStatus, "→", newStatus)
         console.log("🔗 Public URL:", publicUrl)
 
-        // 🔥 DELIVERY LOGIC
         let deliveredAt = order.delivered_at
         let escrowReleaseAt = order.escrow_release_at
 
@@ -131,7 +182,6 @@ serve(async (req) => {
           console.log("🎉 DELIVERY DETECTED → TIMER STARTED", order.id)
         }
 
-        // 🔥 UPDATE OBJECT
         const updateData: any = {
           tracking_status: newStatus,
           delivered_at: deliveredAt,
@@ -139,9 +189,81 @@ serve(async (req) => {
           updated_at: new Date().toISOString(),
         }
 
-        // 🔥 Only update tracking URL if provided
         if (publicUrl && publicUrl !== order.tracking_url) {
           updateData.tracking_url = publicUrl
+        }
+
+        // 🔔 NOTIFICATIONS (ONLY ON STATUS CHANGE)
+        if (oldStatus !== newStatus) {
+          console.log("🔔 Status changed:", oldStatus, "→", newStatus)
+
+          // 🟡 BUYER: LABEL CREATED
+          if (newStatus === "label_created") {
+            await sendNotification({
+              userId: order.buyer_id,
+              type: "order",
+              title: "Shipping Label Created",
+              body: "Your order is being prepared for shipment.",
+              data: { orderId: order.id },
+            })
+          }
+
+          // 🟠 OUT FOR DELIVERY (uses raw EasyPost status)
+          if (easyPostStatus === "out_for_delivery") {
+            await sendNotification({
+              userId: order.buyer_id,
+              type: "order",
+              title: "Out for Delivery",
+              body: "Your package is out for delivery today.",
+              data: { orderId: order.id },
+            })
+
+            await sendNotification({
+              userId: order.seller_id,
+              type: "order",
+              title: "Out for Delivery",
+              body: "The package is out for delivery to the buyer.",
+              data: { orderId: order.id },
+            })
+          }
+
+          // 🔵 IN TRANSIT
+          if (newStatus === "in_transit") {
+            await sendNotification({
+              userId: order.buyer_id,
+              type: "order",
+              title: "Order In Transit",
+              body: "Your package is on the way.",
+              data: { orderId: order.id },
+            })
+
+            await sendNotification({
+              userId: order.seller_id,
+              type: "order",
+              title: "Package In Transit",
+              body: "The buyer’s order is now in transit.",
+              data: { orderId: order.id },
+            })
+          }
+
+          // 🟢 DELIVERED
+          if (newStatus === "delivered") {
+            await sendNotification({
+              userId: order.buyer_id,
+              type: "order",
+              title: "Order Delivered",
+              body: "Your order has been delivered.",
+              data: { orderId: order.id },
+            })
+
+            await sendNotification({
+              userId: order.seller_id,
+              type: "order",
+              title: "Order Delivered",
+              body: "The order has been delivered to the buyer.",
+              data: { orderId: order.id },
+            })
+          }
         }
 
         await supabase

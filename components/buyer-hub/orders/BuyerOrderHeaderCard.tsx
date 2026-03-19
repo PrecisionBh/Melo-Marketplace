@@ -1,7 +1,18 @@
-import { Image, StyleSheet, Text, View } from "react-native"
+import { Image } from "expo-image"
+import {
+  Dimensions,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native"
+
+const SCREEN_WIDTH = Dimensions.get("window").width
 
 type Props = {
-  imageUrl: string | null
+  imageUrls?: string[] | null
+  imageUrl?: string | null
   orderId: string
   title?: string | null
   status?: string
@@ -10,6 +21,7 @@ type Props = {
 }
 
 export default function BuyerOrderHeaderCard({
+  imageUrls,
   imageUrl,
   orderId,
   title,
@@ -17,93 +29,105 @@ export default function BuyerOrderHeaderCard({
   isDisputed,
   hasReturnTracking = false,
 }: Props) {
-  /**
-   * 🔥 FIXED MELO ORDER NUMBER LOGIC
-   * Priority:
-   * 1. If already formatted (Melo123456) → use as-is
-   * 2. If DB gives clean public number (194253) → prefix Melo
-   * 3. If UUID → generate Melo + first 6 chars (stable fallback)
-   */
+  /* ---------------- IMAGE NORMALIZATION ---------------- */
+
+  const images =
+    imageUrls && imageUrls.length > 0
+      ? imageUrls
+      : imageUrl
+      ? [imageUrl]
+      : []
+
+  /* ---------------- ORDER NUMBER ---------------- */
+
   const formatMeloOrderNumber = (id?: string) => {
     if (!id) return "Melo------"
-
-    // If already starts with Melo (from DB public_order_number)
-    if (id.startsWith("Melo")) {
-      return id
-    }
-
-    // If it's a numeric/public style ID (like 194253)
-    const isNumeric = /^[0-9]+$/.test(id)
-    if (isNumeric) {
-      return `Melo${id}`
-    }
-
-    // UUID fallback (remove dashes and slice)
-    const clean = id.replace(/-/g, "")
-    return `Melo${clean.slice(0, 6)}`
+    if (id.startsWith("Melo")) return id
+    if (/^[0-9]+$/.test(id)) return `Melo${id}`
+    return `Melo${id.replace(/-/g, "").slice(0, 6)}`
   }
 
   const displayOrderNumber = formatMeloOrderNumber(orderId)
+
+  /* ---------------- BADGE TEXT ---------------- */
 
   const getBadgeText = () => {
     if (!status) return ""
 
     if (status === "completed") return "COMPLETED"
-
     if (status === "refunded") return "REFUNDED"
-
-    if (status === "paid") return "AWAITING SELLER SHIPMENT"
-
-    if (status === "shipped") return "SHIPPED"
-
-    if (status === "return_started" || status === "return_processing") {
-      if (isDisputed) return "RETURN DISPUTED BY SELLER"
-      if (hasReturnTracking)
-        return "RETURN SHIPPED (AWAITING SELLER)"
-      return "RETURN STARTED (AWAITING BUYER SHIPMENT)"
-    }
+    if (status === "cancelled" || status === "cancelled_payment")
+      return "CANCELLED"
 
     if (status === "disputed") return "DISPUTED"
+    if (status === "issue_open") return "ISSUE OPEN"
+
+    if (status === "return_processing") {
+      if (isDisputed) return "RETURN DISPUTED"
+      return "RETURN UNDER REVIEW"
+    }
+
+    if (status === "return_started") {
+      if (hasReturnTracking) return "RETURN IN TRANSIT"
+      return "RETURN STARTED"
+    }
+
+    if (status === "returned") return "RETURNED"
+
+    if (status === "delivered") return "DELIVERED"
+    if (status === "shipped") return "SHIPPED"
+
+    if (status === "paid") return "AWAITING SHIPMENT"
+    if (status === "pending_payment") return "AWAITING PAYMENT"
 
     return status.replace(/_/g, " ").toUpperCase()
   }
 
-  const isCompleted = status === "completed"
   const badgeText = getBadgeText()
 
   return (
     <>
-      <Image
-        source={{ uri: imageUrl ?? undefined }}
-        style={styles.image}
-      />
+      {/* 🔥 EXACT SAME STRUCTURE AS LISTING SCREEN */}
+      {images.length === 0 ? (
+        <View style={styles.imagePage} />
+      ) : (
+        <ScrollView
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+        >
+          {images.map((uri, i) => (
+            <TouchableOpacity
+              key={i}
+              style={styles.imagePage}
+              activeOpacity={1}
+            >
+              <Image
+                source={uri}
+                style={styles.image}
+                contentFit="contain"
+                cachePolicy="memory-disk"
+                transition={100}
+              />
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
 
+      {/* CONTENT */}
       <View style={styles.content}>
-        {/* 🔥 TITLE + BADGE (PRIMARY ROW) */}
         <View style={styles.topRow}>
-          <Text
-            style={styles.title}
-            numberOfLines={1}
-            ellipsizeMode="tail"
-          >
+          <Text style={styles.title} numberOfLines={1}>
             {title || "Untitled Listing"}
           </Text>
 
           {badgeText ? (
-            <View
-              style={[
-                styles.badge,
-                isCompleted && styles.completedBadge,
-              ]}
-            >
-              <Text style={styles.badgeText}>
-                {badgeText}
-              </Text>
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>{badgeText}</Text>
             </View>
           ) : null}
         </View>
 
-        {/* 🔽 MELO ORDER NUMBER (FIXED — NO MORE MELOMELO BUG) */}
         <Text style={styles.orderNumber}>
           Order #{displayOrderNumber}
         </Text>
@@ -112,24 +136,31 @@ export default function BuyerOrderHeaderCard({
   )
 }
 
+/* ---------------- STYLES ---------------- */
+
 const styles = StyleSheet.create({
+  imagePage: {
+    width: SCREEN_WIDTH,
+    height: 260,
+    backgroundColor: "#000",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
   image: {
     width: "100%",
-    height: 260,
-    resizeMode: "cover",
+    height: "100%",
   },
 
   content: {
     paddingTop: 16,
     paddingHorizontal: 16,
-    paddingBottom: 0,
   },
 
   topRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 8,
   },
 
   title: {
@@ -152,11 +183,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
-    flexShrink: 0,
-  },
-
-  completedBadge: {
-    backgroundColor: "#27AE60",
   },
 
   badgeText: {

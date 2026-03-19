@@ -7,8 +7,10 @@ import {
   Linking,
   ScrollView,
   StyleSheet,
-  Text, TextInput, TouchableOpacity,
-  View
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native"
 
 import AppHeader from "@/components/app-header"
@@ -20,6 +22,7 @@ import { supabase } from "@/lib/supabase"
 import BuyerShippingAddressCard from "@/components/seller-hub/orders/BuyerShippingAddressCard"
 import ConfirmReturnReceivedModal from "@/components/seller-hub/orders/ConfirmReturnReceivedModal"
 import SellerOrderHeaderCard from "@/components/seller-hub/orders/SellerOrderHeaderCard"
+import SellerTrackingCard from "@/components/seller-hub/orders/SellerTrackingCard"
 
 /* ---------------- TYPES ---------------- */
 
@@ -50,14 +53,15 @@ type Order = {
   seller_net_cents: number | null
 
   image_url: string | null
+  image_urls: string[] | null
 
   carrier: string | null
   tracking_number: string | null
   tracking_url?: string | null
   shipping_label_purchased?: boolean | null
-label_url?: string | null
-shipping_label_cost_cents?: number | null
-tracking_status?: string | null
+  label_url?: string | null
+  shipping_label_cost_cents?: number | null
+  tracking_status?: string | null
 
   shipping_name: string | null
   shipping_line1: string | null
@@ -79,21 +83,6 @@ tracking_status?: string | null
 
 /* ---------------- HELPERS ---------------- */
 
-const buildTrackingUrl = (carrier: string, tracking: string) => {
-  switch (carrier) {
-    case "USPS":
-      return `https://tools.usps.com/go/TrackConfirmAction?tLabels=${tracking}`
-    case "UPS":
-      return `https://www.ups.com/track?tracknum=${tracking}`
-    case "FedEx":
-      return `https://www.fedex.com/fedextrack/?tracknumbers=${tracking}`
-    case "DHL":
-      return `https://www.dhl.com/en/express/tracking.html?AWB=${tracking}`
-    default:
-      return null
-  }
-}
-
 /* ---------------- SCREEN ---------------- */
 
 export default function SellerOrderDetailScreen() {
@@ -112,31 +101,40 @@ export default function SellerOrderDetailScreen() {
   const [confirmReturnVisible, setConfirmReturnVisible] = useState(false)
   const [activeDispute, setActiveDispute] = useState<any>(null)
 
+  const [checkedTracking, setCheckedTracking] = useState(false) // ✅ FIX
+
   useEffect(() => {
     if (id) loadOrder()
   }, [id])
 
+  /* ✅ FIXED TRACKING CHECK (NO LOOP) */
   useEffect(() => {
-  if (order?.id && order?.tracking_number) {
-    fetch(
-      `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/check-tracking`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY}`,
-        },
-        body: JSON.stringify({ orderId: order.id }),
-      }
-    )
-      .then(() => {
-        setTimeout(() => {
-          loadOrder()
-        }, 1500)
-      })
-      .catch(() => {})
-  }
-}, [order?.id])
+    if (
+      order?.id &&
+      order?.tracking_number &&
+      !checkedTracking
+    ) {
+      setCheckedTracking(true)
+
+      fetch(
+        `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/check-tracking`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY}`,
+          },
+          body: JSON.stringify({ orderId: order.id }),
+        }
+      )
+        .then(() => {
+          setTimeout(() => {
+            loadOrder()
+          }, 1500)
+        })
+        .catch(() => {})
+    }
+  }, [order?.tracking_number]) // ✅ FIXED DEPENDENCY
 
   const loadOrder = async () => {
     try {
@@ -171,28 +169,19 @@ export default function SellerOrderDetailScreen() {
         return
       }
 
-      console.log("FULL ORDER OBJECT:", data)
-      console.log("ORDER KEYS:", Object.keys(data))
-      console.log("ORDER TITLE FIELD:", data?.title)
-
       if (data.seller_id !== user.id) {
-        console.log("[SELLER ORDER ACCESS BLOCKED]", {
-          orderSeller: data.seller_id,
-          currentUser: user.id,
-          orderId: id,
-        })
         Alert.alert("Access denied")
         router.back()
         return
       }
 
       setOrder({
-  ...data,
-  title: data.listing_snapshot?.title ?? null,
-})
+        ...data,
+        title: data.listing_snapshot?.title ?? null,
+      })
 
-setCarrier(data.carrier ?? "")
-setTracking(data.tracking_number ?? "")
+      setCarrier(data.carrier ?? "")
+      setTracking(data.tracking_number ?? "")
 
       const { data: profile } = await supabase
         .from("profiles")
@@ -393,11 +382,7 @@ const hasTracking =
   !!order.tracking_url || !!order.tracking_number
 
 // 🧠 unified tracking URL (same idea as buyer screen)
-const activeTrackingUrl =
-  order.tracking_url ||
-  (order.carrier && order.tracking_number
-    ? buildTrackingUrl(order.carrier, order.tracking_number)
-    : null)
+const activeTrackingUrl = order.tracking_url ?? null
 
 // 🟢 ONLY show add tracking if NOTHING exists yet
 const showAddTracking =
@@ -473,13 +458,16 @@ return (
   <View style={styles.screen}>
     <AppHeader title="Order" backRoute="/seller-hub/orders" />
 
-    <ScrollView contentContainerStyle={{ paddingBottom: 140 }}>
-      <SellerOrderHeaderCard
-  imageUrl={order.image_url}
+  <ScrollView
+  contentContainerStyle={{ paddingBottom: 140 }}
+  nestedScrollEnabled
+>
+     <SellerOrderHeaderCard
+  imageUrls={order.image_urls} // ✅ use this if available
+  imageUrl={order.image_url}   // fallback
   orderId={order.public_order_number ?? order.id}
   title={order.title}
   status={order.status}
-  tracking_status={order.tracking_status}   // ✅ THIS IS THE FIX
   isDisputed={isReturnProcessing}
   hasReturnTracking={hasReturnTracking}
 />
@@ -551,34 +539,40 @@ return (
     </>
   )}
 
-  {/* 📍 TRACK PACKAGE */}
-  {showTrackShipment && !isRefunded && !isCancelled && (
-    <TouchableOpacity
-      style={{
-        backgroundColor: "#000",
-        padding: 14,
-        borderRadius: 12,
-        alignItems: "center",
-        marginBottom: 12,
-      }}
-      onPress={async () => {
-        if (!activeTrackingUrl) {
-          Alert.alert("Tracking not available yet")
-          return
-        }
+  {/* 📦 TRACKING STATUS CARD */}
+{showTrackShipment && !isRefunded && !isCancelled && (
+  <SellerTrackingCard tracking_status={order.tracking_status} />
+)}
 
-        try {
-          await Linking.openURL(activeTrackingUrl)
-        } catch (err) {
-          Alert.alert("Unable to open tracking link")
-        }
-      }}
-    >
-      <Text style={{ color: "#fff", fontWeight: "600" }}>
-        📍 Track Package
-      </Text>
-    </TouchableOpacity>
-  )}
+{/* 📍 TRACK PACKAGE */}
+{showTrackShipment && !isRefunded && !isCancelled && (
+  <TouchableOpacity
+    style={{
+      backgroundColor: "#000",
+      padding: 14,
+      borderRadius: 12,
+      alignItems: "center",
+       marginTop: 12,
+      marginBottom: 12,
+    }}
+    onPress={async () => {
+      if (!activeTrackingUrl) {
+        Alert.alert("Tracking not available yet")
+        return
+      }
+
+      try {
+        await Linking.openURL(activeTrackingUrl)
+      } catch (err) {
+        Alert.alert("Unable to open tracking link")
+      }
+    }}
+  >
+    <Text style={{ color: "#fff", fontWeight: "600" }}>
+      📍 Track Package
+    </Text>
+  </TouchableOpacity>
+)}
         {/* RECEIPT + ACTIONS unchanged */}
       </View>
     </ScrollView>
@@ -611,7 +605,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     marginTop: 12,
-    marginBottom: 12,
+    marginBottom: 22,
   },
   field: {
     marginTop: 12,
