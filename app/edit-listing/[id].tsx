@@ -197,7 +197,8 @@ export default function EditListingScreen() {
 
   const { session } = useAuth()
   const router = useRouter()
-  const { id } = useLocalSearchParams<{ id: string }>()
+  const params = useLocalSearchParams()
+const id = Array.isArray(params.id) ? params.id[0] : params.id
 
   const [loadingListing, setLoadingListing] = useState(true)
   const [submitting, setSubmitting] = useState(false)
@@ -254,284 +255,319 @@ export default function EditListingScreen() {
     setBrand(null)
   }, [sportType])
 
-  /* ---------------- LOAD LISTING ---------------- */
+ /* ---------------- LOAD LISTING ---------------- */
 
-  useEffect(() => {
-    if (id) loadListing()
-  }, [id])
+useEffect(() => {
+  if (id) loadListing()
+}, [id])
 
-  const loadListing = async () => {
+useEffect(() => {
+  const loadGuards = async () => {
+    if (!session?.user) {
+      setCheckingAddress(false)
+      setCheckingPro(false)
+      return
+    }
 
     try {
+      setCheckingAddress(true)
+      setCheckingPro(true)
 
-      setLoadingListing(true)
+      // ✅ MATCH CREATE LISTING (FIX)
+      const { data: addressData } = await supabase
+        .from("seller_return_addresses")
+        .select("id")
+        .eq("user_id", session.user.id)
+        .maybeSingle()
 
-      const { data, error } = await supabase
-        .from("listings")
-        .select("*")
-        .eq("id", id)
+      setHasReturnAddress(!!addressData)
+      setShowAddressModal(!addressData)
+
+      // ✅ PRO DATA
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("is_pro, boosts_remaining, mega_boosts_remaining")
+        .eq("id", session.user.id)
         .single()
 
-      if (error || !data) throw error
-
-      setTitle(data.title ?? "")
-      setDescription(data.description ?? "")
-      setSportType(data.sport_type ?? "billiards")
-      setBrand(data.brand ?? null)
-      setCategory(data.category ?? null)
-      setCondition(data.condition ?? null)
-
-      setPrice(data.price ? String(data.price) : "")
-      setAllowOffers(!!data.allow_offers)
-      setMinOffer(data.min_offer ? String(data.min_offer) : "")
-
-      setShippingType(data.shipping_type ?? null)
-      setShippingPrice(data.shipping_price ? String(data.shipping_price) : "")
-
-      setImages(data.image_urls ?? [])
-
-      setIsBoosted(Boolean(data.is_boosted))
-      setIsMegaBoosted(Boolean(data.is_mega_boost))
-
-      const safeLoadedQty =
-        data.quantity && data.quantity > 0 ? data.quantity : 1
-
-      setQuantity(String(safeLoadedQty))
+      setIsPro(!!profile?.is_pro)
+      setBoostsRemaining(profile?.boosts_remaining ?? 0)
+      setMegaBoostsRemaining(profile?.mega_boosts_remaining ?? 0)
 
     } catch (err) {
+      console.log("Edit guard error:", err)
 
-      handleAppError(err, {
-        fallbackMessage: "Failed to load listing.",
-      })
-
-      router.back()
-
-    } finally {
-
-      setLoadingListing(false)
-
-    }
-
-  }
-
-  /* ---------------- UPDATE LISTING ---------------- */
-
-  const handleUpdateListing = async () => {
-
-    if (!session?.user || !id || submitting) return
-
-    try {
-
-      setSubmitting(true)
-
-      const parsedPrice = parseFloat(price)
-      const parsedMinOffer = minOffer ? parseFloat(minOffer) : null
-      const parsedShippingPrice = shippingPrice ? parseFloat(shippingPrice) : 0
-
-      const rawQty = parseInt(quantity, 10)
-      const safeQuantity = isPro
-        ? Math.max(1, Number.isFinite(rawQty) ? rawQty : 1)
-        : 1
-
-      if (isNaN(parsedPrice)) {
-        Alert.alert("Invalid Price", "Please enter a valid price.")
-        return
-      }
-
-      const uploadedImageUrls: string[] = []
-
-      for (const uri of images) {
-
-        if (uri.startsWith("http")) {
-          uploadedImageUrls.push(uri)
-          continue
-        }
-
-        const response = await fetch(uri)
-        const arrayBuffer = await response.arrayBuffer()
-
-        const fileExtMatch = uri.match(/\.(\w+)$/)
-        const fileExt = fileExtMatch ? fileExtMatch[1] : "jpg"
-
-        const fileName = `${session.user.id}/${Date.now()}-${Math.random()
-          .toString(36)
-          .substring(2, 9)}.${fileExt}`
-
-        const { error: uploadError } = await supabase.storage
-          .from("listing-images")
-          .upload(fileName, arrayBuffer, {
-            contentType: `image/${fileExt}`,
-            upsert: false,
-          })
-
-        if (uploadError) throw uploadError
-
-        const { data } = supabase.storage
-          .from("listing-images")
-          .getPublicUrl(fileName)
-
-        uploadedImageUrls.push(data.publicUrl)
-
-      }
-
-      const updatePayload: any = {
-        title: title.trim(),
-        description: description.trim() || null,
-        sport_type: sportType,
-        brand,
-        category,
-        condition,
-        price: parsedPrice,
-        allow_offers: allowOffers,
-        min_offer: allowOffers ? parsedMinOffer : null,
-        shipping_type: shippingType,
-        shipping_price: parsedShippingPrice,
-        image_urls: uploadedImageUrls,
-        quantity: safeQuantity,
-        quantity_available: safeQuantity,
-      }
-
-      const { error } = await supabase
-        .from("listings")
-        .update(updatePayload)
-        .eq("id", id)
-
-      if (error) throw error
-
-      Alert.alert("Success", "Listing updated successfully!")
-
-      router.back()
-
-    } catch (err) {
-
-      handleAppError(err, {
-        context: "update_listing",
-        fallbackMessage: "Failed to update listing.",
-      })
+      // fallback (prevents blank screen)
+      setHasReturnAddress(false)
+      setShowAddressModal(true)
+      setIsPro(false)
+      setBoostsRemaining(0)
+      setMegaBoostsRemaining(0)
 
     } finally {
+      setCheckingAddress(false)
+      setCheckingPro(false)
+    }
+  }
 
-      setSubmitting(false)
+  loadGuards()
+}, [session?.user?.id])
 
+const loadListing = async () => {
+  try {
+    setLoadingListing(true)
+
+    const { data, error } = await supabase
+      .from("listings")
+      .select("*")
+      .eq("id", id)
+      .single()
+
+    if (error || !data) throw error
+
+    setTitle(data.title ?? "")
+    setDescription(data.description ?? "")
+    setSportType(data.sport_type ?? "billiards")
+    setBrand(data.brand ?? null)
+    setCategory(data.category ?? null)
+    setCondition(data.condition ?? null)
+
+    setPrice(data.price ? String(data.price) : "")
+    setAllowOffers(!!data.allow_offers)
+    setMinOffer(data.min_offer ? String(data.min_offer) : "")
+
+    setShippingType(data.shipping_type ?? null)
+    setShippingPrice(data.shipping_price ? String(data.shipping_price) : "")
+
+    setImages(data.image_urls ?? [])
+
+    setIsBoosted(Boolean(data.is_boosted))
+    setIsMegaBoosted(Boolean(data.is_mega_boost))
+
+    const safeLoadedQty =
+      data.quantity && data.quantity > 0 ? data.quantity : 1
+
+    setQuantity(String(safeLoadedQty))
+
+  } catch (err) {
+    handleAppError(err, {
+      fallbackMessage: "Failed to load listing.",
+    })
+
+    router.back()
+
+  } finally {
+    setLoadingListing(false)
+  }
+}
+
+/* ---------------- UPDATE LISTING ---------------- */
+
+const handleUpdateListing = async () => {
+  if (!session?.user || !id || submitting) return
+
+  try {
+    setSubmitting(true)
+
+    const parsedPrice = parseFloat(price)
+    const parsedMinOffer = minOffer ? parseFloat(minOffer) : null
+    const parsedShippingPrice = shippingPrice ? parseFloat(shippingPrice) : 0
+
+    const rawQty = parseInt(quantity, 10)
+    const safeQuantity = isPro
+      ? Math.max(1, Number.isFinite(rawQty) ? rawQty : 1)
+      : 1
+
+    if (isNaN(parsedPrice)) {
+      Alert.alert("Invalid Price", "Please enter a valid price.")
+      return
     }
 
+    const uploadedImageUrls: string[] = []
+
+    for (const uri of images) {
+      if (uri.startsWith("http")) {
+        uploadedImageUrls.push(uri)
+        continue
+      }
+
+      const response = await fetch(uri)
+      const arrayBuffer = await response.arrayBuffer()
+
+      const fileExtMatch = uri.match(/\.(\w+)$/)
+      const fileExt = fileExtMatch ? fileExtMatch[1] : "jpg"
+
+      const fileName = `${session.user.id}/${Date.now()}-${Math.random()
+        .toString(36)
+        .substring(2, 9)}.${fileExt}`
+
+      const { error: uploadError } = await supabase.storage
+        .from("listing-images")
+        .upload(fileName, arrayBuffer, {
+          contentType: `image/${fileExt}`,
+          upsert: false,
+        })
+
+      if (uploadError) throw uploadError
+
+      const { data } = supabase.storage
+        .from("listing-images")
+        .getPublicUrl(fileName)
+
+      uploadedImageUrls.push(data.publicUrl)
+    }
+
+    const updatePayload: any = {
+      title: title.trim(),
+      description: description.trim() || null,
+      sport_type: sportType,
+      brand,
+      category,
+      condition,
+      price: parsedPrice,
+      allow_offers: allowOffers,
+      min_offer: allowOffers ? parsedMinOffer : null,
+      shipping_type: shippingType,
+      shipping_price: parsedShippingPrice,
+      image_urls: uploadedImageUrls,
+      quantity: safeQuantity,
+      quantity_available: safeQuantity,
+    }
+
+    const { error } = await supabase
+      .from("listings")
+      .update(updatePayload)
+      .eq("id", id)
+
+    if (error) throw error
+
+    Alert.alert("Success", "Listing updated successfully!")
+    router.back()
+
+  } catch (err) {
+    handleAppError(err, {
+      context: "update_listing",
+      fallbackMessage: "Failed to update listing.",
+    })
+
+  } finally {
+    setSubmitting(false)
   }
+}
 
-  /* ---------------- LOADING ---------------- */
+/* ---------------- LOADING ---------------- */
 
-  if (checkingAddress || loadingListing) {
-    return (
-      <View style={styles.screen}>
-        <AppHeader title="Edit Listing" backRoute="/seller-hub" />
-        <View style={styles.loaderWrap}>
-          <ActivityIndicator size="large" color="#7FAF9B" />
-        </View>
-      </View>
-    )
-  }
-
-  /* ---------------- UI ---------------- */
-
+if (checkingAddress || loadingListing) {
   return (
     <View style={styles.screen}>
       <AppHeader title="Edit Listing" backRoute="/seller-hub" />
-
-      {!checkingPro && !isPro && (
-        <UpgradeToProButton
-          style={{ marginHorizontal: 16, marginTop: 12, marginBottom: 4 }}
-        />
-      )}
-
-      {hasReturnAddress && (
-        <ScrollView contentContainerStyle={styles.content}>
-          <ImageUpload images={images} setImages={setImages} max={5} />
-
-          <TitleDescriptionSection
-            title={title}
-            setTitle={setTitle}
-            description={description}
-            setDescription={setDescription}
-          />
-
-          <CategoryBrandConditionSection
-            sportType={sportType}
-            category={category}
-            brand={brand}
-            condition={condition}
-            onPressSportType={() => setShowSportModal(true)}
-            onPressCategory={() => setShowCategoryModal(true)}
-            onPressBrand={() => setShowBrandModal(true)}
-            onPressCondition={() => setShowConditionModal(true)}
-          />
-
-          <View style={styles.sectionSpacing}>
-            <ProFeaturesSection
-              isPro={isPro}
-              boostsRemaining={boostsRemaining}
-              megaBoostsRemaining={megaBoostsRemaining}
-              isBoosted={isBoosted}
-              setIsBoosted={(val: boolean) => {
-                setIsBoosted(val)
-                if (val) setIsMegaBoosted(false)
-              }}
-              isMegaBoosted={isMegaBoosted}
-              setIsMegaBoosted={(val: boolean) => {
-                setIsMegaBoosted(val)
-                if (val) setIsBoosted(false)
-              }}
-              megaBoostDescription="Take over the home page in one listing."
-              quantity={quantity}
-              setQuantity={setQuantity}
-            />
-          </View>
-
-          <View style={styles.sectionSpacing}>
-            <ShippingSection
-              shippingType={shippingType}
-              setShippingType={setShippingType}
-              shippingPrice={shippingPrice}
-              setShippingPrice={setShippingPrice}
-            />
-          </View>
-
-          <View style={styles.sectionSpacing}>
-            <PriceOffersSection
-              price={price}
-              setPrice={setPrice}
-              allowOffers={allowOffers}
-              setAllowOffers={setAllowOffers}
-              minOffer={minOffer}
-              setMinOffer={setMinOffer}
-            />
-          </View>
-
-          <View style={styles.sectionSpacing}>
-            <CreateListingFooter
-              submitting={submitting}
-              onSubmit={handleUpdateListing}
-              label="Update Listing"
-              disabled={
-                submitting ||
-                !title ||
-                !sportType ||
-                !category ||
-                !condition ||
-                !price ||
-                images.length === 0 ||
-                (allowOffers && !minOffer) ||
-                !shippingType
-              }
-            />
-          </View>
-        </ScrollView>
-      )}
-
-      <ReturnAddressRequiredModal
-        visible={showAddressModal}
-        onClose={() => setShowAddressModal(false)}
-      />
+      <View style={styles.loaderWrap}>
+        <ActivityIndicator size="large" color="#7FAF9B" />
+      </View>
     </View>
   )
+}
+
+/* ---------------- UI ---------------- */
+
+return (
+  <View style={styles.screen}>
+    <AppHeader title="Edit Listing" backRoute="/seller-hub" />
+
+    {!checkingPro && !isPro && (
+      <UpgradeToProButton
+        style={{ marginHorizontal: 16, marginTop: 12, marginBottom: 4 }}
+      />
+    )}
+
+    <ScrollView contentContainerStyle={styles.content}>
+      <ImageUpload images={images} setImages={setImages} max={5} />
+
+      <TitleDescriptionSection
+        title={title}
+        setTitle={setTitle}
+        description={description}
+        setDescription={setDescription}
+      />
+
+      <CategoryBrandConditionSection
+        sportType={sportType}
+        category={category}
+        brand={brand}
+        condition={condition}
+        onPressSportType={() => setShowSportModal(true)}
+        onPressCategory={() => setShowCategoryModal(true)}
+        onPressBrand={() => setShowBrandModal(true)}
+        onPressCondition={() => setShowConditionModal(true)}
+      />
+
+      <View style={styles.sectionSpacing}>
+        <ProFeaturesSection
+          isPro={isPro}
+          boostsRemaining={boostsRemaining}
+          megaBoostsRemaining={megaBoostsRemaining}
+          isBoosted={isBoosted}
+          setIsBoosted={(val: boolean) => {
+            setIsBoosted(val)
+            if (val) setIsMegaBoosted(false)
+          }}
+          isMegaBoosted={isMegaBoosted}
+          setIsMegaBoosted={(val: boolean) => {
+            setIsMegaBoosted(val)
+            if (val) setIsBoosted(false)
+          }}
+          megaBoostDescription="Take over the home page in one listing."
+          quantity={quantity}
+          setQuantity={setQuantity}
+        />
+      </View>
+
+      <View style={styles.sectionSpacing}>
+        <ShippingSection
+          shippingType={shippingType}
+          setShippingType={setShippingType}
+          shippingPrice={shippingPrice}
+          setShippingPrice={setShippingPrice}
+        />
+      </View>
+
+      <View style={styles.sectionSpacing}>
+        <PriceOffersSection
+          price={price}
+          setPrice={setPrice}
+          allowOffers={allowOffers}
+          setAllowOffers={setAllowOffers}
+          minOffer={minOffer}
+          setMinOffer={setMinOffer}
+        />
+      </View>
+
+      <View style={styles.sectionSpacing}>
+        <CreateListingFooter
+          submitting={submitting}
+          onSubmit={handleUpdateListing}
+          label="Update Listing"
+          disabled={
+            submitting ||
+            !title ||
+            !sportType ||
+            !category ||
+            !condition ||
+            !price ||
+            images.length === 0 ||
+            (allowOffers && !minOffer) ||
+            !shippingType
+          }
+        />
+      </View>
+    </ScrollView>
+
+    <ReturnAddressRequiredModal
+      visible={showAddressModal}
+      onClose={() => setShowAddressModal(false)}
+    />
+  </View>
+)
 }
 
 const styles = StyleSheet.create({

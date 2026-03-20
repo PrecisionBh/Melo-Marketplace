@@ -48,9 +48,6 @@ export default function ListingCard({
       ? listing.image_url
       : null
 
-  // DEBUG LOG
-  console.log("MELO IMAGE URI:", imageUri)
-
   return (
     <TouchableOpacity
       style={[
@@ -78,7 +75,6 @@ export default function ListingCard({
              
             }}
             onLoad={() => {
-              console.log("IMAGE LOADED:", imageUri)
             }}
           />
         ) : (
