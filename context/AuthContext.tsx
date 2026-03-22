@@ -1,4 +1,5 @@
 import { Session } from "@supabase/supabase-js"
+import Constants from "expo-constants"
 import * as Notifications from "expo-notifications"
 import React, { createContext, useContext, useEffect, useState } from "react"
 import { ActivityIndicator, StyleSheet, View } from "react-native"
@@ -30,16 +31,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return
       }
 
-      const token = await Notifications.getExpoPushTokenAsync({
-        projectId: "d3c5c61c-a428-41f5-b2cd-ce9bc35b2f3c", // ✅ CORRECT EXPO ID
-      })
+      // ✅ Get projectId dynamically (correct way for EAS)
+      const projectId =
+        Constants.expoConfig?.extra?.eas?.projectId ??
+        Constants.easConfig?.projectId
 
-      console.log("[PUSH] TOKEN:", token.data)
+      if (!projectId) {
+        console.log("[PUSH] Missing projectId")
+        return
+      }
 
-      await supabase
-        .from("profiles")
-        .update({ push_token: token.data })
-        .eq("id", userId)
+      const token = (
+        await Notifications.getExpoPushTokenAsync({ projectId })
+      ).data
+
+      console.log("[PUSH] TOKEN:", token)
+
+      // ✅ Save to Supabase
+     await supabase
+  .from("profiles")
+  .update({ expo_push_token: token })
+  .eq("id", userId)
 
     } catch (err: any) {
       console.log("[PUSH] Registration error:", err?.message ?? err)

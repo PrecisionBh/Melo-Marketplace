@@ -87,28 +87,21 @@ serve(async (req) => {
       .single()
 
     if (orderError || !order) {
-      console.error("❌ Order not found:", orderError)
       return json(404, { error: "Order not found" })
     }
 
-    // 🔒 ONLY SELLER CAN CONFIRM RETURN RECEIPT
     if (order.seller_id !== user.id) {
       return json(403, {
         error: "Only the seller can confirm return receipt",
       })
     }
 
-    /* ---------------- BUSINESS RULES (RETURN FLOW) ---------------- */
-
-    // ✅ UPDATED: Active return state is now "return_started"
-    // ❄️ "return_processing" is reserved for disputed/paused returns
     if (order.status !== "return_started") {
       return json(400, {
         error: "Order is not in return started state",
       })
     }
 
-    // Prevent double refunds
     if (order.escrow_status === "refunded") {
       return json(400, { error: "Order already refunded" })
     }
@@ -119,7 +112,6 @@ serve(async (req) => {
       })
     }
 
-    // Buyer must have shipped return
     if (!order.return_tracking_number) {
       return json(400, {
         error: "Return tracking has not been submitted by the buyer",
@@ -132,7 +124,6 @@ serve(async (req) => {
       })
     }
 
-    // Prevent duplicate seller confirmations
     if (order.return_received === true) {
       return json(400, {
         error: "Return already marked as received",
@@ -145,144 +136,88 @@ serve(async (req) => {
       })
     }
 
-    /* ---------------- CALCULATE REFUND (ITEM + SHIPPING + TAX ONLY) ---------------- */
-    console.log("💸 Creating RETURN refund:", {
-      order_id: order.id,
-      item_price_cents: order.item_price_cents,
-      shipping_amount_cents: order.shipping_amount_cents,
-      tax_cents: order.tax_cents,
-      buyer_fee_cents: order.buyer_fee_cents,
-    })
-
     const refundableAmount =
       (order.item_price_cents ?? 0) +
       (order.shipping_amount_cents ?? 0) +
-      (order.tax_cents ?? 0) // refund tax, exclude buyer fee
+      (order.tax_cents ?? 0)
 
-    if (refundableAmount <= 0) {
-      return json(400, { error: "Invalid refundable amount" })
-    }
-
-    /* ---------------- STRIPE REFUND ---------------- */
     const refund = await stripe.refunds.create({
       payment_intent: order.stripe_payment_intent,
       amount: refundableAmount,
     })
 
     if (!refund || refund.status !== "succeeded") {
-      console.error("❌ Return refund failed:", refund)
       return json(500, { error: "Refund failed" })
     }
 
     const now = new Date().toISOString()
 
-    /* ---------------- REVERSE SELLER PENDING WALLET (IF PRE-CREDITED) ---------------- */
     if (order.wallet_credited && typeof order.seller_net_cents === "number") {
-      console.log("↩️ Reversing seller pending wallet (return):", {
-        seller_id: order.seller_id,
-        amount: order.seller_net_cents,
+      await supabase.rpc("increment_wallet_pending", {
+        p_user_id: order.seller_id,
+        p_amount_cents: -order.seller_net_cents,
       })
-
-      const { error: walletErr } = await supabase.rpc(
-        "increment_wallet_pending",
-        {
-          p_user_id: order.seller_id,
-          p_amount_cents: -order.seller_net_cents,
-        }
-      )
-
-      if (walletErr) {
-        console.error("❌ Wallet reversal failed:", walletErr)
-        return json(500, { error: "Wallet reversal failed" })
-      }
     }
 
-    /* ---------------- UPDATE ORDER (AUDIT-CORRECT RETURN STATE) ---------------- */
-    const { error: updateErr } = await supabase
+    await supabase
       .from("orders")
       .update({
-        status: "returned", // 🔥 AUDIT-CORRECT (NOT cancelled)
+        status: "returned",
         escrow_status: "refunded",
         return_received: true,
-        wallet_credited: false, // prevents future double reversals
+        wallet_credited: false,
         updated_at: now,
       })
       .eq("id", order.id)
 
-    if (updateErr) {
-      console.error("❌ Return refund update failed:", updateErr)
-      return json(500, { error: "Failed to update order" })
-    }
-
-    /* ---------------- NOTIFY BUYER ---------------- */
+    /* ---------------- NOTIFICATIONS (NEW SYSTEM) ---------------- */
     try {
-      if (order.buyer_id) {
-        await supabase.from("notifications").insert({
-          user_id: order.buyer_id,
+      await fetch(`${SUPABASE_URL}/functions/v1/send-notification`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        },
+        body: JSON.stringify({
+          userId: order.buyer_id,
           type: "order",
           title: "Return Approved & Refunded 💸",
           body:
-            "The seller has received your returned item and your refund has been issued. Funds may take a few business days to appear.",
+            "The seller has received your returned item and your refund has been issued.",
           data: {
-            route: "/buyer-hub/orders/[id]",
-            params: { id: order.id },
+            route: `/buyer-hub/orders/${order.id}`,
           },
-        })
+          dedupeKey: `return-refund-buyer-${order.id}`,
+        }),
+      })
 
-        const { data: buyerProfile } = await supabase
-          .from("profiles")
-          .select("expo_push_token, notifications_enabled")
-          .eq("id", order.buyer_id)
-          .single()
-
-        if (
-          buyerProfile?.expo_push_token &&
-          buyerProfile.notifications_enabled !== false
-        ) {
-          await fetch("https://exp.host/--/api/v2/push/send", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              to: buyerProfile.expo_push_token,
-              title: "Refund Issued 💸",
-              body:
-                "Your return was approved and your refund has been issued.",
-              data: {
-                type: "order",
-                route: "/buyer-hub/orders/[id]",
-                params: { id: order.id },
-              },
-            }),
-          })
-        }
-      }
-
-      /* ---------------- NOTIFY SELLER ---------------- */
-      if (order.seller_id) {
-        await supabase.from("notifications").insert({
-          user_id: order.seller_id,
+      await fetch(`${SUPABASE_URL}/functions/v1/send-notification`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        },
+        body: JSON.stringify({
+          userId: order.seller_id,
           type: "order",
-          title: "Return Completed & Refunded ✅",
+          title: "Return Completed & Refunded",
           body:
-            "You confirmed the returned item. The buyer has been refunded and the case is closed.",
+            "You confirmed the return and the buyer has been refunded.",
           data: {
-            route: "/seller-hub/orders/[id]",
-            params: { id: order.id },
+            route: `/seller-hub/orders/${order.id}`,
           },
-        })
-      }
-    } catch (notifyErr) {
-      console.warn("[notify return_refund] failed:", notifyErr)
+          dedupeKey: `return-refund-seller-${order.id}`,
+        }),
+      })
+    } catch (err) {
+      console.log("⚠️ Return refund notification failed:", err)
     }
-
-    console.log("✅ Return refund + wallet reversal + audit update complete")
 
     return json(200, {
       success: true,
       refundId: refund.id,
     })
   } catch (err) {
-    console.error("🔥 return-order-refund error:", err)
     return json(500, { error: "Internal error" })
   }
 })

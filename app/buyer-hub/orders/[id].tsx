@@ -1,4 +1,3 @@
-import { notify } from "@/lib/notifications/notify"
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router"
 import { useCallback, useEffect, useRef, useState } from "react"
 import {
@@ -224,7 +223,9 @@ export default function BuyerOrderDetailScreen() {
     setConfirmVisible(false)
     setProcessing(false)
 
-    await notify({
+    try {
+  await supabase.functions.invoke("send-notification", {
+    body: {
       userId: order.seller_id,
       type: "order",
       title: "Order completed",
@@ -233,7 +234,12 @@ export default function BuyerOrderDetailScreen() {
         route: "/seller-hub/orders/[id]",
         params: { id: order.id },
       },
-    })
+      dedupeKey: `order-completed-${order.id}`, // 🔥 unique event key
+    },
+  })
+} catch (err) {
+  console.log("⚠️ order completed notification failed (non-blocking):", err)
+}
 
     router.replace("/buyer-hub/orders/completed")
   }

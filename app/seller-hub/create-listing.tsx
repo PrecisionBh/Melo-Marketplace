@@ -152,6 +152,51 @@ const SPORT_BRAND_MAP: Record<string, SelectorOption[]> = {
     { label: "Rawlings", value: "rawlings" },
     { label: "Louisville Slugger", value: "louisville_slugger" },
     { label: "Wilson", value: "wilson" },
+    { label: "Marucci", value: "marucci" },
+    { label: "DeMarini", value: "demarini" },
+    { label: "Other", value: "other" },
+  ],
+
+  basketball: [
+    { label: "Nike", value: "nike" },
+    { label: "Adidas", value: "adidas" },
+    { label: "Jordan", value: "jordan" },
+    { label: "Under Armour", value: "under_armour" },
+    { label: "Wilson", value: "wilson" },
+    { label: "Spalding", value: "spalding" },
+    { label: "Molten", value: "molten" },
+    { label: "Other", value: "other" },
+  ],
+
+  football: [
+    { label: "Nike", value: "nike" },
+    { label: "Adidas", value: "adidas" },
+    { label: "Under Armour", value: "under_armour" },
+    { label: "Riddell", value: "riddell" },
+    { label: "Schutt", value: "schutt" },
+    { label: "Wilson", value: "wilson" },
+    { label: "Xenith", value: "xenith" },
+    { label: "Other", value: "other" },
+  ],
+
+  soccer: [
+    { label: "Nike", value: "nike" },
+    { label: "Adidas", value: "adidas" },
+    { label: "Puma", value: "puma" },
+    { label: "Umbro", value: "umbro" },
+    { label: "New Balance", value: "new_balance" },
+    { label: "Mizuno", value: "mizuno" },
+    { label: "Other", value: "other" },
+  ],
+
+  fitness: [
+    { label: "Bowflex", value: "bowflex" },
+    { label: "NordicTrack", value: "nordictrack" },
+    { label: "Peloton", value: "peloton" },
+    { label: "Rogue Fitness", value: "rogue" },
+    { label: "Titan Fitness", value: "titan_fitness" },
+    { label: "CAP Barbell", value: "cap_barbell" },
+    { label: "Life Fitness", value: "life_fitness" },
     { label: "Other", value: "other" },
   ],
 
@@ -176,6 +221,7 @@ const SPORT_BRAND_MAP: Record<string, SelectorOption[]> = {
     { label: "Discraft", value: "discraft" },
     { label: "Dynamic Discs", value: "dynamic_discs" },
     { label: "MVP", value: "mvp" },
+    { label: "Latitude 64", value: "latitude_64" },
     { label: "Other", value: "other" },
   ],
 
@@ -184,11 +230,12 @@ const SPORT_BRAND_MAP: Record<string, SelectorOption[]> = {
     { label: "Brunswick", value: "brunswick" },
     { label: "Hammer", value: "hammer" },
     { label: "Ebonite", value: "ebonite" },
+    { label: "Motiv", value: "motiv" },
     { label: "Other", value: "other" },
   ],
 }
 
-/* ---------------- CONDITIONS ---------------- */
+//conditions//
 
 const CONDITIONS: SelectorOption[] = [
   { label: "New", value: "new", subtext: "Brand new, unused, and in original condition." },
@@ -274,7 +321,7 @@ const handleCreateListing = async () => {
 
       if (countError) throw countError
 
-      if ((count ?? 0) >= 5) {
+      if ((count ?? 0) >= 8) {
         setShowLimitModal(true)
         setSubmitting(false)
         return
@@ -360,10 +407,9 @@ const handleCreateListing = async () => {
 if (isPro && data?.id) {
   try {
     if (isMegaBoosted) {
-      const { error: megaError } = await supabase.rpc("boost_listing", {
+      const { error: megaError } = await supabase.rpc("mega_boost_listing", {
         listing_id: data.id,
         user_id: session.user.id,
-        boost_type: "mega",
       })
 
       if (megaError) {
@@ -373,7 +419,6 @@ if (isPro && data?.id) {
       const { error: boostError } = await supabase.rpc("boost_listing", {
         listing_id: data.id,
         user_id: session.user.id,
-        boost_type: "regular",
       })
 
       if (boostError) {

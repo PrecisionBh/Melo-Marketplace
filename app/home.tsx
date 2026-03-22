@@ -17,7 +17,6 @@ import SearchBar from "../components/home/SearchBar"
 import { Listing } from "../components/home/ListingCard"
 import SportFilterBar, { SportKey } from "../components/home/SportFilterBar"
 import { handleAppError } from "../lib/errors/appError"
-import { registerForPushNotifications } from "../lib/notifications"
 import { SPORT_CATEGORY_MAP } from "../lib/sportCategories"
 import { supabase } from "../lib/supabase"
 
@@ -81,22 +80,27 @@ export default function HomeScreen() {
 
   /* ---------------- CATEGORY OPTIONS BY SPORT ---------------- */
 
-  const categoryOptions = useMemo(() => {
-    if (activeSport === "all") {
-      return [
-        { key: "all", label: "All" },
-        { key: "cue", label: "Cue" },
-        { key: "case", label: "Case" },
-        { key: "shaft", label: "Shaft" },
-        { key: "apparel", label: "Apparel" },
-        { key: "accessories", label: "Accessories" },
-        { key: "collectibles", label: "Collectibles" },
-        { key: "other", label: "Other" },
-      ]
-    }
+  const categoryOptions = useMemo<{
+  key: FilterKey
+  label: string
+}[]>(() => {
+  if (activeSport === "all") {
+    return [
+      { key: "all", label: "All" },
+      { key: "cue", label: "Cue" },
+      { key: "case", label: "Case" },
+      { key: "shaft", label: "Shaft" },
+      { key: "apparel", label: "Apparel" },
+      { key: "accessories", label: "Accessories" },
+      { key: "collectibles", label: "Collectibles" },
+      { key: "other", label: "Other" },
+    ]
+  }
 
-    return SPORT_CATEGORY_MAP[activeSport] ?? [{ key: "all", label: "All" }]
-  }, [activeSport])
+  return SPORT_CATEGORY_MAP[activeSport] ?? [
+    { key: "all", label: "All" },
+  ]
+}, [activeSport])
 
   /* ---------------- RESET CATEGORY WHEN SPORT CHANGES ---------------- */
 
@@ -105,15 +109,6 @@ export default function HomeScreen() {
   }, [activeSport])
 
   /* ---------------- LOAD DATA ---------------- */
-
-  useEffect(() => {
-    registerForPushNotifications().catch((err) => {
-      handleAppError(err, {
-        context: "push_register",
-        fallbackMessage: "Failed to register for push notifications.",
-      })
-    })
-  }, [])
 
   useFocusEffect(
     useCallback(() => {
@@ -299,7 +294,7 @@ export default function HomeScreen() {
     setRefreshing(false)
   }
 
-  const checkUnreadMessages = async () => {
+const checkUnreadMessages = async () => {
   try {
     const {
       data: { user },
@@ -310,22 +305,24 @@ export default function HomeScreen() {
       return
     }
 
-    const { count, error } = await supabase
+    const { data, error } = await supabase
       .from("messages")
-      .select("id", { count: "exact", head: true })
-      .eq("receiver_id", user.id)
-      .or("is_read.eq.false,read_at.is.null")
+      .select("id")
+      .neq("sender_id", user.id) // 🔥 not your messages
+      .is("read_at", null)       // 🔥 unread
+      .limit(1)
 
     if (error) throw error
 
-    setHasUnreadMessages((count ?? 0) > 0)
+    setHasUnreadMessages((data ?? []).length > 0)
   } catch (err) {
     handleAppError(err, {
       context: "check_unread_messages",
     })
     setHasUnreadMessages(false)
   }
-}
+}  
+
 
   const checkUnreadNotifications = async () => {
   try {

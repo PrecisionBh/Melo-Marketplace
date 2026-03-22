@@ -1,4 +1,3 @@
-import { notify } from "@/lib/notifications/notify"
 import { Ionicons } from "@expo/vector-icons"
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { useEffect, useMemo, useRef, useState } from "react"
@@ -204,21 +203,24 @@ const submitOffer = async () => {
       throw error
     }
 
-    /* ✅ NOTIFY AFTER SUCCESS (non-blocking safe) */
-    try {
-      await notify({
-        userId: listing.user_id,
-        type: "offer",
-        title: "New offer received",
-        body: `You received a new offer on "${listing.title}" (Qty: ${quantity})`,
-        data: {
-          route: "/seller-hub/offers/[id]",
-          params: { id: newOffer.id },
-        },
-      })
-    } catch (notifyErr) {
-      console.warn("Notify failed:", notifyErr)
-    }
+   /* ✅ NOTIFY AFTER SUCCESS (non-blocking safe) */
+try {
+  await supabase.functions.invoke("send-notification", {
+    body: {
+      userId: listing.user_id,
+      type: "offer",
+      title: "New offer received",
+      body: `You received a new offer on "${listing.title}" (Qty: ${quantity})`,
+      data: {
+        route: "/seller-hub/offers/[id]",
+        params: { id: newOffer.id },
+      },
+      dedupeKey: `offer-${newOffer.id}`, // 🔥 CRITICAL
+    },
+  })
+} catch (err) {
+  console.log("⚠️ offer notification failed (non-blocking):", err)
+}
 
     Alert.alert(
       "Offer Sent",

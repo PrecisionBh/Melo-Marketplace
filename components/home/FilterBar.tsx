@@ -20,7 +20,7 @@ export type FilterKey =
   | "collectibles"
   | "other"
 
-type FilterOption = {
+export type FilterOption = {
   key: FilterKey
   label: string
 }

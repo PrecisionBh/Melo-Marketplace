@@ -15,7 +15,6 @@ import {
 
 import AppHeader from "@/components/app-header"
 import { useAuth } from "@/context/AuthContext"
-import { notify } from "@/lib/notifications/notify"
 import { supabase } from "@/lib/supabase"
 
 /* ---------------- TYPES ---------------- */
@@ -179,23 +178,26 @@ export default function ReturnInitiateScreen() {
       if (updateError) throw updateError
 
       try {
-        await notify({
-          userId: order.seller_id,
-          type: "order",
-          title: "Return Initiated",
-          body:
-            "The buyer has initiated a return. Please await the return shipment.",
-          data: {
-            route: "/seller-hub/orders/[id]",
-            params: { id: order.id },
-          },
-        })
-      } catch (notifyErr) {
-        console.warn(
-          "Return notification failed (non-blocking):",
-          notifyErr
-        )
-      }
+  await supabase.functions.invoke("send-notification", {
+    body: {
+      userId: order.seller_id,
+      type: "order",
+      title: "Return Initiated",
+      body:
+        "The buyer has initiated a return. Please await the return shipment.",
+      data: {
+        route: "/seller-hub/orders/[id]",
+        params: { id: order.id },
+      },
+      dedupeKey: `order-return-initiated-${order.id}`, // 🔥 unique event
+    },
+  })
+} catch (notifyErr) {
+  console.warn(
+    "Return notification failed (non-blocking):",
+    notifyErr
+  )
+}
 
       const redirectId = order.id
 

@@ -16,7 +16,6 @@ import {
 import AppHeader from "@/components/app-header"
 import { useAuth } from "@/context/AuthContext"
 import { handleAppError } from "@/lib/errors/appError"
-import { notify } from "@/lib/notifications/notify"
 import { supabase } from "@/lib/supabase"
 
 type Dispute = {
@@ -222,20 +221,23 @@ export default function SellerDisputeIssue() {
       if (error) throw error
 
       try {
-        await notify({
-          userId: dispute.buyer_id,
-          type: "order",
-          title: "Seller Responded to Dispute",
-          body:
-            "The seller has submitted their response and evidence. The dispute is now under review.",
-          data: {
-            route: "/buyer-hub/orders/disputes/[id]",
-            params: { id: dispute.id },
-          },
-        })
-      } catch (notifyErr) {
-        console.warn("Notification failed:", notifyErr)
-      }
+  await supabase.functions.invoke("send-notification", {
+    body: {
+      userId: dispute.buyer_id,
+      type: "dispute",
+      title: "Seller Responded to Dispute",
+      body:
+        "The seller has submitted their response and evidence. The dispute is now under review.",
+      data: {
+        route: "/buyer-hub/orders/disputes/[id]",
+        params: { id: dispute.id },
+      },
+      dedupeKey: `dispute-response-${dispute.id}`, // 🔥 unique event
+    },
+  })
+} catch (notifyErr) {
+  console.warn("Notification failed:", notifyErr)
+}
 
       Alert.alert(
         "Response submitted",

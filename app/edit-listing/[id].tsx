@@ -118,15 +118,18 @@ const SPORT_CATEGORY_MAP: Record<string, SelectorOption[]> = {
 /* ---------------- SPORT → BRAND MAP ---------------- */
 
 const SPORT_BRAND_MAP: Record<string, SelectorOption[]> = {
+
   billiards: [
     { label: "Precision", value: "precision" },
     { label: "Predator", value: "predator" },
     { label: "Cuetec", value: "cuetec" },
     { label: "McDermott", value: "mcdermott" },
     { label: "Meucci", value: "meucci" },
+    { label: "Pechauer", value: "pechauer" },
     { label: "Jacoby", value: "jacoby" },
-    { label: "Schon", value: "schon" },
+    { label: "Lucasi", value: "lucasi" },
     { label: "Mezz", value: "mezz" },
+    { label: "Schon", value: "schon" },
     { label: "Viking", value: "viking" },
     { label: "Other", value: "other" },
   ],
@@ -145,6 +148,51 @@ const SPORT_BRAND_MAP: Record<string, SelectorOption[]> = {
     { label: "Rawlings", value: "rawlings" },
     { label: "Louisville Slugger", value: "louisville_slugger" },
     { label: "Wilson", value: "wilson" },
+    { label: "Marucci", value: "marucci" },
+    { label: "DeMarini", value: "demarini" },
+    { label: "Other", value: "other" },
+  ],
+
+  basketball: [
+    { label: "Nike", value: "nike" },
+    { label: "Adidas", value: "adidas" },
+    { label: "Jordan", value: "jordan" },
+    { label: "Under Armour", value: "under_armour" },
+    { label: "Wilson", value: "wilson" },
+    { label: "Spalding", value: "spalding" },
+    { label: "Molten", value: "molten" },
+    { label: "Other", value: "other" },
+  ],
+
+  football: [
+    { label: "Nike", value: "nike" },
+    { label: "Adidas", value: "adidas" },
+    { label: "Under Armour", value: "under_armour" },
+    { label: "Riddell", value: "riddell" },
+    { label: "Schutt", value: "schutt" },
+    { label: "Wilson", value: "wilson" },
+    { label: "Xenith", value: "xenith" },
+    { label: "Other", value: "other" },
+  ],
+
+  soccer: [
+    { label: "Nike", value: "nike" },
+    { label: "Adidas", value: "adidas" },
+    { label: "Puma", value: "puma" },
+    { label: "Umbro", value: "umbro" },
+    { label: "New Balance", value: "new_balance" },
+    { label: "Mizuno", value: "mizuno" },
+    { label: "Other", value: "other" },
+  ],
+
+  fitness: [
+    { label: "Bowflex", value: "bowflex" },
+    { label: "NordicTrack", value: "nordictrack" },
+    { label: "Peloton", value: "peloton" },
+    { label: "Rogue Fitness", value: "rogue" },
+    { label: "Titan Fitness", value: "titan_fitness" },
+    { label: "CAP Barbell", value: "cap_barbell" },
+    { label: "Life Fitness", value: "life_fitness" },
     { label: "Other", value: "other" },
   ],
 
@@ -169,6 +217,7 @@ const SPORT_BRAND_MAP: Record<string, SelectorOption[]> = {
     { label: "Discraft", value: "discraft" },
     { label: "Dynamic Discs", value: "dynamic_discs" },
     { label: "MVP", value: "mvp" },
+    { label: "Latitude 64", value: "latitude_64" },
     { label: "Other", value: "other" },
   ],
 
@@ -177,6 +226,7 @@ const SPORT_BRAND_MAP: Record<string, SelectorOption[]> = {
     { label: "Brunswick", value: "brunswick" },
     { label: "Hammer", value: "hammer" },
     { label: "Ebonite", value: "ebonite" },
+    { label: "Motiv", value: "motiv" },
     { label: "Other", value: "other" },
   ],
 }
@@ -418,21 +468,24 @@ const handleUpdateListing = async () => {
     }
 
     const updatePayload: any = {
-      title: title.trim(),
-      description: description.trim() || null,
-      sport_type: sportType,
-      brand,
-      category,
-      condition,
-      price: parsedPrice,
-      allow_offers: allowOffers,
-      min_offer: allowOffers ? parsedMinOffer : null,
-      shipping_type: shippingType,
-      shipping_price: parsedShippingPrice,
-      image_urls: uploadedImageUrls,
-      quantity: safeQuantity,
-      quantity_available: safeQuantity,
-    }
+  title: title.trim(),
+  description: description.trim() || null,
+  sport_type: sportType,
+  brand,
+  category,
+  condition,
+  price: parsedPrice,
+  allow_offers: allowOffers,
+  min_offer: allowOffers ? parsedMinOffer : null,
+  shipping_type: shippingType,
+  shipping_price: parsedShippingPrice,
+  image_urls: uploadedImageUrls,
+  quantity: safeQuantity,
+  quantity_available: safeQuantity,
+
+  // 🔥 LOCK BOOST IF EDITED
+  boost_locked: isBoosted || isMegaBoosted ? false : true,
+}
 
     const { error } = await supabase
       .from("listings")

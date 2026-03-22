@@ -9,9 +9,12 @@ const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY")!, {
   apiVersion: "2023-10-16",
 })
 
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+
 const supabase = createClient(
-  Deno.env.get("SUPABASE_URL")!,
-  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+  SUPABASE_URL,
+  SUPABASE_SERVICE_ROLE_KEY
 )
 
 Deno.serve(async (req) => {
@@ -29,10 +32,6 @@ Deno.serve(async (req) => {
 
   console.log("➡️ Escrow release requested", { user_id, order_id })
 
-  /* -----------------------------------------------------
-     STEP 1: Fetch order
-  ----------------------------------------------------- */
-
   const { data: order, error: orderErr } = await supabase
     .from("orders")
     .select(`
@@ -47,22 +46,14 @@ Deno.serve(async (req) => {
     .single()
 
   if (orderErr || !order) {
-    console.error("❌ Order not found", orderErr)
     return new Response("Order not found", { status: 404 })
   }
-
-  /* -----------------------------------------------------
-     STEP 2: AUTHORIZE BUYER
-  ----------------------------------------------------- */
 
   if (order.buyer_id !== user_id) {
     return new Response("Unauthorized buyer", { status: 403 })
   }
 
-  /* -------- DOUBLE PAYOUT GUARD -------- */
-
   if (order.escrow_released) {
-    console.log("⚠️ Escrow already released — preventing double payout")
     return Response.json({ success: true, already_released: true })
   }
 
@@ -73,10 +64,6 @@ Deno.serve(async (req) => {
   const seller_id = order.seller_id
   const payout_cents = order.seller_net_cents
 
-  /* -----------------------------------------------------
-     STEP 3: Lock SELLER wallet
-  ----------------------------------------------------- */
-
   const { error: lockErr } = await supabase
     .from("wallets")
     .update({ payout_locked: true })
@@ -86,10 +73,6 @@ Deno.serve(async (req) => {
   if (lockErr) {
     return new Response("Wallet is locked", { status: 409 })
   }
-
-  /* -----------------------------------------------------
-     STEP 4: Check PLATFORM Stripe balance
-  ----------------------------------------------------- */
 
   const balance = await stripe.balance.retrieve()
   const availableUSD =
@@ -104,15 +87,10 @@ Deno.serve(async (req) => {
     return new Response(
       JSON.stringify({
         error: "Stripe funds not available yet",
-        code: "STRIPE_FUNDS_PENDING",
       }),
       { status: 409 }
     )
   }
-
-  /* -----------------------------------------------------
-     STEP 5: FINALIZE ESCROW LEDGER FIRST
-  ----------------------------------------------------- */
 
   const { error: rpcErr } = await supabase.rpc(
     "release_order_escrow",
@@ -123,32 +101,21 @@ Deno.serve(async (req) => {
   )
 
   if (rpcErr) {
-    console.error("❌ Ledger finalize failed", rpcErr)
-
     await supabase
       .from("wallets")
       .update({ payout_locked: false })
       .eq("user_id", seller_id)
 
-    return new Response(
-      JSON.stringify({
-        error: "Ledger finalize failed",
-      }),
-      { status: 500 }
-    )
+    return new Response("Ledger finalize failed", { status: 500 })
   }
 
-  /* -----------------------------------------------------
-     STEP 6: Stripe transfer PLATFORM → SELLER
-  ----------------------------------------------------- */
-
-  const { data: profile, error: profileErr } = await supabase
+  const { data: profile } = await supabase
     .from("profiles")
     .select("stripe_account_id")
     .eq("id", seller_id)
     .single()
 
-  if (profileErr || !profile?.stripe_account_id) {
+  if (!profile?.stripe_account_id) {
     return new Response("Seller Stripe account missing", { status: 400 })
   }
 
@@ -156,63 +123,35 @@ Deno.serve(async (req) => {
     amount: payout_cents,
     currency: "usd",
     destination: profile.stripe_account_id,
-    metadata: {
-      order_id,
-      seller_id,
-    },
+    metadata: { order_id },
   })
-
-  /* -----------------------------------------------------
-     STEP 7: Update ledger with Stripe transfer ID
-  ----------------------------------------------------- */
 
   await supabase.rpc("release_order_escrow", {
     p_order_id: order_id,
     p_stripe_transfer_id: transfer.id,
   })
 
-  /* -----------------------------------------------------
-     NOTIFICATIONS
-  ----------------------------------------------------- */
-
+  /* ---------------- NOTIFICATIONS (NEW SYSTEM) ---------------- */
   try {
-    await supabase.from("notifications").insert({
-      user_id: seller_id,
-      type: "order",
-      title: "Funds Released 💰",
-      body: "Escrow has been released. Your funds are now available.",
-      data: {
-        route: "/seller-hub/wallet",
+    await fetch(`${SUPABASE_URL}/functions/v1/send-notification`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
       },
+      body: JSON.stringify({
+        userId: seller_id,
+        type: "order",
+        title: "Funds Released 💰",
+        body: "Escrow has been released. Your funds are now available.",
+        data: {
+          route: `/seller-hub/wallet`,
+        },
+        dedupeKey: `manual-release-seller-${order_id}`,
+      }),
     })
-
-    const { data: sellerProfile } = await supabase
-      .from("profiles")
-      .select("expo_push_token, notifications_enabled")
-      .eq("id", seller_id)
-      .single()
-
-    if (
-      sellerProfile?.expo_push_token &&
-      sellerProfile.notifications_enabled !== false
-    ) {
-      await fetch("https://exp.host/--/api/v2/push/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          to: sellerProfile.expo_push_token,
-          title: "Funds Released 💰",
-          body: "Escrow has been released. Your funds are now available.",
-          data: {
-            type: "order",
-            route: "/seller-hub/wallet",
-          },
-        }),
-      })
-    }
-
   } catch (err) {
-    console.warn("[notify escrow_released] failed:", err)
+    console.log("⚠️ Notification failed:", err)
   }
 
   return Response.json({

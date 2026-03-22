@@ -1,4 +1,3 @@
-import { notify } from "@/lib/notifications/notify"
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { useEffect, useMemo, useState } from "react"
 import {
@@ -258,7 +257,9 @@ export default function BuyerOfferDetailScreen() {
       return
     }
 
-    await notify({
+    try {
+  await supabase.functions.invoke("send-notification", {
+    body: {
       userId: offer.seller_id,
       type: "offer",
       title: "Offer accepted!",
@@ -267,7 +268,12 @@ export default function BuyerOfferDetailScreen() {
         route: "/seller-hub/offers/[id]",
         params: { id: offer.id },
       },
-    })
+      dedupeKey: `offer-accepted-${offer.id}`, // 🔥 unique event key
+    },
+  })
+} catch (err) {
+  console.log("⚠️ offer accepted notification failed (non-blocking):", err)
+}
 
     loadOffer()
   }
@@ -294,15 +300,22 @@ export default function BuyerOfferDetailScreen() {
       return
     }
 
-    await notify({
-  userId: offer.seller_id,
-  type: "offer",
-  title: "Offer declined",
-  body: "The buyer declined your offer.",
-  data: {
-    route: "/seller-hub/offers",
-  },
-})
+  try {
+  await supabase.functions.invoke("send-notification", {
+    body: {
+      userId: offer.seller_id,
+      type: "offer",
+      title: "Offer declined",
+      body: "The buyer declined your offer.",
+      data: {
+        route: "/seller-hub/offers",
+      },
+      dedupeKey: `offer-declined-${offer.id}`, // 🔥 unique per event
+    },
+  })
+} catch (err) {
+  console.log("⚠️ offer declined notification failed (non-blocking):", err)
+}
 
 /* 🔥 UPDATE LOCAL STATE IMMEDIATELY */
 setOffer((prev) =>
@@ -356,7 +369,9 @@ loadOffer()
     setShowCounter(false)
     setCounterAmount("")
 
-    await notify({
+   try {
+  await supabase.functions.invoke("send-notification", {
+    body: {
       userId: offer.seller_id,
       type: "offer",
       title: "Offer countered",
@@ -365,7 +380,12 @@ loadOffer()
         route: "/seller-hub/offers/[id]",
         params: { id: offer.id },
       },
-    })
+      dedupeKey: `offer-countered-${offer.id}`, // 🔥 unique per event
+    },
+  })
+} catch (err) {
+  console.log("⚠️ offer countered notification failed (non-blocking):", err)
+}
 
     loadOffer()
   }

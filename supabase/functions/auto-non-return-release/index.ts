@@ -14,6 +14,9 @@ const supabase = createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 )
 
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+
 const CRON_SECRET = Deno.env.get("CRON_SECRET")
 
 function subtractBusinessDays(from: Date, businessDays: number) {
@@ -66,7 +69,6 @@ Deno.serve(async (req) => {
 
     console.log(`📦 Orders to process: ${orders.length}`)
 
-    // ✅ Stripe balance ONCE
     const balance = await stripe.balance.retrieve()
     const availableUSD =
       balance.available.find((b) => b.currency === "usd")?.amount ?? 0
@@ -117,6 +119,51 @@ Deno.serve(async (req) => {
         if (rpcError) {
           console.error("❌ RPC failed:", rpcError)
           continue
+        }
+
+        /* ---------------- NOTIFICATIONS ---------------- */
+        try {
+          await fetch(`${SUPABASE_URL}/functions/v1/send-notification`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+            },
+            body: JSON.stringify({
+              userId: order.seller_id,
+              type: "order",
+              title: "Escrow Released",
+              body: "The buyer did not return the item in time. Funds have been released to you.",
+              data: {
+                route: `/seller-hub/orders/${order.id}`,
+              },
+              dedupeKey: `non-return-release-seller-${order.id}`,
+            }),
+          })
+        } catch (e) {
+          console.log("⚠️ Seller non-return notification failed:", e)
+        }
+
+        try {
+          await fetch(`${SUPABASE_URL}/functions/v1/send-notification`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+            },
+            body: JSON.stringify({
+              userId: order.buyer_id,
+              type: "order",
+              title: "Return Window Expired",
+              body: "You did not upload return tracking in time. The order has been completed and payment released.",
+              data: {
+                route: `/buyer-hub/orders/${order.id}`,
+              },
+              dedupeKey: `non-return-release-buyer-${order.id}`,
+            }),
+          })
+        } catch (e) {
+          console.log("⚠️ Buyer non-return notification failed:", e)
         }
 
         processed++

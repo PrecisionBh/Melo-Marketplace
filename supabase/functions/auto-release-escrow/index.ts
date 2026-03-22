@@ -14,10 +14,12 @@ const supabase = createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 )
 
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+
 const CRON_SECRET = Deno.env.get("CRON_SECRET")
 
 Deno.serve(async (req) => {
-  // 🔐 AUTH
   const headerSecret = req.headers.get("x-cron-secret")
 
   if (!CRON_SECRET || headerSecret !== CRON_SECRET) {
@@ -30,14 +32,13 @@ Deno.serve(async (req) => {
   const now = new Date().toISOString()
   console.log("🧪 CURRENT TIME (ISO):", now)
 
-  // 🔥 Fetch ALL eligible orders (SAFE FILTER)
   const { data: orders, error: ordersErr } = await supabase
     .from("orders")
     .select("*")
-    .eq("tracking_status", "delivered") // ✅ MUST be delivered
+    .eq("tracking_status", "delivered")
     .eq("escrow_released", false)
     .eq("is_disputed", false)
-    .is("return_requested_at", null) // ✅ BLOCK returns
+    .is("return_requested_at", null)
     .not("escrow_release_at", "is", null)
     .lte("escrow_release_at", now)
 
@@ -53,7 +54,6 @@ Deno.serve(async (req) => {
 
   console.log(`💰 Found ${orders.length} eligible orders`)
 
-  // 🔥 Get Stripe balance ONCE
   const balance = await stripe.balance.retrieve()
   const availableUSD =
     balance.available.find(b => b.currency === "usd")?.amount ?? 0
@@ -66,7 +66,6 @@ Deno.serve(async (req) => {
     try {
       console.log("💰 Processing order:", order.id)
 
-      // 🔒 Safety
       if (!order.escrow_funded_at) {
         console.warn("⚠️ Skipping — escrow not funded:", order.id)
         continue
@@ -92,7 +91,6 @@ Deno.serve(async (req) => {
 
       console.log("🏦 Sending to Stripe account:", profile.stripe_account_id)
 
-      // 💸 TRANSFER
       const transfer = await stripe.transfers.create({
         amount: order.seller_net_cents,
         currency: "usd",
@@ -104,7 +102,6 @@ Deno.serve(async (req) => {
 
       console.log("✅ Stripe transfer created:", transfer.id)
 
-      // 🧠 FINALIZE (only AFTER transfer succeeds)
       const { error: rpcError } = await supabase.rpc("release_order_escrow", {
         p_order_id: order.id,
         p_stripe_transfer_id: transfer.id,
@@ -113,6 +110,51 @@ Deno.serve(async (req) => {
       if (rpcError) {
         console.error("❌ RPC failed:", rpcError)
         continue
+      }
+
+      /* ---------------- NOTIFICATIONS ---------------- */
+      try {
+        await fetch(`${SUPABASE_URL}/functions/v1/send-notification`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+          },
+          body: JSON.stringify({
+            userId: order.seller_id,
+            type: "order",
+            title: "Escrow Released",
+            body: "Funds from your completed order have been released to your account.",
+            data: {
+              route: `/seller-hub/orders/${order.id}`,
+            },
+            dedupeKey: `auto-release-seller-${order.id}`,
+          }),
+        })
+      } catch (e) {
+        console.log("⚠️ Seller auto-release notification failed:", e)
+      }
+
+      try {
+        await fetch(`${SUPABASE_URL}/functions/v1/send-notification`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+          },
+          body: JSON.stringify({
+            userId: order.buyer_id,
+            type: "order",
+            title: "Order Completed",
+            body: "Your order has been successfully completed and payment has been released.",
+            data: {
+              route: `/buyer-hub/orders/${order.id}`,
+            },
+            dedupeKey: `auto-release-buyer-${order.id}`,
+          }),
+        })
+      } catch (e) {
+        console.log("⚠️ Buyer auto-release notification failed:", e)
       }
 
       processed++

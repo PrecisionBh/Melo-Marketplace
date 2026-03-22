@@ -7,8 +7,9 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
 } from "react-native"
+import { Swipeable } from "react-native-gesture-handler"
 
 import AppHeader from "@/components/app-header"
 import { useAuth } from "@/context/AuthContext"
@@ -35,11 +36,12 @@ export default function NotificationsScreen() {
         setLoading(true)
 
         const { data, error } = await supabase
-          .from("notifications")
-          .select("*")
-          .eq("user_id", userId)
-          .eq("cleared", false)
-          .order("created_at", { ascending: false })
+  .from("notifications")
+  .select("*")
+  .eq("user_id", userId)
+  .eq("cleared", false)
+  .eq("read", false) // ✅ ADD THIS
+  .order("created_at", { ascending: false })
 
         if (error) throw error
 
@@ -59,8 +61,18 @@ export default function NotificationsScreen() {
     loadNotifications()
   }, [userId])
 
+  /* ---------------- OPEN NOTIFICATION ---------------- */
+
   const openNotification = async (n: any) => {
     try {
+      // 🔥 Instant UI update (removes red dot immediately)
+      setNotifications((prev) =>
+        prev.map((notif) =>
+          notif.id === n.id ? { ...notif, read: true } : notif
+        )
+      )
+
+      // 🔄 Update DB
       if (!n.read) {
         const { error } = await supabase
           .from("notifications")
@@ -72,6 +84,7 @@ export default function NotificationsScreen() {
         }
       }
 
+      // 🚀 Navigate
       if (n.data?.route) {
         router.push({
           pathname: n.data.route,
@@ -86,6 +99,39 @@ export default function NotificationsScreen() {
       })
     }
   }
+
+  /* ---------------- DELETE ONE ---------------- */
+
+  const deleteNotification = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from("notifications")
+        .update({ cleared: true })
+        .eq("id", id)
+
+      if (error) throw error
+
+      setNotifications((prev) => prev.filter((n) => n.id !== id))
+    } catch (err) {
+      handleAppError(err, {
+        context: "notifications_delete",
+        fallbackMessage: "Failed to delete notification.",
+      })
+    }
+  }
+
+  /* ---------------- SWIPE ACTION ---------------- */
+
+  const renderRightActions = (id: string) => (
+    <TouchableOpacity
+      onPress={() => deleteNotification(id)}
+      style={styles.deleteButton}
+    >
+      <Text style={styles.deleteText}>Delete</Text>
+    </TouchableOpacity>
+  )
+
+  /* ---------------- CLEAR ALL ---------------- */
 
   const clearAllNotifications = async () => {
     if (!userId) return
@@ -113,11 +159,7 @@ export default function NotificationsScreen() {
 
   return (
     <View style={styles.screen}>
-      <AppHeader
-        title="Notifications"
-        backLabel="Back"
-        backRoute={undefined}
-      />
+      <AppHeader title="Notifications" backLabel="Back" backRoute={undefined} />
 
       {notifications.length > 0 && (
         <View style={styles.clearRow}>
@@ -151,24 +193,29 @@ export default function NotificationsScreen() {
       ) : (
         <ScrollView showsVerticalScrollIndicator={false}>
           {notifications.map((n) => (
-            <Pressable
+            <Swipeable
               key={n.id}
-              style={styles.notificationCard}
-              onPress={() => openNotification(n)}
+              renderRightActions={() => renderRightActions(n.id)}
+              overshootRight={false}
             >
-              {!n.read && <View style={styles.unreadDot} />}
-
-              <Text
-                style={[
-                  styles.notifTitle,
-                  !n.read && { fontWeight: "900" },
-                ]}
+              <Pressable
+                style={styles.notificationCard}
+                onPress={() => openNotification(n)}
               >
-                {n.title}
-              </Text>
+                {!n.read && <View style={styles.unreadDot} />}
 
-              <Text style={styles.notifBody}>{n.body}</Text>
-            </Pressable>
+                <Text
+                  style={[
+                    styles.notifTitle,
+                    !n.read && { fontWeight: "900" },
+                  ]}
+                >
+                  {n.title}
+                </Text>
+
+                <Text style={styles.notifBody}>{n.body}</Text>
+              </Pressable>
+            </Swipeable>
           ))}
         </ScrollView>
       )}
@@ -246,5 +293,19 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontSize: 13,
     color: "#4F6F61",
+  },
+
+  deleteButton: {
+    backgroundColor: "#FF3B30",
+    justifyContent: "center",
+    alignItems: "center",
+    width: 90,
+    marginVertical: 6,
+    borderRadius: 12,
+  },
+
+  deleteText: {
+    color: "#fff",
+    fontWeight: "800",
   },
 })

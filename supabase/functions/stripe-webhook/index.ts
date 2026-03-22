@@ -241,7 +241,7 @@ console.log("💰 Dynamic seller fee applied", {
       })
       .eq("id", resolvedListingId)
   }
-  // 🔔 Send notifications (buyer + seller)
+// 🔔 Send notifications (buyer + seller)
 try {
   console.log("🔔 Notification Debug:", {
     buyer_id: order.buyer_id,
@@ -249,16 +249,19 @@ try {
     order_id: orderId,
   })
 
-  const nowIso = now
-
   // If buyer and seller are the same (dev testing), send ONE notification
   const isSelfPurchase = order.buyer_id === order.seller_id
 
+  // ✅ BUYER
   if (order.buyer_id) {
-    const { error: notifError } = await supabase
-      .from("notifications")
-      .insert({
-        user_id: order.buyer_id,
+    await fetch(`${SUPABASE_URL}/functions/v1/send-notification`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      },
+      body: JSON.stringify({
+        userId: order.buyer_id,
         type: "order",
         title: isSelfPurchase
           ? "Test Order Paid"
@@ -267,38 +270,35 @@ try {
           ? "Your test order was processed successfully."
           : "Your order was successful and is now secured in escrow.",
         data: { route: `/buyer-hub/orders/${orderId}` },
-        read: false,
-        created_at: nowIso,
-      })
-
-    if (notifError) {
-      console.error("❌ Buyer notification failed:", notifError)
-    }
+        dedupeKey: `order-paid-buyer-${orderId}`,
+      }),
+    })
   }
 
-  // Only send seller notification if different user
+  // ✅ SELLER (only if different user)
   if (order.seller_id && order.seller_id !== order.buyer_id) {
-    const { error: sellerNotifError } = await supabase
-      .from("notifications")
-      .insert({
-        user_id: order.seller_id,
+    await fetch(`${SUPABASE_URL}/functions/v1/send-notification`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      },
+      body: JSON.stringify({
+        userId: order.seller_id,
         type: "order",
         title: "New Order Paid",
         body: "A buyer has paid. Prepare the order for shipment.",
         data: { route: `/seller-hub/orders/${orderId}` },
-        read: false,
-        created_at: nowIso,
-      })
-
-    if (sellerNotifError) {
-      console.error("❌ Seller notification failed:", sellerNotifError)
-    }
+        dedupeKey: `order-paid-seller-${orderId}`,
+      }),
+    })
   }
+
 } catch (notifErr) {
-  console.error("❌ Notification insert failed:", notifErr)
+  console.error("❌ Notification failed:", notifErr)
 }
 
-  return json(200, { received: true })
+return json(200, { received: true })
 }
 
 async function activateMeloPro(params: {

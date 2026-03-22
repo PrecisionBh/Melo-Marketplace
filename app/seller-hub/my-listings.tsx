@@ -134,12 +134,14 @@ export default function MyListingsScreen() {
   const now = new Date()
 
   const boostActive =
+    listing?.is_boosted &&
     listing?.boost_expires_at &&
     new Date(listing.boost_expires_at) > now
 
   const megaActive =
-    listing?.mega_boost_expires_at &&
-    new Date(listing.mega_boost_expires_at) > now
+    listing?.is_mega_boost &&
+    listing?.boost_expires_at &&
+    new Date(listing.boost_expires_at) > now
 
   // 🚫 BLOCK if ANY boost is active
   if (boostActive || megaActive) {
@@ -168,10 +170,9 @@ export default function MyListingsScreen() {
 
   try {
     const { error } = await supabase.rpc("boost_listing", {
-  listing_id: listingId,
-  user_id: session.user.id,
-  boost_type: "regular",
-})
+      listing_id: listingId,
+      user_id: session.user.id,
+    })
 
     if (error) throw error
 
@@ -197,12 +198,14 @@ const megaBoostListing = async (listingId: string) => {
   const now = new Date()
 
   const boostActive =
+    listing?.is_boosted &&
     listing?.boost_expires_at &&
     new Date(listing.boost_expires_at) > now
 
   const megaActive =
-    listing?.mega_boost_expires_at &&
-    new Date(listing.mega_boost_expires_at) > now
+    listing?.is_mega_boost &&
+    listing?.boost_expires_at &&
+    new Date(listing.boost_expires_at) > now
 
   if (boostActive || megaActive) {
     Alert.alert(
@@ -213,11 +216,10 @@ const megaBoostListing = async (listingId: string) => {
   }
 
   try {
-    const { error } = await supabase.rpc("boost_listing", {
-  listing_id: listingId,
-  user_id: session.user.id,
-  boost_type: "mega",
-})
+    const { error } = await supabase.rpc("mega_boost_listing", {
+      listing_id: listingId,
+      user_id: session.user.id,
+    })
 
     if (error) throw error
 

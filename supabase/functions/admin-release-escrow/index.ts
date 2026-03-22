@@ -14,6 +14,9 @@ const supabase = createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 )
 
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -136,6 +139,51 @@ Deno.serve(async (req) => {
       .eq("id", dispute.id)
 
     console.log("✅ Escrow released:", order.id)
+
+    /* ---------------- NOTIFICATIONS ---------------- */
+    try {
+      await fetch(`${SUPABASE_URL}/functions/v1/send-notification`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        },
+        body: JSON.stringify({
+          userId: order.seller_id,
+          type: "order",
+          title: "Escrow Released",
+          body: "Your dispute was resolved in your favor and funds have been released.",
+          data: {
+            route: `/seller-hub/orders/${order.id}`,
+          },
+          dedupeKey: `admin-release-seller-${order.id}`,
+        }),
+      })
+    } catch (e) {
+      console.log("⚠️ Seller release notification failed:", e)
+    }
+
+    try {
+      await fetch(`${SUPABASE_URL}/functions/v1/send-notification`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        },
+        body: JSON.stringify({
+          userId: order.buyer_id,
+          type: "order",
+          title: "Dispute Closed",
+          body: "The dispute was resolved in the seller's favor and payment has been released.",
+          data: {
+            route: `/buyer-hub/orders/${order.id}`,
+          },
+          dedupeKey: `admin-release-buyer-${order.id}`,
+        }),
+      })
+    } catch (e) {
+      console.log("⚠️ Buyer release notification failed:", e)
+    }
 
     return json(200, { success: true })
 

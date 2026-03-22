@@ -1,4 +1,3 @@
-import { notify } from "@/lib/notifications/notify"
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { useEffect, useState } from "react"
 import {
@@ -191,23 +190,26 @@ const submitReturnTracking = async () => {
 
     if (error) throw error
 
-    // 🔔 Notify seller (non-blocking)
-    try {
-      await notify({
-        userId: order.seller_id,
-        type: "order",
-        title: "Return Shipped",
-        body: "The buyer has shipped the return. Tracking is now available.",
-        data: {
-          route: "/seller-hub/orders/[id]",
-          params: { id: order.id },
-        },
-      })
-    } catch (notifyErr) {
-      handleAppError(notifyErr, {
-        fallbackMessage: "Tracking saved, but notification failed.",
-      })
-    }
+   // 🔔 Notify seller (non-blocking)
+try {
+  await supabase.functions.invoke("send-notification", {
+    body: {
+      userId: order.seller_id,
+      type: "order",
+      title: "Return Shipped",
+      body: "The buyer has shipped the return. Tracking is now available.",
+      data: {
+        route: "/seller-hub/orders/[id]",
+        params: { id: order.id },
+      },
+      dedupeKey: `order-return-shipped-${order.id}`, // 🔥 unique event
+    },
+  })
+} catch (notifyErr) {
+  handleAppError(notifyErr, {
+    fallbackMessage: "Tracking saved, but notification failed.",
+  })
+}
 
     Alert.alert(
       "Return Tracking Submitted",

@@ -6,6 +6,10 @@ export type SportKey =
   | "darts"
   | "disc_golf"
   | "bowling"
+  | "basketball"
+  | "football"
+  | "soccer"
+  | "fitness"
 
 export type CategoryFilter = {
   key: string
@@ -44,6 +48,47 @@ export const SPORT_CATEGORY_MAP: Record<SportKey, CategoryFilter[]> = {
     { key: "gloves", label: "Gloves" },
     { key: "cleats", label: "Cleats" },
     { key: "helmets", label: "Helmets" },
+    { key: "accessories", label: "Accessories" },
+  ],
+
+  basketball: [
+    { key: "all", label: "All" },
+    { key: "basketballs", label: "Basketballs" },
+    { key: "basketball_shoes", label: "Shoes" },
+    { key: "jerseys", label: "Jerseys" },
+    { key: "training_equipment", label: "Training Gear" },
+    { key: "hoops", label: "Hoops" },
+    { key: "accessories", label: "Accessories" },
+  ],
+
+  football: [
+    { key: "all", label: "All" },
+    { key: "footballs", label: "Footballs" },
+    { key: "helmets", label: "Helmets" },
+    { key: "pads", label: "Pads" },
+    { key: "cleats", label: "Cleats" },
+    { key: "gloves", label: "Gloves" },
+    { key: "jerseys", label: "Jerseys" },
+    { key: "accessories", label: "Accessories" },
+  ],
+
+  soccer: [
+    { key: "all", label: "All" },
+    { key: "soccer_balls", label: "Balls" },
+    { key: "cleats", label: "Cleats" },
+    { key: "jerseys", label: "Jerseys" },
+    { key: "shin_guards", label: "Shin Guards" },
+    { key: "goalkeeper_gloves", label: "Goalie Gloves" },
+    { key: "accessories", label: "Accessories" },
+  ],
+
+  fitness: [
+    { key: "all", label: "All" },
+    { key: "weights", label: "Weights" },
+    { key: "benches", label: "Benches" },
+    { key: "machines", label: "Machines" },
+    { key: "resistance_bands", label: "Bands" },
+    { key: "cardio_equipment", label: "Cardio" },
     { key: "accessories", label: "Accessories" },
   ],
 

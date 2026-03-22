@@ -1,9 +1,7 @@
-import { notify } from "@/lib/notifications/notify"
 import { Ionicons } from "@expo/vector-icons"
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { useEffect, useRef, useState } from "react"
 import {
-  Alert,
   FlatList,
   Image,
   KeyboardAvoidingView,
@@ -12,14 +10,13 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
 import { useAuth } from "../../context/AuthContext"
 import { handleAppError } from "../../lib/errors/appError"
 import { supabase } from "../../lib/supabase"
-
 
 type Message = {
   id: string
@@ -42,7 +39,6 @@ export default function ChatScreen() {
   const router = useRouter()
   const insets = useSafeAreaInsets()
 
-  // 🔥 UPDATED: now supports listingId from Listing screen
   const { id: conversationId, listingId } =
     useLocalSearchParams<{ id: string; listingId?: string }>()
 
@@ -53,12 +49,14 @@ export default function ChatScreen() {
     useState<Record<string, ListingPreview>>({})
   const [text, setText] = useState("")
   const [loading, setLoading] = useState(true)
+  const [sending, setSending] = useState(false)
 
   const [isOtherTyping, setIsOtherTyping] = useState(false)
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const messageChannelRef = useRef<any>(null)
   const typingChannelRef = useRef<any>(null)
 
-  // 🟢 NEW: holds the listing attached to this chat session
   const [initialListingId, setInitialListingId] = useState<string | null>(null)
 
   const [otherUserName, setOtherUserName] = useState("Chat")
@@ -67,18 +65,22 @@ export default function ChatScreen() {
 
   const flatListRef = useRef<FlatList>(null)
 
-  /* 🟢 Capture listingId when chat is opened from a listing */
+  /* ---------------- CAPTURE LISTING ID ---------------- */
+
   useEffect(() => {
     if (listingId && typeof listingId === "string") {
       setInitialListingId(listingId)
     }
   }, [listingId])
 
-  /* 🟢 PRELOAD product card EVEN before first message */
+  /* ---------------- PRELOAD INITIAL LISTING ---------------- */
+
   useEffect(() => {
     if (!initialListingId) return
     preloadInitialListing()
   }, [initialListingId])
+
+  /* ---------------- INITIAL LOAD + REALTIME ---------------- */
 
   useEffect(() => {
     if (!conversationId) return
@@ -87,181 +89,187 @@ export default function ChatScreen() {
     loadConversationUser()
     markAsRead()
 
-    // Subscribe to realtime (messages + typing)
     const unsubscribe = subscribeToMessages()
 
-    // Cleanup ONLY this chat's channels
     return () => {
-      if (unsubscribe) {
-        unsubscribe()
-      }
+      if (unsubscribe) unsubscribe()
     }
   }, [conversationId])
 
-  /* 🟢 PRELOAD INITIAL LISTING CARD (CRITICAL FOR CARD BEFORE FIRST MESSAGE) */
+  /* ---------------- PRELOAD INITIAL LISTING CARD ---------------- */
+
   const preloadInitialListing = async () => {
-  try {
-    if (!initialListingId) return
+    try {
+      if (!initialListingId) return
 
-    if (listingMap[initialListingId]) return
+      if (listingMap[initialListingId]) return
 
-    const { data, error } = await supabase
-      .from("listings")
-      .select("id,title,price,image_urls,allow_offers")
-      .eq("id", initialListingId)
-      .single()
+      const { data, error } = await supabase
+        .from("listings")
+        .select("id,title,price,image_urls,allow_offers")
+        .eq("id", initialListingId)
+        .single()
 
-    if (error || !data) {
-      throw error ?? new Error("Listing preload failed")
+      if (error || !data) {
+        throw error ?? new Error("Listing preload failed")
+      }
+
+      setListingMap((prev) => ({
+        ...prev,
+        [data.id]: data,
+      }))
+    } catch (err) {
+      handleAppError(err, {
+        fallbackMessage: "Failed to load product preview.",
+      })
     }
-
-    setListingMap((prev) => ({
-      ...prev,
-      [data.id]: data,
-    }))
-  } catch (err) {
-    handleAppError(err, {
-      fallbackMessage: "Failed to load product preview.",
-    })
   }
-}
-
 
   /* ---------------- LOAD MESSAGES ---------------- */
 
   const loadMessages = async () => {
-  try {
-    if (!conversationId) return
+    try {
+      if (!conversationId) return
 
-    const { data, error } = await supabase
-      .from("messages")
-      .select(
-        "id, body, sender_id, created_at, read_at, listing_id"
-      )
-      .eq("conversation_id", conversationId)
-      .order("created_at", { ascending: true })
+      const { data, error } = await supabase
+        .from("messages")
+        .select("id, body, sender_id, created_at, read_at, listing_id")
+        .eq("conversation_id", conversationId)
+        .order("created_at", { ascending: true })
 
-    if (error) throw error
+      if (error) throw error
 
-    if (data) {
-      setMessages(data)
-      await loadListingCards(data)
+      if (data) {
+        setMessages(data)
+        await loadListingCards(data)
+      }
+    } catch (err) {
+      handleAppError(err, {
+        fallbackMessage: "Failed to load messages.",
+      })
+    } finally {
+      setLoading(false)
     }
-  } catch (err) {
-    handleAppError(err, {
-      fallbackMessage: "Failed to load messages.",
-    })
-  } finally {
-    setLoading(false)
   }
-}
-
 
   /* ---------------- LOAD CONVERSATION USER ---------------- */
 
   const loadConversationUser = async () => {
-  try {
-    if (!conversationId || !session?.user) return
+    try {
+      if (!conversationId || !session?.user) return
 
-    const { data, error } = await supabase
-      .from("conversations")
-      .select("user_one, user_two")
-      .eq("id", conversationId)
-      .single()
+      const { data, error } = await supabase
+        .from("conversations")
+        .select("user_one, user_two")
+        .eq("id", conversationId)
+        .single()
 
-    if (error || !data) {
-      throw error ?? new Error("Conversation not found")
+      if (error || !data) {
+        throw error ?? new Error("Conversation not found")
+      }
+
+      const resolvedOtherUserId =
+        data.user_one === session.user.id
+          ? data.user_two
+          : data.user_one
+
+      setOtherUserId(resolvedOtherUserId)
+
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("display_name, avatar_url")
+        .eq("id", resolvedOtherUserId)
+        .single()
+
+      if (profileError) throw profileError
+
+      if (profile?.display_name) {
+        setOtherUserName(profile.display_name)
+      }
+
+      if (profile?.avatar_url) {
+        setOtherUserAvatar(profile.avatar_url)
+      }
+    } catch (err) {
+      handleAppError(err, {
+        fallbackMessage: "Failed to load chat user.",
+      })
     }
-
-    const resolvedOtherUserId =
-      data.user_one === session.user.id
-        ? data.user_two
-        : data.user_one
-
-    setOtherUserId(resolvedOtherUserId)
-
-    const { data: profile, error: profileError } = await supabase
-      .from("profiles")
-      .select("display_name, avatar_url")
-      .eq("id", resolvedOtherUserId)
-      .single()
-
-    if (profileError) throw profileError
-
-    if (profile?.display_name) {
-      setOtherUserName(profile.display_name)
-    }
-
-    if (profile?.avatar_url) {
-      setOtherUserAvatar(profile.avatar_url)
-    }
-  } catch (err) {
-    handleAppError(err, {
-      fallbackMessage: "Failed to load chat user.",
-    })
   }
-}
-
 
   /* ---------------- LOAD PRODUCT CARDS ---------------- */
 
- const loadListingCards = async (msgs: Message[]) => {
-  try {
-    const listingIds = Array.from(
-      new Set(msgs.map((m) => m.listing_id).filter(Boolean))
-    ) as string[]
+  const loadListingCards = async (msgs: Message[]) => {
+    try {
+      const listingIds = Array.from(
+        new Set(msgs.map((m) => m.listing_id).filter(Boolean))
+      ) as string[]
 
-    if (listingIds.length === 0) return
+      if (listingIds.length === 0) return
 
-    const { data, error } = await supabase
-      .from("listings")
-      .select("id,title,price,image_urls,allow_offers")
-      .in("id", listingIds)
+      const { data, error } = await supabase
+        .from("listings")
+        .select("id,title,price,image_urls,allow_offers")
+        .in("id", listingIds)
 
-    if (error) throw error
-    if (!data) return
+      if (error) throw error
+      if (!data) return
 
-    const map: Record<string, ListingPreview> = {}
-    data.forEach((l) => {
-      map[l.id] = l
-    })
+      const map: Record<string, ListingPreview> = {}
+      data.forEach((l) => {
+        map[l.id] = l
+      })
 
-    setListingMap(map)
-  } catch (err) {
-    handleAppError(err, {
-      fallbackMessage: "Failed to load listing cards.",
-    })
+      setListingMap(map)
+    } catch (err) {
+      handleAppError(err, {
+        fallbackMessage: "Failed to load listing cards.",
+      })
+    }
   }
-}
-
 
   /* ---------------- MARK READ ---------------- */
 
- const markAsRead = async () => {
-  try {
-    if (!conversationId || !session?.user) return
+  const markAsRead = async () => {
+    try {
+      if (!conversationId || !session?.user) return
 
-    const { error } = await supabase
-      .from("messages")
-      .update({ read_at: new Date().toISOString() })
-      .eq("conversation_id", conversationId)
-      .neq("sender_id", session.user.id)
-      .is("read_at", null)
+      const { error } = await supabase
+        .from("messages")
+        .update({ read_at: new Date().toISOString() })
+        .eq("conversation_id", conversationId)
+        .neq("sender_id", session.user.id)
+        .is("read_at", null)
 
-    if (error) throw error
-  } catch (err) {
-    handleAppError(err, {
-      fallbackMessage: "Failed to update read status.",
-    })
+      if (error) throw error
+    } catch (err) {
+      handleAppError(err, {
+        fallbackMessage: "Failed to update read status.",
+      })
+    }
   }
-}
 
-
-
-/* ---------------- REALTIME ---------------- */
+ /* ---------------- REALTIME ---------------- */
 
 const subscribeToMessages = () => {
-  if (!conversationId) return () => {}
+  console.log("🟢 subscribeToMessages INIT", conversationId)
+
+  if (!conversationId) {
+    console.log("❌ No conversationId — abort subscribe")
+    return () => {}
+  }
+
+  if (messageChannelRef.current) {
+    console.log("🧹 Removing existing message channel")
+    supabase.removeChannel(messageChannelRef.current)
+    messageChannelRef.current = null
+  }
+
+  if (typingChannelRef.current) {
+    console.log("🧹 Removing existing typing channel")
+    supabase.removeChannel(typingChannelRef.current)
+    typingChannelRef.current = null
+  }
 
   const messagesChannel = supabase
     .channel(`messages-${conversationId}`)
@@ -274,24 +282,20 @@ const subscribeToMessages = () => {
         filter: `conversation_id=eq.${conversationId}`,
       },
       (payload) => {
+        console.log("📩 REALTIME MESSAGE RECEIVED:", payload)
+
         const newMessage = payload.new as Message
 
         setMessages((prev) => {
-          const alreadyExists = prev.some(
-            (m) =>
-              m.id === newMessage.id ||
-              (m.body === newMessage.body &&
-                m.sender_id === newMessage.sender_id &&
-                Math.abs(
-                  new Date(m.created_at).getTime() -
-                    new Date(newMessage.created_at).getTime()
-                ) < 5000)
-          )
-
-          if (alreadyExists) return prev
+          const alreadyExists = prev.some((m) => m.id === newMessage.id)
+          if (alreadyExists) {
+            console.log("⚠️ Duplicate realtime message blocked")
+            return prev
+          }
           return [...prev, newMessage]
         })
 
+        console.log("👁 Marking as read after realtime")
         markAsRead()
 
         setTimeout(() => {
@@ -299,11 +303,17 @@ const subscribeToMessages = () => {
         }, 50)
       }
     )
-    .subscribe()
+    .subscribe((status) => {
+      console.log("📡 Message channel status:", status)
+    })
+
+  messageChannelRef.current = messagesChannel
 
   const typingChannel = supabase
     .channel(`typing-${conversationId}`)
     .on("broadcast", { event: "typing" }, (payload) => {
+      console.log("⌨️ Typing event:", payload)
+
       if (payload.payload?.userId === session?.user?.id) return
 
       setIsOtherTyping(true)
@@ -316,15 +326,24 @@ const subscribeToMessages = () => {
         setIsOtherTyping(false)
       }, 2000)
     })
-    .subscribe()
+    .subscribe((status) => {
+      console.log("📡 Typing channel status:", status)
+    })
 
   typingChannelRef.current = typingChannel
 
   return () => {
-    supabase.removeChannel(messagesChannel)
-    supabase.removeChannel(typingChannel)
+    console.log("🧹 Cleaning up channels")
 
-    typingChannelRef.current = null
+    if (messageChannelRef.current) {
+      supabase.removeChannel(messageChannelRef.current)
+      messageChannelRef.current = null
+    }
+
+    if (typingChannelRef.current) {
+      supabase.removeChannel(typingChannelRef.current)
+      typingChannelRef.current = null
+    }
 
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current)
@@ -333,81 +352,61 @@ const subscribeToMessages = () => {
   }
 }
 
-  /* ---------------- SEND ---------------- */
+/* ---------------- SEND ---------------- */
 
-  const sendMessage = async () => {
-  if (!text.trim() || !session?.user || !conversationId) return
+const sendMessage = async () => {
+  console.log("🚀 sendMessage CALLED")
+  console.log("🚀 sendMessage TRIGGERED")
 
-  const message = text.trim()
-  const lowerMessage = message.toLowerCase()
-
-  // 🚫 Block emails
-  const emailRegex = /\S+@\S+\.\S+/
-
-  // 🚫 Block phone numbers
-  const phoneRegex = /\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b/
-
-  // 🚫 Block off-platform payments & contact attempts
-  const bannedKeywords = [
-    "zelle",
-    "venmo",
-    "cashapp",
-    "paypal",
-    "apple pay",
-    "google pay",
-    "text me",
-    "call me",
-    "email me",
-    "hit me up",
-    "send your number",
-    "whatsapp",
-    "telegram",
-    "pay outside",
-    "outside the app",
-    "pay off app",
-  ]
-
-  const containsBannedKeyword = bannedKeywords.some((word) =>
-    lowerMessage.includes(word)
-  )
-
-  if (
-    emailRegex.test(message) ||
-    phoneRegex.test(message) ||
-    containsBannedKeyword
-  ) {
-    Alert.alert(
-      "Safety Notice",
-      "Keeping all communication through Melo is the only way we can ensure full buyer and seller protection. Sharing contact information or discussing off-platform payments is not allowed."
-    )
+  if (sending) {
+    console.log("⛔ blocked — already sending")
     return
   }
 
-  // 🟢 CRITICAL: Attach listing ONLY to the first message (if chat came from listing)
+  if (!text.trim()) {
+    console.log("⛔ blocked — empty text")
+    return
+  }
+
+  if (!session?.user) {
+    console.log("⛔ blocked — no session")
+    return
+  }
+
+  if (!conversationId) {
+    console.log("⛔ blocked — no conversationId")
+    return
+  }
+
+  setSending(true)
+
+  const message = text.trim()
+  console.log("✉️ Sending message:", message)
+
   const messageListingId =
     messages.length === 0 && initialListingId
       ? initialListingId
       : null
 
-  // 🔥 OPTIMISTIC MESSAGE (INSTANT UI)
+  console.log("📦 listing attached:", messageListingId)
+
+  const tempId = `temp-${Date.now()}`
+
   const tempMessage: Message = {
-    id: `temp-${Date.now()}`,
+    id: tempId,
     body: message,
     sender_id: session.user.id,
     created_at: new Date().toISOString(),
     read_at: null,
-    listing_id: messageListingId, // 🟢 THIS makes the product card appear
+    listing_id: messageListingId,
   }
 
-  // Instantly show message in UI
   setMessages((prev) => [...prev, tempMessage])
 
-  // Auto scroll
   setTimeout(() => {
     flatListRef.current?.scrollToEnd({ animated: true })
   }, 50)
 
-  // Stop typing indicator immediately
   setIsOtherTyping(false)
 
   if (typingTimeoutRef.current) {
@@ -415,57 +414,96 @@ const subscribeToMessages = () => {
     typingTimeoutRef.current = null
   }
 
-  // Clear input instantly
   setText("")
 
-  // 🚀 Send to Supabase (REAL MESSAGE)
-    try {
-    const { error } = await supabase.from("messages").insert({
-      conversation_id: conversationId,
-      sender_id: session.user.id,
-      body: message,
-      listing_id: messageListingId,
-    })
+  try {
+    console.log("📤 INSERTING MESSAGE INTO DB")
 
-    if (error) throw error
+    const { data, error } = await supabase
+      .from("messages")
+      .insert({
+        conversation_id: conversationId,
+        sender_id: session.user.id,
+        body: message,
+        listing_id: messageListingId,
+      })
+      .select()
 
-    if (otherUserId) {
-      await notify({
-        userId: otherUserId,
+    console.log("🔥 INSERT RESULT:", data, error)
+
+    if (error) {
+      console.log("❌ INSERT ERROR:", error)
+      throw error
+    }
+
+    if (!data || data.length === 0) {
+      console.log("❌ NO DATA RETURNED FROM INSERT")
+      return
+    }
+
+    const realMessageId = data[0].id
+    console.log("✅ Message inserted with ID:", realMessageId)
+
+    /* ---------------- NOTIFICATION ---------------- */
+
+    console.log("🔍 Fetching conversation for notification")
+
+    const { data: convo, error: convoError } = await supabase
+      .from("conversations")
+      .select("user_one, user_two")
+      .eq("id", conversationId)
+      .single()
+
+    console.log("📦 convo result:", convo, convoError)
+
+    if (convoError || !convo) {
+      console.log("❌ convo fetch failed:", convoError)
+      return
+    }
+
+    const recipientId =
+      convo.user_one === session.user.id
+        ? convo.user_two
+        : convo.user_one
+
+    console.log("🎯 recipientId:", recipientId)
+
+    if (!recipientId) {
+      console.log("❌ no recipientId — abort")
+      return
+    }
+
+    console.log("📡 INVOKING FUNCTION send-notification")
+
+    const res = await supabase.functions.invoke("send-notification", {
+      body: {
+        userId: recipientId,
         type: "message",
         title: "New message",
-        body: "You have a new message",
+        body: message,
         data: {
           route: "/messages/[id]",
           params: { id: conversationId },
         },
-      })
-    }
+        dedupeKey: realMessageId,
+      },
+    })
+
+    console.log("🔥 FUNCTION RESPONSE:", res)
   } catch (err) {
+    console.log("💥 SEND MESSAGE ERROR:", err)
+
     handleAppError(err, {
       fallbackMessage: "Message failed to send.",
     })
-  }
-
-  // 🔔 Notify other user
-  if (otherUserId) {
-    await notify({
-      userId: otherUserId,
-      type: "message",
-      title: "New message",
-      body: "You have a new message",
-      data: {
-        route: "/messages/[id]",
-        params: { id: conversationId },
-      },
-    })
+  } finally {
+    console.log("🔓 sendMessage FINISHED")
+    setSending(false)
   }
 }
 
 const broadcastTyping = async () => {
   if (!conversationId || !session?.user) return
-
-  // Reuse the existing typing channel (prevents channel spam)
   if (!typingChannelRef.current) return
 
   await typingChannelRef.current.send({
@@ -477,7 +515,7 @@ const broadcastTyping = async () => {
   })
 }
 
-  /* ---------------- HELPERS ---------------- */
+/* ---------------- HELPERS ---------------- */
 
 const formatTime = (date: string) =>
   new Date(date).toLocaleTimeString([], {

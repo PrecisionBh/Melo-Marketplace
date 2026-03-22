@@ -1,4 +1,3 @@
-import { notify } from "@/lib/notifications/notify"
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { useEffect, useMemo, useState } from "react"
 import {
@@ -288,7 +287,9 @@ const acceptOffer = async () => {
     if (listingUpdateError) throw listingUpdateError
 
     // 🔔 Notify buyer to complete checkout
-    await notify({
+try {
+  await supabase.functions.invoke("send-notification", {
+    body: {
       userId: offer.buyer_id,
       type: "offer",
       title: "Offer accepted!",
@@ -297,7 +298,12 @@ const acceptOffer = async () => {
         route: "/checkout",
         params: { offerId: offer.id },
       },
-    })
+      dedupeKey: `offer-checkout-${offer.id}`, // 🔥 unique event
+    },
+  })
+} catch (err) {
+  console.log("⚠️ checkout notification failed (non-blocking):", err)
+}
 
     await loadOffer()
   } catch (err) {
@@ -332,7 +338,9 @@ const declineOffer = async () => {
 
     if (error) throw error
 
-    await notify({
+    try {
+  await supabase.functions.invoke("send-notification", {
+    body: {
       userId: offer.buyer_id,
       type: "offer",
       title: "Offer declined",
@@ -340,8 +348,12 @@ const declineOffer = async () => {
       data: {
         route: "/buyer-hub/offers",
       },
-    })
-
+      dedupeKey: `offer-declined-buyer-${offer.id}`, // 🔥 separate from seller decline
+    },
+  })
+} catch (err) {
+  console.log("⚠️ buyer offer declined notification failed (non-blocking):", err)
+}
     await loadOffer()
   } catch (err) {
     handleAppError(err, {
@@ -402,16 +414,23 @@ const submitCounter = async () => {
   setShowCounter(false)
   setCounterAmount("")
 
-  await notify({
-    userId: offer.buyer_id,
-    type: "offer",
-    title: "Offer countered",
-    body: "The seller sent a counter offer.",
-    data: {
-      route: "/buyer-hub/offers/[id]",
-      params: { id: offer.id },
+  try {
+  await supabase.functions.invoke("send-notification", {
+    body: {
+      userId: offer.buyer_id,
+      type: "offer",
+      title: "Offer countered",
+      body: "The seller sent a counter offer.",
+      data: {
+        route: "/buyer-hub/offers/[id]",
+        params: { id: offer.id },
+      },
+      dedupeKey: `offer-countered-buyer-${offer.id}`, // 🔥 separate from seller version
     },
   })
+} catch (err) {
+  console.log("⚠️ buyer counter offer notification failed (non-blocking):", err)
+}
 
   loadOffer()
 }

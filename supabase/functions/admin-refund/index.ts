@@ -212,7 +212,7 @@ serve(async (req) => {
         updated_at: now,
       })
       .eq("id", order.id)
-      .eq("status", "paid") // 🔒 prevents duplicate updates
+      .eq("status", "paid")
 
     if (orderUpdateErr) {
       console.error("❌ Order update failed:", orderUpdateErr)
@@ -230,7 +230,7 @@ serve(async (req) => {
         admin_notes,
       })
       .eq("id", dispute.id)
-      .is("resolved_at", null) // 🔒 prevents duplicate resolution
+      .is("resolved_at", null)
 
     if (disputeUpdateErr) {
       console.error("❌ Dispute update failed:", disputeUpdateErr)
@@ -238,6 +238,51 @@ serve(async (req) => {
     }
 
     console.log("✅ Admin refund successful:", refund.id, "status:", refund.status)
+
+    /* ---------------- NOTIFICATIONS ---------------- */
+    try {
+      await fetch(`${SUPABASE_URL}/functions/v1/send-notification`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        },
+        body: JSON.stringify({
+          userId: order.buyer_id,
+          type: "order",
+          title: "Refund Issued",
+          body: "Your order has been refunded after dispute review.",
+          data: {
+            route: `/buyer-hub/orders/${order.id}`,
+          },
+          dedupeKey: `admin-refund-buyer-${order.id}`,
+        }),
+      })
+    } catch (e) {
+      console.log("⚠️ Buyer refund notification failed:", e)
+    }
+
+    try {
+      await fetch(`${SUPABASE_URL}/functions/v1/send-notification`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        },
+        body: JSON.stringify({
+          userId: order.seller_id,
+          type: "order",
+          title: "Dispute Lost",
+          body: "A dispute was resolved in the buyer's favor and the order was refunded.",
+          data: {
+            route: `/seller-hub/orders/${order.id}`,
+          },
+          dedupeKey: `admin-refund-seller-${order.id}`,
+        }),
+      })
+    } catch (e) {
+      console.log("⚠️ Seller refund notification failed:", e)
+    }
 
     return json(200, {
       success: true,

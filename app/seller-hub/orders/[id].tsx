@@ -1,4 +1,3 @@
-import { notify } from "@/lib/notifications/notify"
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { useEffect, useState } from "react"
 import {
@@ -239,22 +238,25 @@ const submitTracking = async () => {
 
     if (error) throw error
 
-    try {
-      await notify({
-        userId: order.buyer_id,
-        type: "order",
-        title: "Order shipped",
-        body: "Your order has been shipped. Tracking information is now available.",
-        data: {
-          route: "/buyer-hub/orders/[id]",
-          params: { id: order.id },
-        },
-      })
-    } catch (notifyErr) {
-      handleAppError(notifyErr, {
-        fallbackMessage: "Order shipped, but notification failed.",
-      })
-    }
+   try {
+  await supabase.functions.invoke("send-notification", {
+    body: {
+      userId: order.buyer_id,
+      type: "order",
+      title: "Order shipped",
+      body: "Your order has been shipped. Tracking information is now available.",
+      data: {
+        route: "/buyer-hub/orders/[id]",
+        params: { id: order.id },
+      },
+      dedupeKey: `order-shipped-${order.id}`, // 🔥 unique event
+    },
+  })
+} catch (notifyErr) {
+  handleAppError(notifyErr, {
+    fallbackMessage: "Order shipped, but notification failed.",
+  })
+}
 
     Alert.alert(
       "Order Shipped",

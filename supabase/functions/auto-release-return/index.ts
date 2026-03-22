@@ -14,6 +14,9 @@ const supabase = createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 )
 
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+
 const CRON_SECRET = Deno.env.get("CRON_SECRET")
 
 Deno.serve(async (req) => {
@@ -31,7 +34,6 @@ Deno.serve(async (req) => {
 
   console.log("🧪 CURRENT TIME:", nowISO)
 
-  // ✅ REAL QUERY
   const { data: orders, error } = await supabase
     .from("orders")
     .select("*")
@@ -92,13 +94,57 @@ Deno.serve(async (req) => {
         continue
       }
 
+      /* ---------------- NOTIFICATIONS ---------------- */
+      try {
+        await fetch(`${SUPABASE_URL}/functions/v1/send-notification`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+          },
+          body: JSON.stringify({
+            userId: order.buyer_id,
+            type: "order",
+            title: "Refund Issued",
+            body: "Your return has been received and your refund has been processed.",
+            data: {
+              route: `/buyer-hub/orders/${order.id}`,
+            },
+            dedupeKey: `auto-return-refund-buyer-${order.id}`,
+          }),
+        })
+      } catch (e) {
+        console.log("⚠️ Buyer return refund notification failed:", e)
+      }
+
+      try {
+        await fetch(`${SUPABASE_URL}/functions/v1/send-notification`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+          },
+          body: JSON.stringify({
+            userId: order.seller_id,
+            type: "order",
+            title: "Return Completed",
+            body: "The item was returned and the buyer has been refunded.",
+            data: {
+              route: `/seller-hub/orders/${order.id}`,
+            },
+            dedupeKey: `auto-return-refund-seller-${order.id}`,
+          }),
+        })
+      } catch (e) {
+        console.log("⚠️ Seller return refund notification failed:", e)
+      }
+
       processed++
       console.log("🎉 Return auto-refunded:", order.id)
 
     } catch (err: any) {
       console.error("❌ Order error:", order.id, err)
 
-      // 🔥 HANDLE ALREADY REFUNDED (CRITICAL FIX)
       if (err?.code === "charge_already_refunded") {
         console.warn("⚠️ Already refunded — syncing DB:", order.id)
 
@@ -113,6 +159,51 @@ Deno.serve(async (req) => {
         if (rpcError) {
           console.error("❌ RPC failed after already refunded:", rpcError)
           continue
+        }
+
+        /* ---------------- NOTIFICATIONS (SYNC CASE) ---------------- */
+        try {
+          await fetch(`${SUPABASE_URL}/functions/v1/send-notification`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+            },
+            body: JSON.stringify({
+              userId: order.buyer_id,
+              type: "order",
+              title: "Refund Issued",
+              body: "Your return has been processed and refunded.",
+              data: {
+                route: `/buyer-hub/orders/${order.id}`,
+              },
+              dedupeKey: `auto-return-refund-buyer-${order.id}`,
+            }),
+          })
+        } catch (e) {
+          console.log("⚠️ Buyer sync refund notification failed:", e)
+        }
+
+        try {
+          await fetch(`${SUPABASE_URL}/functions/v1/send-notification`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+            },
+            body: JSON.stringify({
+              userId: order.seller_id,
+              type: "order",
+              title: "Return Completed",
+              body: "The return has been processed and refunded.",
+              data: {
+                route: `/seller-hub/orders/${order.id}`,
+              },
+              dedupeKey: `auto-return-refund-seller-${order.id}`,
+            }),
+          })
+        } catch (e) {
+          console.log("⚠️ Seller sync refund notification failed:", e)
         }
 
         processed++

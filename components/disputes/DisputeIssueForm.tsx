@@ -15,7 +15,6 @@ import {
 
 import { useAuth } from "@/context/AuthContext"
 import { handleAppError } from "@/lib/errors/appError"
-import { notify } from "@/lib/notifications/notify"
 import { supabase } from "@/lib/supabase"
 
 type Props = {
@@ -258,22 +257,29 @@ export default function DisputeIssueForm({
       const notifyUserId =
         role === "buyer" ? order.seller_id : order.buyer_id
 
-      await notify({
-        userId: notifyUserId,
-        type: "dispute",
-        title: "Dispute Opened",
-        body:
+      try {
+  await supabase.functions.invoke("send-notification", {
+    body: {
+      userId: notifyUserId,
+      type: "dispute",
+      title: "Dispute Opened",
+      body:
+        role === "buyer"
+          ? "A buyer has opened a dispute on this order."
+          : "The seller has opened a dispute regarding your return.",
+      data: {
+        route:
           role === "buyer"
-            ? "A buyer has opened a dispute on this order."
-            : "The seller has opened a dispute regarding your return.",
-        data: {
-          route:
-            role === "buyer"
-              ? "/seller-hub/orders/[id]"
-              : "/buyer-hub/orders/[id]",
-          params: { id: orderId },
-        },
-      })
+            ? "/seller-hub/orders/[id]"
+            : "/buyer-hub/orders/[id]",
+        params: { id: orderId },
+      },
+      dedupeKey: `dispute-opened-${orderId}-${role}`, // 🔥 role-aware key
+    },
+  })
+} catch (err) {
+  console.log("⚠️ dispute opened notification failed (non-blocking):", err)
+}
 
       Alert.alert(
         "Dispute Submitted",
