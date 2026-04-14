@@ -9,8 +9,9 @@ import {
   View
 } from "react-native"
 
+import GlobalFooter from "@/components/global/globalfooter"
+import GlobalHeader from "@/components/global/globalheader"
 import FilterBar, { FilterKey, type FilterOption } from "../components/home/FilterBar"
-import HomeHeader from "../components/home/HomeHeader"
 import ListingsGrid from "../components/home/ListingsGrid"
 import SearchBar from "../components/home/SearchBar"
 
@@ -517,20 +518,15 @@ const hasResults = filteredListings.length > 0
     <>
       <View style={styles.screen}>
         <View style={styles.headerBlock}>
-          <HomeHeader
-            hasUnreadNotifications={hasUnreadNotifications}
-            hasUnreadMessages={hasUnreadMessages}
-            onNotificationsPress={() =>
-  requireAuth(() => router.push("/notifications"))
-}
-onMessagesPress={() =>
-  requireAuth(() => router.push("/messages"))
-}
-onProfilePress={() =>
-  requireAuth(() => router.push("/profile"))
-}
-            onMenuPress={() => setMenuOpen(true)}
-          />
+          <GlobalHeader
+  notifCount={hasUnreadNotifications ? 1 : 0}
+  onNotificationsPress={() =>
+    requireAuth(() => router.push("/notifications"))
+  }
+  onMessagesPress={() =>
+    requireAuth(() => router.push("/messages"))
+  }
+/>
 
           <SearchBar
             value={search}
@@ -579,20 +575,8 @@ onProfilePress={() =>
   </>
 )}
 
-        <TouchableOpacity
-          style={styles.fab}
-          onPress={() =>
-  requireAuth(() =>
-    router.push("/seller-hub/create-listing")
-  )
-}
-          activeOpacity={0.9}
-        >
-          <Ionicons name="add" size={20} color="#0F1E17" />
-          <Text style={styles.fabText}>Create Listing</Text>
-        </TouchableOpacity>
       </View>
-
+      <GlobalFooter />
       {menuOpen && (
         <View style={styles.menuOverlay} pointerEvents="box-none">
           <TouchableOpacity
@@ -741,33 +725,11 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: "#EAF4EF",
+    paddingBottom: 90,
   },
   headerBlock: {
     backgroundColor: "#7FAF9B",
     paddingBottom: 10,
-  },
-  fab: {
-    position: "absolute",
-    bottom: 55,
-    left: 24,
-    right: 24,
-    height: 54,
-    borderRadius: 27,
-    backgroundColor: "#7FAF9B",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-    shadowColor: "#000",
-    shadowOpacity: 0.18,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 6,
-  },
-  fabText: {
-    fontSize: 15,
-    fontWeight: "900",
-    color: "#0F1E17",
   },
   menuOverlay: {
     position: "absolute",

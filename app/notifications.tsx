@@ -1,3 +1,5 @@
+import GlobalFooter from "@/components/global/globalfooter"
+import GlobalHeader from "@/components/global/globalheader"
 import { Ionicons } from "@expo/vector-icons"
 import { useRouter } from "expo-router"
 import { useEffect, useState } from "react"
@@ -11,7 +13,6 @@ import {
 } from "react-native"
 import { Swipeable } from "react-native-gesture-handler"
 
-import AppHeader from "@/components/app-header"
 import { useAuth } from "@/context/AuthContext"
 import { handleAppError } from "@/lib/errors/appError"
 import { supabase } from "@/lib/supabase"
@@ -36,12 +37,12 @@ export default function NotificationsScreen() {
         setLoading(true)
 
         const { data, error } = await supabase
-  .from("notifications")
-  .select("*")
-  .eq("user_id", userId)
-  .eq("cleared", false)
-  .eq("read", false) // ✅ ADD THIS
-  .order("created_at", { ascending: false })
+          .from("notifications")
+          .select("*")
+          .eq("user_id", userId)
+          .eq("cleared", false)
+          .eq("read", false)
+          .order("created_at", { ascending: false })
 
         if (error) throw error
 
@@ -61,18 +62,14 @@ export default function NotificationsScreen() {
     loadNotifications()
   }, [userId])
 
-  /* ---------------- OPEN NOTIFICATION ---------------- */
-
   const openNotification = async (n: any) => {
     try {
-      // 🔥 Instant UI update (removes red dot immediately)
       setNotifications((prev) =>
         prev.map((notif) =>
           notif.id === n.id ? { ...notif, read: true } : notif
         )
       )
 
-      // 🔄 Update DB
       if (!n.read) {
         const { error } = await supabase
           .from("notifications")
@@ -84,7 +81,6 @@ export default function NotificationsScreen() {
         }
       }
 
-      // 🚀 Navigate
       if (n.data?.route) {
         router.push({
           pathname: n.data.route,
@@ -99,8 +95,6 @@ export default function NotificationsScreen() {
       })
     }
   }
-
-  /* ---------------- DELETE ONE ---------------- */
 
   const deleteNotification = async (id: string) => {
     try {
@@ -120,18 +114,15 @@ export default function NotificationsScreen() {
     }
   }
 
-  /* ---------------- SWIPE ACTION ---------------- */
-
   const renderRightActions = (id: string) => (
     <TouchableOpacity
       onPress={() => deleteNotification(id)}
       style={styles.deleteButton}
+      activeOpacity={0.85}
     >
       <Text style={styles.deleteText}>Delete</Text>
     </TouchableOpacity>
   )
-
-  /* ---------------- CLEAR ALL ---------------- */
 
   const clearAllNotifications = async () => {
     if (!userId) return
@@ -157,68 +148,121 @@ export default function NotificationsScreen() {
     }
   }
 
+  const unreadCount = notifications.filter((n) => !n.read).length
+
   return (
     <View style={styles.screen}>
-      <AppHeader title="Notifications" backLabel="Back" backRoute={undefined} />
+      <GlobalHeader />
 
-      {notifications.length > 0 && (
-        <View style={styles.clearRow}>
-          <TouchableOpacity onPress={clearAllNotifications}>
-            <Text style={styles.clearText}>Clear all</Text>
-          </TouchableOpacity>
-        </View>
-      )}
+      <View style={styles.content}>
+        <View style={styles.headerRow}>
+          <View>
+            <Text style={styles.pageTitle}>Notifications</Text>
+            {unreadCount > 0 && (
+              <Text style={styles.unreadCount}>
+                {unreadCount} unread
+              </Text>
+            )}
+          </View>
 
-      {!userId ? (
-        <View style={styles.center}>
-          <Ionicons name="notifications-outline" size={56} color="#9FB8AC" />
-          <Text style={styles.headline}>Sign in to view notifications</Text>
-          <Text style={styles.subtext}>
-            Log in to see updates about purchases, offers, and messages.
-          </Text>
-        </View>
-      ) : loading ? (
-        <View style={styles.center}>
-          <Ionicons name="notifications-outline" size={48} color="#9FB8AC" />
-          <Text style={styles.subtext}>Loading notifications...</Text>
-        </View>
-      ) : notifications.length === 0 ? (
-        <View style={styles.center}>
-          <Ionicons name="notifications-outline" size={56} color="#9FB8AC" />
-          <Text style={styles.headline}>No notifications yet</Text>
-          <Text style={styles.subtext}>
-            Updates about purchases, offers, and messages will appear here.
-          </Text>
-        </View>
-      ) : (
-        <ScrollView showsVerticalScrollIndicator={false}>
-          {notifications.map((n) => (
-            <Swipeable
-              key={n.id}
-              renderRightActions={() => renderRightActions(n.id)}
-              overshootRight={false}
+          {notifications.length > 0 && (
+            <TouchableOpacity
+              onPress={clearAllNotifications}
+              activeOpacity={0.85}
+              style={styles.clearButton}
             >
-              <Pressable
-                style={styles.notificationCard}
-                onPress={() => openNotification(n)}
+              <Ionicons
+                name="checkmark-done-outline"
+                size={14}
+                color="#D97732"
+              />
+              <Text style={styles.clearButtonText}>
+                Clear all
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {!userId ? (
+          <View style={styles.emptyWrap}>
+            <Ionicons
+              name="notifications-outline"
+              size={54}
+              color="#D1D5DB"
+            />
+            <Text style={styles.emptyTitle}>
+              Sign in to view notifications
+            </Text>
+            <Text style={styles.emptySub}>
+              Log in to see updates about purchases, offers, and messages.
+            </Text>
+          </View>
+        ) : loading ? (
+          <View style={styles.emptyWrap}>
+            <Ionicons
+              name="notifications-outline"
+              size={48}
+              color="#D1D5DB"
+            />
+            <Text style={styles.emptySub}>
+              Loading notifications...
+            </Text>
+          </View>
+        ) : notifications.length === 0 ? (
+          <View style={styles.emptyWrap}>
+            <Ionicons
+              name="notifications-outline"
+              size={54}
+              color="#D1D5DB"
+            />
+            <Text style={styles.emptyTitle}>
+              No notifications yet
+            </Text>
+            <Text style={styles.emptySub}>
+              You’ll see updates about orders, offers, and messages here.
+            </Text>
+          </View>
+        ) : (
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.listContent}
+          >
+            {notifications.map((n) => (
+              <Swipeable
+                key={n.id}
+                renderRightActions={() => renderRightActions(n.id)}
+                overshootRight={false}
               >
-                {!n.read && <View style={styles.unreadDot} />}
-
-                <Text
-                  style={[
-                    styles.notifTitle,
-                    !n.read && { fontWeight: "900" },
-                  ]}
+                <Pressable
+                  style={styles.notificationCard}
+                  onPress={() => openNotification(n)}
                 >
-                  {n.title}
-                </Text>
+                  <View style={styles.cardLeft}>
+                    {!n.read && <View style={styles.unreadDot} />}
+                  </View>
 
-                <Text style={styles.notifBody}>{n.body}</Text>
-              </Pressable>
-            </Swipeable>
-          ))}
-        </ScrollView>
-      )}
+                  <View style={styles.cardBody}>
+                    <Text
+                      style={[
+                        styles.notifTitle,
+                        !n.read && styles.notifTitleUnread,
+                      ]}
+                    >
+                      {n.title}
+                    </Text>
+
+                    <Text style={styles.notifBody}>
+                      {n.body}
+                    </Text>
+                  </View>
+                </Pressable>
+              </Swipeable>
+            ))}
+          </ScrollView>
+        )}
+      </View>
+
+      <GlobalFooter />
     </View>
   )
 }
@@ -226,86 +270,138 @@ export default function NotificationsScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#EAF4EF",
+    backgroundColor: "#F8F5F1",
   },
 
-  clearRow: {
-    alignItems: "flex-end",
-    paddingHorizontal: 16,
-    paddingTop: 6,
-  },
-
-  clearText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#C0392B",
-  },
-
-  center: {
+  content: {
     flex: 1,
+    paddingHorizontal: 16,
+    paddingTop: 18,
+    paddingBottom: 120,
+  },
+
+  headerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 18,
+  },
+
+  pageTitle: {
+    fontSize: 30,
+    fontWeight: "900",
+    color: "#111827",
+  },
+
+  unreadCount: {
+    marginTop: 4,
+    fontSize: 12,
+    color: "#9CA3AF",
+    fontWeight: "500",
+  },
+
+  clearButton: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 24,
+    gap: 6,
+    backgroundColor: "#FFF7ED",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#F4D7B8",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
 
-  headline: {
-    marginTop: 16,
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#0F1E17",
-    textAlign: "center",
+  clearButtonText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#D97732",
   },
 
-  subtext: {
-    marginTop: 8,
-    fontSize: 14,
-    color: "#6B8F7D",
-    textAlign: "center",
-    lineHeight: 20,
+  listContent: {
+    paddingBottom: 10,
   },
 
   notificationCard: {
+    flexDirection: "row",
+    alignItems: "flex-start",
     backgroundColor: "#FFFFFF",
-    marginHorizontal: 14,
-    marginTop: 12,
-    padding: 14,
-    borderRadius: 12,
-    position: "relative",
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#F1E7DD",
+    padding: 16,
+    marginBottom: 10,
+  },
+
+  cardLeft: {
+    width: 16,
+    alignItems: "center",
+    paddingTop: 4,
   },
 
   unreadDot: {
-    position: "absolute",
-    top: 10,
-    left: 10,
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: "#FF4D4D",
+    backgroundColor: "#D97732",
+  },
+
+  cardBody: {
+    flex: 1,
   },
 
   notifTitle: {
     fontSize: 14,
     fontWeight: "700",
-    color: "#0F1E17",
+    color: "#111827",
+  },
+
+  notifTitleUnread: {
+    fontWeight: "900",
   },
 
   notifBody: {
-    marginTop: 4,
+    marginTop: 5,
     fontSize: 13,
-    color: "#4F6F61",
+    lineHeight: 18,
+    color: "#6B7280",
   },
 
   deleteButton: {
-    backgroundColor: "#FF3B30",
+    backgroundColor: "#EF4444",
     justifyContent: "center",
     alignItems: "center",
-    width: 90,
-    marginVertical: 6,
-    borderRadius: 12,
+    width: 92,
+    marginVertical: 4,
+    borderRadius: 18,
   },
 
   deleteText: {
-    color: "#fff",
+    color: "#FFFFFF",
     fontWeight: "800",
+    fontSize: 13,
+  },
+
+  emptyWrap: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 26,
+  },
+
+  emptyTitle: {
+    marginTop: 16,
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#111827",
+    textAlign: "center",
+  },
+
+  emptySub: {
+    marginTop: 8,
+    fontSize: 14,
+    lineHeight: 20,
+    color: "#9CA3AF",
+    textAlign: "center",
   },
 })

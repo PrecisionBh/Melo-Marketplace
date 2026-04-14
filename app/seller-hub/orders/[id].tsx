@@ -83,6 +83,28 @@ type Order = {
 
 /* ---------------- HELPERS ---------------- */
 
+function generateTrackingUrl(carrier: string, trackingNumber: string) {
+  const c = carrier.toLowerCase()
+
+  if (c.includes("ups")) {
+    return `https://www.ups.com/track?tracknum=${trackingNumber}`
+  }
+
+  if (c.includes("usps")) {
+    return `https://tools.usps.com/go/TrackConfirmAction?tLabels=${trackingNumber}`
+  }
+
+  if (c.includes("fedex")) {
+    return `https://www.fedex.com/fedextrack/?trknbr=${trackingNumber}`
+  }
+
+  if (c.includes("dhl")) {
+    return `https://www.dhl.com/us-en/home/tracking/tracking-express.html?submit=1&tracking-id=${trackingNumber}`
+  }
+
+  return null
+}
+
 /* ---------------- SCREEN ---------------- */
 
 export default function SellerOrderDetailScreen() {
@@ -225,12 +247,15 @@ const submitTracking = async () => {
   try {
     setSaving(true)
 
-    const { error } = await supabase
-      .from("orders")
-      .update({
-        carrier,
-        tracking_number: tracking,
-        status: "shipped",
+    const trackingUrl = generateTrackingUrl(carrier, tracking)
+
+const { error } = await supabase
+  .from("orders")
+  .update({
+    carrier,
+    tracking_number: tracking.trim(),
+    tracking_url: trackingUrl,
+    status: "shipped",
         shipped_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
