@@ -1,6 +1,9 @@
 import { Ionicons } from "@expo/vector-icons"
-import { useRouter } from "expo-router"
-import React, { useState } from "react"
+import {
+    usePathname,
+    useRouter,
+} from "expo-router"
+import React from "react"
 import {
     StyleSheet,
     Text,
@@ -13,7 +16,10 @@ type GlobalFooterProps = {
   cartCount?: number
 }
 
-type IoniconName = React.ComponentProps<typeof Ionicons>["name"]
+type IoniconName =
+  React.ComponentProps<
+    typeof Ionicons
+  >["name"]
 
 const NAV_ITEMS: {
   path: string
@@ -57,52 +63,80 @@ export default function GlobalFooter({
   cartCount = 0,
 }: GlobalFooterProps) {
   const router = useRouter()
+  const pathname = usePathname()
   const insets = useSafeAreaInsets()
-  const [activeTab, setActiveTab] = useState("/")
 
   return (
     <View
       style={[
         styles.wrapper,
         {
-          paddingBottom: Math.max(insets.bottom, 8),
+          paddingBottom: Math.max(
+            insets.bottom,
+            8
+          ),
         },
       ]}
     >
       <View style={styles.inner}>
         {NAV_ITEMS.map((item) => {
-          const active = activeTab === item.path
+          const active =
+            pathname === item.path ||
+            pathname.startsWith(
+              item.path + "/"
+            )
 
           return (
             <TouchableOpacity
               key={item.path}
-              onPress={() => {
-                setActiveTab(item.path)
-                router.push(item.path as any)
-              }}
+              onPress={() =>
+                router.push(
+                  item.path as any
+                )
+              }
               activeOpacity={0.8}
               style={styles.navItem}
             >
               <View style={styles.iconWrap}>
                 <Ionicons
-                  name={active ? item.activeIcon : item.icon}
+                  name={
+                    active
+                      ? item.activeIcon
+                      : item.icon
+                  }
                   size={22}
-                  color={active ? "#D97732" : "#6B7280"}
+                  color={
+                    active
+                      ? "#D97732"
+                      : "#6B7280"
+                  }
                 />
 
-                {item.path === "/cart" && cartCount > 0 && (
-                  <View style={styles.cartBadge}>
-                    <Text style={styles.cartBadgeText}>
-                      {cartCount > 99 ? "99+" : cartCount}
-                    </Text>
-                  </View>
-                )}
+                {item.path === "/cart" &&
+                  cartCount > 0 && (
+                    <View
+                      style={
+                        styles.cartBadge
+                      }
+                    >
+                      <Text
+                        style={
+                          styles.cartBadgeText
+                        }
+                      >
+                        {cartCount > 99
+                          ? "99+"
+                          : cartCount}
+                      </Text>
+                    </View>
+                  )}
               </View>
 
               <Text
                 style={[
                   styles.label,
-                  active && styles.labelActive,
+                  active &&
+                    styles.labelActive,
                 ]}
               >
                 {item.label}
@@ -123,7 +157,8 @@ const styles = StyleSheet.create({
     bottom: 0,
     zIndex: 999,
     elevation: 20,
-    backgroundColor: "rgba(255,255,255,0.96)",
+    backgroundColor:
+      "rgba(255,255,255,0.96)",
     borderTopWidth: 1,
     borderTopColor: "#E5E7EB",
   },

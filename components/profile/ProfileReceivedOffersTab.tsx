@@ -185,61 +185,64 @@ export default function ProfileReceivedOffersTab() {
           offer.listings?.image_urls?.[0] ??
           "https://via.placeholder.com/150"
 
-        return (
-          <TouchableOpacity
-            key={offer.id}
-            activeOpacity={0.9}
-            style={styles.card}
-            onPress={() =>
-              router.push(`/seller-hub/offers/${offer.id}`)
-            }
-          >
-            <Image
-              source={{ uri: image }}
-              style={styles.image}
-            />
+       return (
+  <TouchableOpacity
+    key={offer.id}
+    activeOpacity={0.9}
+    style={styles.card}
+    onPress={() =>
+      router.push({
+        pathname: "/offers/[id]",
+        params: { id: String(offer.id) },
+      })
+    }
+  >
+    <Image
+      source={{ uri: image }}
+      style={styles.image}
+    />
 
-            <View style={styles.infoWrap}>
-              <Text
-                style={styles.title}
-                numberOfLines={2}
-              >
-                {offer.listings?.title || "Offer"}
-              </Text>
+    <View style={styles.infoWrap}>
+      <Text
+        style={styles.title}
+        numberOfLines={2}
+      >
+        {offer.listings?.title || "Offer"}
+      </Text>
 
-              <Text style={styles.amount}>
-                Offer: ${offer.current_amount.toFixed(2)}
-              </Text>
+      <Text style={styles.amount}>
+        Offer: ${offer.current_amount.toFixed(2)}
+      </Text>
 
-              <Text style={styles.meta}>
-                {getStatusText(offer)}
-                {offer.counter_count > 0 &&
-                  ` • ${offer.counter_count} counter${
-                    offer.counter_count === 1 ? "" : "s"
-                  }`}
-              </Text>
-            </View>
-
-            {derivedStatus === "sold" && (
-              <View style={styles.soldBadge}>
-                <Text style={styles.soldBadgeText}>
-                  ITEM SOLD
-                </Text>
-              </View>
-            )}
-
-            {derivedStatus === "expired" && (
-              <View style={styles.expiredBadge}>
-                <Text style={styles.expiredBadgeText}>
-                  OFFER EXPIRED
-                </Text>
-              </View>
-            )}
-          </TouchableOpacity>
-        )
-      })}
+      <Text style={styles.meta}>
+        {getStatusText(offer)}
+        {offer.counter_count > 0 &&
+          ` • ${offer.counter_count} counter${
+            offer.counter_count === 1 ? "" : "s"
+          }`}
+      </Text>
     </View>
-  )
+
+    {derivedStatus === "sold" && (
+      <View style={styles.soldBadge}>
+        <Text style={styles.soldBadgeText}>
+          ITEM SOLD
+        </Text>
+      </View>
+    )}
+
+    {derivedStatus === "expired" && (
+      <View style={styles.expiredBadge}>
+        <Text style={styles.expiredBadgeText}>
+          OFFER EXPIRED
+        </Text>
+      </View>
+    )}
+  </TouchableOpacity>
+)
+})}
+</View>
+)
 }
 
 const styles = StyleSheet.create({

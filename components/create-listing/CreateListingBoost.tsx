@@ -27,7 +27,9 @@ export default function CreateListingBoost({
   return (
     <View style={styles.wrap}>
       <View style={styles.headerRow}>
-        <Text style={styles.header}>Boost Listing</Text>
+        <Text style={styles.header}>
+          Boost Listing
+        </Text>
 
         <View style={styles.creditRow}>
           <Text style={styles.creditText}>
@@ -38,35 +40,55 @@ export default function CreateListingBoost({
             🚀 {megaCredits} Mega
           </Text>
 
-          <TouchableOpacity onPress={onBuyCredits}>
-            <Text style={styles.buyText}>Buy</Text>
+          <TouchableOpacity
+            onPress={onBuyCredits}
+          >
+            <Text style={styles.buyText}>
+              Buy
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
 
       <View style={styles.optionRow}>
         <BoostCard
-          active={selectedBoost === "none"}
+          active={
+            selectedBoost === "none"
+          }
           title="No Boost"
           sub="Standard listing placement"
-          onPress={() => setSelectedBoost("none")}
+          onPress={() =>
+            setSelectedBoost("none")
+          }
         />
 
         <BoostCard
-          active={selectedBoost === "boost"}
+          active={
+            selectedBoost === "boost"
+          }
           title="Boost"
           sub="3x more views for 7 days"
-          onPress={() => setSelectedBoost("boost")}
-          disabled={boostCredits <= 0}
+          onPress={() =>
+            setSelectedBoost("boost")
+          }
+          disabled={
+            boostCredits <= 0
+          }
           disabledText="No credits"
         />
 
         <BoostCard
-          active={selectedBoost === "mega"}
+          active={
+            selectedBoost === "mega"
+          }
           title="Mega Boost"
           sub="10x views + Enlarged listing for 14 days"
-          onPress={() => setSelectedBoost("mega")}
-          disabled={megaCredits <= 0}
+          onPress={() =>
+            setSelectedBoost("mega")
+          }
+          disabled={
+            megaCredits <= 0
+          }
           disabledText="No credits"
         />
       </View>
@@ -102,16 +124,25 @@ function BoostCard({
     <TouchableOpacity
       style={[
         styles.card,
-        active && styles.cardActive,
+        active &&
+          styles.cardActive,
       ]}
       onPress={onPress}
       activeOpacity={0.85}
+      disabled={disabled}
     >
-      <Text style={styles.cardTitle}>{title}</Text>
-      <Text style={styles.cardSub}>{sub}</Text>
+      <Text style={styles.cardTitle}>
+        {title}
+      </Text>
+
+      <Text style={styles.cardSub}>
+        {sub}
+      </Text>
 
       {disabled && (
-        <Text style={styles.disabledText}>
+        <Text
+          style={styles.disabledText}
+        >
           {disabledText}
         </Text>
       )}

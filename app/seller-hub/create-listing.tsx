@@ -382,7 +382,7 @@ return (
           }}
           boostCredits={boostsRemaining}
           megaCredits={megaBoostsRemaining}
-          onBuyCredits={() => router.push("/pro/packages")}
+          onBuyCredits={() => router.push("/boostcredits")}
           onPublish={handleCreateListing}
         />
       </ScrollView>

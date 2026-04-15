@@ -157,3 +157,36 @@ entrypoint = "./functions/grant-purchase/index.ts"
 # Specifies static files to be bundled with the function. Supports glob patterns.
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/grant-purchase/*.html" ]
+
+[functions.backfill-easypost-trackers]
+enabled = true
+verify_jwt = true
+import_map = "./functions/backfill-easypost-trackers/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/backfill-easypost-trackers/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/backfill-easypost-trackers/*.html" ]
+
+[functions.create-easypost-tracker]
+enabled = true
+verify_jwt = true
+import_map = "./functions/create-easypost-tracker/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/create-easypost-tracker/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/create-easypost-tracker/*.html" ]
+
+[functions.create-return-easypost-tracker]
+enabled = true
+verify_jwt = true
+import_map = "./functions/create-return-easypost-tracker/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/create-return-easypost-tracker/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/create-return-easypost-tracker/*.html" ]

@@ -1,7 +1,10 @@
 import { Ionicons } from "@expo/vector-icons"
+import * as ImageManipulator from "expo-image-manipulator"
+import * as ImagePicker from "expo-image-picker"
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { useEffect, useRef, useState } from "react"
 import {
+  Alert,
   FlatList,
   Image,
   KeyboardAvoidingView,
@@ -14,7 +17,6 @@ import {
 } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
-import GlobalFooter from "@/components/global/globalfooter"
 import GlobalHeader from "@/components/global/globalheader"
 import { useAuth } from "../../context/AuthContext"
 import { handleAppError } from "../../lib/errors/appError"
@@ -22,7 +24,8 @@ import { supabase } from "../../lib/supabase"
 
 type Message = {
   id: string
-  body: string
+  body: string | null
+  image_url?: string | null
   sender_id: string
   created_at: string
   read_at: string | null
@@ -52,6 +55,7 @@ export default function ChatScreen() {
   const [text, setText] = useState("")
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
+  const [uploadingImage, setUploadingImage] = useState(false)
 
   const [isOtherTyping, setIsOtherTyping] = useState(false)
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -134,10 +138,10 @@ export default function ChatScreen() {
       if (!conversationId) return
 
       const { data, error } = await supabase
-        .from("messages")
-        .select("id, body, sender_id, created_at, read_at, listing_id")
-        .eq("conversation_id", conversationId)
-        .order("created_at", { ascending: true })
+  .from("messages")
+  .select("id, body, image_url, sender_id, created_at, read_at, listing_id")
+  .eq("conversation_id", conversationId)
+  .order("created_at", { ascending: true })
 
       if (error) throw error
 
@@ -360,43 +364,26 @@ const sendMessage = async () => {
   console.log("🚀 sendMessage CALLED")
   console.log("🚀 sendMessage TRIGGERED")
 
-  if (sending) {
-    console.log("⛔ blocked — already sending")
-    return
-  }
-
-  if (!text.trim()) {
-    console.log("⛔ blocked — empty text")
-    return
-  }
-
-  if (!session?.user) {
-    console.log("⛔ blocked — no session")
-    return
-  }
-
-  if (!conversationId) {
-    console.log("⛔ blocked — no conversationId")
-    return
-  }
+  if (sending) return
+  if (!text.trim()) return
+  if (!session?.user) return
+  if (!conversationId) return
 
   setSending(true)
 
   const message = text.trim()
-  console.log("✉️ Sending message:", message)
 
   const messageListingId =
     messages.length === 0 && initialListingId
       ? initialListingId
       : null
 
-  console.log("📦 listing attached:", messageListingId)
-
   const tempId = `temp-${Date.now()}`
 
   const tempMessage: Message = {
     id: tempId,
     body: message,
+    image_url: null,
     sender_id: session.user.id,
     created_at: new Date().toISOString(),
     read_at: null,
@@ -419,65 +406,38 @@ const sendMessage = async () => {
   setText("")
 
   try {
-    console.log("📤 INSERTING MESSAGE INTO DB")
-
     const { data, error } = await supabase
       .from("messages")
       .insert({
         conversation_id: conversationId,
         sender_id: session.user.id,
         body: message,
+        image_url: null,
         listing_id: messageListingId,
       })
       .select()
 
-    console.log("🔥 INSERT RESULT:", data, error)
-
-    if (error) {
-      console.log("❌ INSERT ERROR:", error)
-      throw error
-    }
-
-    if (!data || data.length === 0) {
-      console.log("❌ NO DATA RETURNED FROM INSERT")
-      return
-    }
+    if (error) throw error
+    if (!data?.length) return
 
     const realMessageId = data[0].id
-    console.log("✅ Message inserted with ID:", realMessageId)
 
-    /* ---------------- NOTIFICATION ---------------- */
-
-    console.log("🔍 Fetching conversation for notification")
-
-    const { data: convo, error: convoError } = await supabase
+    const { data: convo } = await supabase
       .from("conversations")
       .select("user_one, user_two")
       .eq("id", conversationId)
       .single()
 
-    console.log("📦 convo result:", convo, convoError)
-
-    if (convoError || !convo) {
-      console.log("❌ convo fetch failed:", convoError)
-      return
-    }
+    if (!convo) return
 
     const recipientId =
       convo.user_one === session.user.id
         ? convo.user_two
         : convo.user_one
 
-    console.log("🎯 recipientId:", recipientId)
+    if (!recipientId) return
 
-    if (!recipientId) {
-      console.log("❌ no recipientId — abort")
-      return
-    }
-
-    console.log("📡 INVOKING FUNCTION send-notification")
-
-    const res = await supabase.functions.invoke("send-notification", {
+    await supabase.functions.invoke("send-notification", {
       body: {
         userId: recipientId,
         type: "message",
@@ -490,16 +450,11 @@ const sendMessage = async () => {
         dedupeKey: realMessageId,
       },
     })
-
-    console.log("🔥 FUNCTION RESPONSE:", res)
   } catch (err) {
-    console.log("💥 SEND MESSAGE ERROR:", err)
-
     handleAppError(err, {
       fallbackMessage: "Message failed to send.",
     })
   } finally {
-    console.log("🔓 sendMessage FINISHED")
     setSending(false)
   }
 }
@@ -515,6 +470,210 @@ const broadcastTyping = async () => {
       userId: session.user.id,
     },
   })
+}
+
+const uploadChatImage = async (localUri: string) => {
+  if (!session?.user) throw new Error("No session user")
+  if (!conversationId) throw new Error("No conversationId")
+
+  const response = await fetch(localUri)
+  const arrayBuffer = await response.arrayBuffer()
+
+  const fileExtMatch = localUri.match(/\.(\w+)$/)
+  const fileExt = fileExtMatch ? fileExtMatch[1].toLowerCase() : "jpg"
+
+  const normalizedExt =
+    fileExt === "jpg" || fileExt === "jpeg"
+      ? "jpeg"
+      : fileExt === "png"
+      ? "png"
+      : "jpeg"
+
+  const fileName = `${Date.now()}-${Math.random()
+    .toString(36)
+    .substring(2, 9)}.${normalizedExt}`
+
+  const filePath = `${conversationId}/${session.user.id}/${fileName}`
+
+  const { data, error } = await supabase.storage
+    .from("chat-images")
+    .upload(filePath, arrayBuffer, {
+      contentType: `image/${normalizedExt}`,
+      upsert: false,
+    })
+
+  if (error) throw error
+
+  return data.path
+}
+
+const sendImageMessage = async (localUri: string) => {
+  if (sending || uploadingImage) return
+  if (!session?.user) return
+  if (!conversationId) return
+
+  setUploadingImage(true)
+
+  const messageListingId =
+    messages.length === 0 && initialListingId
+      ? initialListingId
+      : null
+
+  const tempId = `temp-image-${Date.now()}`
+
+  const tempMessage: Message = {
+    id: tempId,
+    body: "",
+    image_url: localUri,
+    sender_id: session.user.id,
+    created_at: new Date().toISOString(),
+    read_at: null,
+    listing_id: messageListingId,
+  }
+
+  setMessages((prev) => [...prev, tempMessage])
+
+  setTimeout(() => {
+    flatListRef.current?.scrollToEnd({ animated: true })
+  }, 50)
+
+  try {
+    const filePath = await uploadChatImage(localUri)
+
+    const payload = {
+      conversation_id: conversationId,
+      sender_id: session.user.id,
+      body: "",
+      image_url: filePath,
+      listing_id: messageListingId,
+    }
+
+    console.log("📤 IMAGE MESSAGE PAYLOAD:", payload)
+
+    const { data, error } = await supabase
+      .from("messages")
+      .insert(payload)
+      .select()
+
+    if (error) throw error
+    if (!data?.length) {
+      throw new Error("No message returned after image send.")
+    }
+
+    const realMessageId = data[0].id
+
+   setMessages((prev) =>
+  prev.map((m) =>
+    m.id === tempId
+      ? data[0]
+      : m
+  )
+)
+
+    const { data: convo } = await supabase
+      .from("conversations")
+      .select("user_one, user_two")
+      .eq("id", conversationId)
+      .single()
+
+    if (!convo) {
+      throw new Error("Conversation not found")
+    }
+
+    const recipientId =
+      convo.user_one === session.user.id
+        ? convo.user_two
+        : convo.user_one
+
+    if (recipientId) {
+      await supabase.functions.invoke("send-notification", {
+        body: {
+          userId: recipientId,
+          type: "message",
+          title: "New image",
+          body: "Sent you a photo",
+          data: {
+            route: "/messages/[id]",
+            params: { id: conversationId },
+          },
+          dedupeKey: realMessageId,
+        },
+      })
+    }
+  } catch (err) {
+    handleAppError(err, {
+      fallbackMessage: "Image failed to send.",
+    })
+  } finally {
+    setUploadingImage(false)
+  }
+}
+
+const pickChatImage = async () => {
+  try {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      quality: 0.35,
+      allowsMultipleSelection: false,
+      selectionLimit: 1,
+    })
+
+    if (!result.canceled && result.assets?.length > 0) {
+      const asset = result.assets[0]
+
+      const converted = await ImageManipulator.manipulateAsync(
+        asset.uri,
+        [{ resize: { width: 1200 } }],
+        {
+          compress: 0.25,
+          format: ImageManipulator.SaveFormat.JPEG,
+        }
+      )
+
+      await sendImageMessage(converted.uri)
+    }
+  } catch (err) {
+    handleAppError(err, {
+      context: "chat_image_picker",
+      fallbackMessage: "Could not select image.",
+    })
+  }
+}
+
+const takeChatPhoto = async () => {
+  try {
+    const permission = await ImagePicker.requestCameraPermissionsAsync()
+
+    if (!permission.granted) {
+      Alert.alert("Permission required", "Enable camera access.")
+      return
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ["images"],
+      quality: 0.35,
+    })
+
+    if (!result.canceled && result.assets?.length > 0) {
+      const asset = result.assets[0]
+
+      const converted = await ImageManipulator.manipulateAsync(
+        asset.uri,
+        [{ resize: { width: 1200 } }],
+        {
+          compress: 0.25,
+          format: ImageManipulator.SaveFormat.JPEG,
+        }
+      )
+
+      await sendImageMessage(converted.uri)
+    }
+  } catch (err) {
+    handleAppError(err, {
+      context: "chat_image_camera",
+      fallbackMessage: "Could not take photo.",
+    })
+  }
 }
 
 /* ---------------- HELPERS ---------------- */
@@ -646,129 +805,148 @@ const renderItem = ({
 
       {/* MESSAGE BUBBLE */}
       <View
-        style={[
-          styles.bubble,
-          isMe ? styles.myBubble : styles.theirBubble,
-        ]}
-      >
-        <Text
-          style={[
-            styles.bubbleText,
-            isMe && styles.myBubbleText,
-          ]}
-        >
-          {item.body}
-        </Text>
+  style={[
+    styles.bubble,
+    item.image_url
+      ? styles.imageBubble
+      : isMe
+      ? styles.myBubble
+      : styles.theirBubble,
+  ]}
+>
+  {item.image_url ? (
+    <Image
+      source={{
+        uri: item.image_url.startsWith("http")
+          ? item.image_url
+          : supabase.storage
+              .from("chat-images")
+              .getPublicUrl(item.image_url).data.publicUrl,
+      }}
+      style={styles.chatImage}
+    />
+  ) : (
+    <Text
+      style={[
+        styles.bubbleText,
+        isMe && styles.myBubbleText,
+      ]}
+    >
+      {item.body}
+    </Text>
+  )}
 
-        {isMe && (
-          <Text style={styles.meta}>
-            {item.read_at ? "Seen" : "Sent"}
-          </Text>
-        )}
-      </View>
+  {isMe && (
+    <Text style={styles.meta}>
+      {item.read_at ? "Seen" : "Sent"}
+    </Text>
+  )}
+</View>
     </View>
   )
 }
 
 return (
-  <View style={styles.screen}>
-    <GlobalHeader />
+  <KeyboardAvoidingView
+    style={styles.screen}
+    behavior={Platform.OS === "ios" ? "padding" : "height"}
+    keyboardVerticalOffset={0}
+  >
+    <View style={styles.screen}>
+      <GlobalHeader />
 
-    <View style={styles.chatHeaderRow}>
-      <TouchableOpacity
-        onPress={() => router.back()}
-        style={styles.backBtn}
-        activeOpacity={0.8}
-      >
-        <Ionicons name="arrow-back" size={20} color="#111" />
-      </TouchableOpacity>
+      <View style={styles.chatHeaderRow}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={styles.backBtn}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="arrow-back" size={20} color="#111" />
+        </TouchableOpacity>
 
-      {otherUserAvatar ? (
-        <Image
-          source={{ uri: otherUserAvatar }}
-          style={styles.chatAvatar}
-        />
-      ) : (
-        <Image
-          source={require("../../assets/images/avatar-placeholder.png")}
-          style={styles.chatAvatar}
-        />
-      )}
+        {otherUserAvatar ? (
+          <Image
+            source={{ uri: otherUserAvatar }}
+            style={styles.chatAvatar}
+          />
+        ) : (
+          <Image
+            source={require("../../assets/images/avatar-placeholder.png")}
+            style={styles.chatAvatar}
+          />
+        )}
 
-      <View style={{ flex: 1 }}>
-        <Text style={styles.chatName}>{otherUserName}</Text>
-        <Text style={styles.chatSub}>
-          {initialListingId ? "Re: Listing" : "Conversation"}
-        </Text>
-      </View>
-    </View>
-
-    {/* CHAT LIST */}
-    <FlatList
-      ref={flatListRef}
-      data={messages}
-      keyExtractor={(item) => item.id}
-      renderItem={renderItem}
-      contentContainerStyle={styles.list}
-      keyboardShouldPersistTaps="handled"
-      onContentSizeChange={() =>
-        flatListRef.current?.scrollToEnd({ animated: true })
-      }
-    />
-
-    {/* TYPING */}
-    {isOtherTyping && (
-      <View style={styles.typingFloating}>
-        <View style={styles.typingBubble}>
-          <Text style={styles.typingText}>
-            {otherUserName} is typing...
+        <View style={{ flex: 1 }}>
+          <Text style={styles.chatName}>{otherUserName}</Text>
+          <Text style={styles.chatSub}>
+            {initialListingId ? "Re: Listing" : "Conversation"}
           </Text>
         </View>
       </View>
-    )}
 
-    {/* INPUT */}
-    <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={0}
-    >
-      <View
-        style={[
-          styles.inputRow,
-          {
-            bottom: insets.bottom + 70,
-          },
-        ]}
-      >
-        <TextInput
-          value={text}
-          onChangeText={(val) => {
-            setText(val)
-            broadcastTyping()
-          }}
-          placeholder="Message..."
-          style={styles.input}
-          multiline
-        />
+      <FlatList
+        ref={flatListRef}
+        data={messages}
+        keyExtractor={(item) => item.id}
+        renderItem={renderItem}
+        style={styles.listFlex}
+        contentContainerStyle={styles.list}
+        keyboardShouldPersistTaps="handled"
+        onContentSizeChange={() =>
+          flatListRef.current?.scrollToEnd({ animated: true })
+        }
+      />
 
-        <TouchableOpacity
-          onPress={sendMessage}
-          style={styles.sendBtn}
-        >
-          <Ionicons
-            name="send"
-            size={18}
-            color="#fff"
-          />
-        </TouchableOpacity>
-      </View>
-    </KeyboardAvoidingView>
+      {isOtherTyping && (
+        <View style={styles.typingWrap}>
+          <View style={styles.typingBubble}>
+            <Text style={styles.typingText}>
+              {otherUserName} is typing...
+            </Text>
+          </View>
+        </View>
+      )}
 
-    {/* FOOTER */}
-    <View style={styles.footerWrap}>
-      <GlobalFooter />
+      <View style={styles.inputRow}>
+  <TouchableOpacity
+    onPress={takeChatPhoto}
+    style={styles.iconBtn}
+    disabled={uploadingImage}
+  >
+    <Ionicons name="camera-outline" size={22} color="#111" />
+  </TouchableOpacity>
+
+  <TouchableOpacity
+    onPress={pickChatImage}
+    style={styles.iconBtn}
+    disabled={uploadingImage}
+  >
+    <Ionicons name="image-outline" size={22} color="#111" />
+  </TouchableOpacity>
+
+  <TextInput
+    value={text}
+    onChangeText={(val) => {
+      setText(val)
+      broadcastTyping()
+    }}
+    placeholder={uploadingImage ? "Uploading image..." : "Message..."}
+    style={styles.input}
+    multiline
+    textAlignVertical="top"
+    editable={!uploadingImage}
+  />
+
+  <TouchableOpacity
+    onPress={sendMessage}
+    style={styles.sendBtn}
+    disabled={uploadingImage}
+  >
+    <Ionicons name="send" size={18} color="#fff" />
+  </TouchableOpacity>
+</View>
     </View>
-  </View>
+  </KeyboardAvoidingView>
 )
 }
 
@@ -777,8 +955,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#F8F8F8",
   },
-
-  /* ---------------- CHAT SUB HEADER ---------------- */
 
   chatHeaderRow: {
     flexDirection: "row",
@@ -813,15 +989,15 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
-  /* ---------------- MESSAGE LIST ---------------- */
+  listFlex: {
+    flex: 1,
+  },
 
   list: {
     paddingTop: 12,
     paddingHorizontal: 12,
-    paddingBottom: 140,
+    paddingBottom: 12,
   },
-
-  /* ---------------- PRODUCT CARD ---------------- */
 
   productCard: {
     flexDirection: "row",
@@ -872,14 +1048,23 @@ const styles = StyleSheet.create({
     color: "#D97732",
   },
 
-  /* ---------------- MESSAGE BUBBLES ---------------- */
-
   bubble: {
-    maxWidth: "80%",
-    padding: 10,
-    borderRadius: 14,
-    marginBottom: 10,
-  },
+  maxWidth: "80%",
+  padding: 10,
+  borderRadius: 14,
+  marginBottom: 10,
+},
+
+imageBubble: {
+  maxWidth: "80%",
+  padding: 4,
+  borderRadius: 16,
+  marginBottom: 10,
+  overflow: "hidden",
+  backgroundColor: "#FFFFFF",
+  borderWidth: 1,
+  borderColor: "#E8E8E8",
+},
 
   myBubble: {
     alignSelf: "flex-end",
@@ -909,17 +1094,12 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
 
-  /* ---------------- INPUT ---------------- */
-
   inputRow: {
-    position: "absolute",
-    left: 0,
-    right: 0,
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-end",
     paddingHorizontal: 10,
     paddingTop: 10,
-    paddingBottom: 10,
+    paddingBottom: 60,
     borderTopWidth: 1,
     borderTopColor: "#E8E8E8",
     backgroundColor: "#F8F8F8",
@@ -938,6 +1118,22 @@ const styles = StyleSheet.create({
     borderColor: "#E8E8E8",
   },
 
+  iconBtn: {
+  width: 38,
+  height: 38,
+  borderRadius: 19,
+  alignItems: "center",
+  justifyContent: "center",
+  marginRight: 6,
+},
+
+chatImage: {
+  width: 220,
+  height: 220,
+  borderRadius: 12,
+  resizeMode: "cover",
+},
+
   sendBtn: {
     marginLeft: 8,
     width: 42,
@@ -947,8 +1143,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-
-  /* ---------------- DATE / TIME ---------------- */
 
   dateHeaderContainer: {
     alignItems: "center",
@@ -981,13 +1175,10 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 
-  /* ---------------- TYPING ---------------- */
-
-  typingFloating: {
-    position: "absolute",
-    left: 16,
-    right: 16,
-    bottom: 130,
+  typingWrap: {
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+    backgroundColor: "#F8F8F8",
   },
 
   typingBubble: {
@@ -1006,14 +1197,5 @@ const styles = StyleSheet.create({
     color: "#777",
     fontStyle: "italic",
     fontWeight: "500",
-  },
-
-  /* ---------------- FOOTER ---------------- */
-
-  footerWrap: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
   },
 })

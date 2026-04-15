@@ -18,6 +18,7 @@ import ListingHeroCard from "@/components/listing-v2/ListingHeroCard"
 import ListingImageGallery from "@/components/listing-v2/ListingImageGallery"
 import ListingMetaSection from "@/components/listing-v2/ListingMetaSection"
 import ListingPurchaseActions from "@/components/listing-v2/ListingPurchaseActions"
+import OwnerListingActions from "@/components/listing-v2/OwnerListingActions"
 import SellerProfileCard from "@/components/listing-v2/SellerProfileCard"
 
 import { useAuth } from "../../context/AuthContext"
@@ -38,6 +39,7 @@ type Listing = {
   shipping_type: "free" | "buyer_pays"
   shipping_price: number | null
   quantity_available: number
+  status: string
 }
 
 export default function ListingDetailScreen() {
@@ -130,7 +132,8 @@ const [offerMessage, setOfferMessage] =
           allow_offers,
           shipping_type,
           shipping_price,
-          quantity_available
+          quantity_available,
+          status
         `
         )
         .eq("id", id)
@@ -443,28 +446,37 @@ setIsSellerPro(!!data?.is_pro)
         return
       }
 
-      const { error } =
-        await supabase
-          .from("offers")
-          .insert({
-            listing_id: listing.id,
-            buyer_id: session!.user.id,
-            seller_id: listing.user_id,
-            amount: parsed,
-            message:
-              offerMessage.trim() || null,
-            status: "pending",
-          })
+      const { data: newOffer, error } =
+  await supabase
+    .from("offers")
+    .insert({
+      listing_id: listing.id,
+      buyer_id: session!.user.id,
+      seller_id: listing.user_id,
 
-      if (error) throw error
+      current_amount: parsed,
+      quantity: quantity,
+      counter_count: 0,
+      last_actor: "buyer",
 
-      Alert.alert(
-        "Offer Sent",
-        "Your offer has been submitted."
-      )
+      message:
+        offerMessage.trim() || null,
 
-      setOfferAmount("")
-      setOfferMessage("")
+      status: "pending",
+    })
+    .select("id")
+    .single()
+
+if (error) throw error
+
+setOfferAmount("")
+setOfferMessage("")
+
+router.push({
+  pathname: "/offers/[id]",
+  params: { id: String(newOffer.id) },
+})
+
     } catch (err) {
       handleAppError(err, {
         fallbackMessage:
@@ -554,6 +566,151 @@ setIsSellerPro(!!data?.is_pro)
     })
   }
 
+  const toggleListingActive = async () => {
+  if (!listing) return
+
+  try {
+    const nextStatus =
+      listing.status === "active"
+        ? "inactive"
+        : "active"
+
+    const { error } = await supabase
+      .from("listings")
+      .update({
+        status: nextStatus,
+      })
+      .eq("id", listing.id)
+
+    if (error) throw error
+
+    setListing((prev) =>
+      prev
+        ? {
+            ...prev,
+            status: nextStatus,
+          }
+        : prev
+    )
+  } catch (err) {
+    handleAppError(err, {
+      fallbackMessage:
+        "Failed to update listing status.",
+    })
+  }
+}
+
+const duplicateListing = async () => {
+  if (!listing || !session?.user) return
+
+  try {
+    const newQuantity =
+      listing.quantity_available || 1
+
+    const { data: newListing, error } =
+      await supabase
+        .from("listings")
+        .insert({
+          user_id: session.user.id,
+
+          title: listing.title,
+          description:
+            listing.description || null,
+
+          sport_type: "billiards",
+          brand:
+            listing.brand ||
+            "precision",
+
+          category:
+            listing.category || null,
+
+          condition:
+            listing.condition || null,
+
+          price: listing.price,
+
+          allow_offers:
+            listing.allow_offers,
+
+          shipping_type:
+            listing.shipping_type,
+
+          shipping_price:
+            listing.shipping_price ||
+            0,
+
+          image_urls:
+            listing.image_urls || [],
+
+          status: "active",
+          is_sold: false,
+
+          is_boosted: false,
+          boost_expires_at: null,
+          is_mega_boost: false,
+          mega_boost_expires_at: null,
+
+          quantity: newQuantity,
+          quantity_available:
+            newQuantity,
+
+          created_at:
+            new Date().toISOString(),
+        })
+        .select()
+        .single()
+
+    if (error) throw error
+
+    router.push(
+      `/edit-listing/${newListing.id}`
+    )
+  } catch (err) {
+    handleAppError(err, {
+      fallbackMessage:
+        "Failed to duplicate listing.",
+    })
+  }
+}
+
+const deleteListing = () => {
+  if (!listing) return
+
+  Alert.alert(
+    "Delete Listing",
+    "Are you sure you want to permanently delete this listing?",
+    [
+      {
+        text: "Cancel",
+        style: "cancel",
+      },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            const { error } =
+              await supabase
+                .from("listings")
+                .delete()
+                .eq("id", listing.id)
+
+            if (error) throw error
+
+            router.replace("/profile")
+          } catch (err) {
+            handleAppError(err, {
+              fallbackMessage:
+                "Failed to delete listing.",
+            })
+          }
+        },
+      },
+    ]
+  )
+}
+
   if (loading) {
     return (
       <View style={styles.center}>
@@ -569,6 +726,7 @@ setIsSellerPro(!!data?.is_pro)
       </View>
     )
   }
+  
 
   const isSeller =
     session?.user?.id === listing.user_id
@@ -624,38 +782,50 @@ setIsSellerPro(!!data?.is_pro)
   description={listing.description}
 />
 
-        <ListingPurchaseActions
-  isSeller={isSeller}
-  allowOffers={listing.allow_offers}
-
-  quantity={quantity}
-  setQuantity={setQuantity}
-  maxQuantity={
-    Math.max(
+       {isSeller ? (
+  <OwnerListingActions
+    isActive={listing.status === "active"}
+    onEdit={() =>
+      router.push(
+        `/edit-listing/${listing.id}`
+      )
+    }
+    onDuplicate={() =>
+      duplicateListing()
+    }
+    onToggleActive={() =>
+      toggleListingActive()
+    }
+    onDelete={() =>
+      deleteListing()
+    }
+  />
+) : (
+  <ListingPurchaseActions
+    isSeller={false}
+    allowOffers={listing.allow_offers}
+    quantity={quantity}
+    setQuantity={setQuantity}
+    maxQuantity={Math.max(
       1,
       listing.quantity_available ?? 1
-    )
-  }
-
-  following={following}
-  onToggleFollow={toggleFollow}
-
-  offerAmount={offerAmount}
-  setOfferAmount={setOfferAmount}
-
-  offerMessage={offerMessage}
-  setOfferMessage={setOfferMessage}
-
-  onBuyNow={handleBuyNow}
-  onAddToCart={handleAddToCart}
-  onMakeOffer={handleMakeOffer}
-
-  onMessageSeller={() =>
-    requireAuth(() =>
-      handleMessageSeller()
-    )
-  }
-/>
+    )}
+    following={following}
+    onToggleFollow={toggleFollow}
+    offerAmount={offerAmount}
+    setOfferAmount={setOfferAmount}
+    offerMessage={offerMessage}
+    setOfferMessage={setOfferMessage}
+    onBuyNow={handleBuyNow}
+    onAddToCart={handleAddToCart}
+    onMakeOffer={handleMakeOffer}
+    onMessageSeller={() =>
+      requireAuth(() =>
+        handleMessageSeller()
+      )
+    }
+  />
+)}
       </ScrollView>
 
       <GlobalFooter />

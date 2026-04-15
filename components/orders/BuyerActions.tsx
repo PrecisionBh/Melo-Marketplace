@@ -8,9 +8,13 @@ import {
 export default function BuyerActions({
   order,
   refreshOrder,
+  onConfirmDelivery,
+  onStartReturn,
 }: {
   order: any
   refreshOrder?: () => void
+  onConfirmDelivery?: () => void
+  onStartReturn?: () => void
 }) {
   const status = order.status
 
@@ -27,10 +31,13 @@ export default function BuyerActions({
       )
     : null
 
+  const isDelivered =
+    order.tracking_status === "delivered"
+
   const returnWindowActive =
     returnDeadline &&
     now < returnDeadline &&
-    status === "delivered"
+    isDelivered
 
   const hoursRemaining = returnDeadline
     ? Math.max(
@@ -64,9 +71,7 @@ export default function BuyerActions({
 
           <TouchableOpacity
             style={styles.primaryBtn}
-            onPress={() =>
-              console.log("Confirm Order")
-            }
+            onPress={onConfirmDelivery}
           >
             <Text style={styles.primaryText}>
               Confirm Delivery / Complete Order
@@ -75,9 +80,7 @@ export default function BuyerActions({
 
           <TouchableOpacity
             style={styles.secondaryBtn}
-            onPress={() =>
-              console.log("Start Return")
-            }
+            onPress={onStartReturn}
           >
             <Text style={styles.secondaryText}>
               Start Return

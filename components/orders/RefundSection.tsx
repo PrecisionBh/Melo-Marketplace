@@ -8,9 +8,11 @@ import {
 export default function RefundSection({
   order,
   refreshOrder,
+  onRefund,
 }: {
   order: any
   refreshOrder?: () => void
+  onRefund?: () => void
 }) {
   return (
     <View style={styles.card}>
@@ -32,9 +34,7 @@ export default function RefundSection({
 
       <TouchableOpacity
         style={styles.refundBtn}
-        onPress={() =>
-          console.log("Confirm Return + Refund")
-        }
+        onPress={onRefund}
       >
         <Text style={styles.refundText}>
           Confirm Return & Refund Buyer

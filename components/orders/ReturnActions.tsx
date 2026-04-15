@@ -1,6 +1,13 @@
+import { useAuth } from "@/context/AuthContext"
+import { handleAppError } from "@/lib/errors/appError"
+import { supabase } from "@/lib/supabase"
+
+import { useState } from "react"
 import {
+    Linking,
     StyleSheet,
     Text,
+    TextInput,
     TouchableOpacity,
     View,
 } from "react-native"
@@ -8,15 +15,75 @@ import {
 export default function ReturnActions({
   order,
   refreshOrder,
+  onCancelReturn,
 }: {
   order: any
   refreshOrder?: () => void
+  onCancelReturn?: () => void
 }) {
+  const { session } = useAuth()
+
   const hasReturnTracking =
     !!order.return_tracking_number
 
   const isProcessing =
     order.status === "return_processing"
+
+  const [showTrackingForm, setShowTrackingForm] =
+    useState(false)
+
+  const [carrier, setCarrier] = useState(
+    order.return_carrier || "UPS"
+  )
+
+  const [trackingNumber, setTrackingNumber] =
+    useState(order.return_tracking_number || "")
+
+  const [saving, setSaving] = useState(false)
+
+  const uploadReturnTracking = async () => {
+    if (!trackingNumber.trim()) return
+
+    try {
+      setSaving(true)
+
+      const { error } =
+        await supabase.functions.invoke(
+          "create-return-easypost-tracker",
+          {
+            body: {
+              orderId: order.id,
+              carrier,
+              trackingNumber:
+                trackingNumber.trim(),
+              userId:
+                session?.user?.id,
+            },
+          }
+        )
+
+      if (error) throw error
+
+      setShowTrackingForm(false)
+
+      await refreshOrder?.()
+    } catch (err) {
+      handleAppError(err, {
+        fallbackMessage:
+          "Failed to upload return tracking.",
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const trackReturnPackage = async () => {
+    if (!order.return_tracking_url) return
+
+    await Linking.openURL(
+      order.return_tracking_url
+    )
+  }
 
   return (
     <View style={styles.card}>
@@ -39,9 +106,7 @@ export default function ReturnActions({
       {hasReturnTracking && (
         <TouchableOpacity
           style={styles.primaryBtn}
-          onPress={() =>
-            console.log("Track Return Package")
-          }
+          onPress={trackReturnPackage}
         >
           <Text style={styles.primaryText}>
             Track Return Package
@@ -49,27 +114,105 @@ export default function ReturnActions({
         </TouchableOpacity>
       )}
 
-      {!hasReturnTracking && (
-        <TouchableOpacity
-          style={styles.secondaryBtn}
-          onPress={() =>
-            console.log("Upload Return Tracking")
-          }
-        >
-          <Text style={styles.secondaryText}>
-            Upload Return Tracking
+      {!hasReturnTracking &&
+        !showTrackingForm && (
+          <>
+            <TouchableOpacity
+              style={styles.secondaryBtn}
+              onPress={() =>
+                setShowTrackingForm(true)
+              }
+            >
+              <Text
+                style={styles.secondaryText}
+              >
+                Upload Return Tracking
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.cancelBtn}
+              onPress={onCancelReturn}
+            >
+              <Text style={styles.cancelText}>
+                Cancel Return
+              </Text>
+            </TouchableOpacity>
+          </>
+        )}
+
+      {showTrackingForm && (
+        <>
+          <Text style={styles.label}>
+            Select Carrier
           </Text>
-        </TouchableOpacity>
+
+          <View style={styles.carrierRow}>
+            {[
+              "UPS",
+              "USPS",
+              "FedEx",
+              "DHL",
+            ].map((c) => (
+              <TouchableOpacity
+                key={c}
+                style={[
+                  styles.carrierPill,
+                  carrier === c &&
+                    styles.carrierPillActive,
+                ]}
+                onPress={() =>
+                  setCarrier(c)
+                }
+              >
+                <Text
+                  style={[
+                    styles.carrierText,
+                    carrier === c &&
+                      styles
+                        .carrierTextActive,
+                  ]}
+                >
+                  {c}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <TextInput
+            style={styles.input}
+            placeholder="Return Tracking Number"
+            value={trackingNumber}
+            onChangeText={setTrackingNumber}
+          />
+
+          <TouchableOpacity
+            style={styles.submitBtn}
+            onPress={uploadReturnTracking}
+            disabled={saving}
+          >
+            <Text style={styles.submitText}>
+              {saving
+                ? "Saving..."
+                : "Submit Return Tracking"}
+            </Text>
+          </TouchableOpacity>
+        </>
       )}
 
       {isProcessing && (
         <View style={styles.processingBox}>
-          <Text style={styles.processingTitle}>
+          <Text
+            style={styles.processingTitle}
+          >
             Processing Return
           </Text>
 
-          <Text style={styles.processingSub}>
-            Seller is reviewing the returned item.
+          <Text
+            style={styles.processingSub}
+          >
+            Seller is reviewing the
+            returned item.
           </Text>
         </View>
       )}
@@ -144,6 +287,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 
+  cancelBtn: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    paddingVertical: 14,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#DC2626",
+  },
+
+  cancelText: {
+    color: "#DC2626",
+    fontWeight: "800",
+    fontSize: 14,
+  },
+
   processingBox: {
     backgroundColor: "#FEF2F2",
     borderRadius: 16,
@@ -161,5 +319,62 @@ const styles = StyleSheet.create({
   processingSub: {
     fontSize: 13,
     color: "#991B1B",
+  },
+
+  label: {
+    fontSize: 13,
+    fontWeight: "700",
+    marginBottom: 8,
+    color: "#111",
+  },
+
+  carrierRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 14,
+  },
+
+  carrierPill: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    backgroundColor: "#F3F4F6",
+  },
+
+  carrierPillActive: {
+    backgroundColor: "#D97732",
+  },
+
+  carrierText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#333",
+  },
+
+  carrierTextActive: {
+    color: "#fff",
+  },
+
+  input: {
+    backgroundColor: "#F9FAFB",
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+
+  submitBtn: {
+    backgroundColor: "#D97732",
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: "center",
+  },
+
+  submitText: {
+    color: "#fff",
+    fontWeight: "800",
+    fontSize: 14,
   },
 })

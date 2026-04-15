@@ -8,9 +8,13 @@ import {
 export default function SellerShippingActions({
   order,
   refreshOrder,
+  onAddTracking,
+  onCancelOrder,
 }: {
   order: any
   refreshOrder?: () => void
+  onAddTracking?: () => void
+  onCancelOrder?: () => void
 }) {
   const status = order.status
 
@@ -38,9 +42,7 @@ export default function SellerShippingActions({
         <>
           <TouchableOpacity
             style={styles.primaryBtn}
-            onPress={() =>
-              console.log("Add Tracking")
-            }
+            onPress={onAddTracking}
           >
             <Text style={styles.primaryText}>
               Add Tracking / Mark Shipped
@@ -49,9 +51,7 @@ export default function SellerShippingActions({
 
           <TouchableOpacity
             style={styles.secondaryBtn}
-            onPress={() =>
-              console.log("Cancel Order")
-            }
+            onPress={onCancelOrder}
           >
             <Text style={styles.secondaryText}>
               Cancel / Refund Order

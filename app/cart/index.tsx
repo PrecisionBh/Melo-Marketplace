@@ -214,29 +214,22 @@ export default function CartScreen() {
               </View>
 
               <View style={styles.summaryCard}>
-                <SummaryRow
-                  label="Subtotal"
-                  value={`$${subtotal.toFixed(
-                    2
-                  )}`}
-                />
+                <View style={styles.totalRow}>
+                  <Text
+                    style={styles.totalLabel}
+                  >
+                    Total ({cart.length}{" "}
+                    {cart.length === 1
+                      ? "item"
+                      : "items"})
+                  </Text>
 
-                <SummaryRow
-                  label="Shipping"
-                  value={`$${shippingTotal.toFixed(
-                    2
-                  )}`}
-                />
-
-                <View style={styles.divider} />
-
-                <SummaryRow
-                  label="Total"
-                  value={`$${total.toFixed(
-                    2
-                  )}`}
-                  bold
-                />
+                  <Text
+                    style={styles.totalValue}
+                  >
+                    ${total.toFixed(2)}
+                  </Text>
+                </View>
 
                 <TouchableOpacity
                   style={styles.checkoutBtn}
@@ -261,38 +254,6 @@ export default function CartScreen() {
       <GlobalFooter
         cartCount={cart.length}
       />
-    </View>
-  )
-}
-
-function SummaryRow({
-  label,
-  value,
-  bold,
-}: {
-  label: string
-  value: string
-  bold?: boolean
-}) {
-  return (
-    <View style={styles.summaryRow}>
-      <Text
-        style={[
-          styles.summaryLabel,
-          bold && styles.boldText,
-        ]}
-      >
-        {label}
-      </Text>
-
-      <Text
-        style={[
-          styles.summaryValue,
-          bold && styles.boldText,
-        ]}
-      >
-        {value}
-      </Text>
     </View>
   )
 }
@@ -340,24 +301,24 @@ const styles = StyleSheet.create({
   },
 
   cartList: {
-    gap: 12,
+    gap: 14,
   },
 
   card: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#FFF",
-    borderRadius: 18,
-    padding: 14,
+    borderRadius: 24,
+    padding: 18,
     borderWidth: 1,
-    borderColor: "#E8E8E8",
+    borderColor: "#ECECEC",
   },
 
   image: {
-    width: 80,
-    height: 80,
-    borderRadius: 14,
-    marginRight: 14,
+    width: 86,
+    height: 86,
+    borderRadius: 18,
+    marginRight: 16,
     backgroundColor: "#EEE",
   },
 
@@ -366,7 +327,7 @@ const styles = StyleSheet.create({
   },
 
   itemTitle: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: "700",
     color: "#111",
   },
@@ -378,54 +339,44 @@ const styles = StyleSheet.create({
   },
 
   price: {
-    fontSize: 17,
+    fontSize: 19,
     fontWeight: "800",
-    color: "#D97732",
-    marginTop: 6,
+    color: "#111",
+    marginTop: 8,
   },
 
   summaryCard: {
-    marginTop: 20,
+    marginTop: 28,
     backgroundColor: "#FFF",
-    borderRadius: 18,
-    padding: 18,
+    borderRadius: 24,
+    padding: 20,
     borderWidth: 1,
-    borderColor: "#E8E8E8",
+    borderColor: "#ECECEC",
   },
 
-  summaryRow: {
+  totalRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 10,
+    alignItems: "center",
   },
 
-  summaryLabel: {
-    fontSize: 14,
-    color: "#666",
+  totalLabel: {
+    fontSize: 17,
+    color: "#6B7280",
+    fontWeight: "500",
   },
 
-  summaryValue: {
-    fontSize: 14,
+  totalValue: {
+    fontSize: 24,
+    fontWeight: "900",
     color: "#111",
-  },
-
-  boldText: {
-    fontWeight: "800",
-    fontSize: 16,
-    color: "#111",
-  },
-
-  divider: {
-    height: 1,
-    backgroundColor: "#EEE",
-    marginVertical: 12,
   },
 
   checkoutBtn: {
-    marginTop: 16,
+    marginTop: 18,
     backgroundColor: "#D97732",
-    paddingVertical: 15,
-    borderRadius: 16,
+    paddingVertical: 17,
+    borderRadius: 18,
     alignItems: "center",
   },
 
