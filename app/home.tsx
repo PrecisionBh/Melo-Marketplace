@@ -11,15 +11,13 @@ import {
 
 import GlobalFooter from "@/components/global/globalfooter"
 import GlobalHeader from "@/components/global/globalheader"
-import FilterBar, { FilterKey, type FilterOption } from "../components/home/FilterBar"
+import FilterBar from "../components/home/FilterBar"
 import ListingsGrid from "../components/home/ListingsGrid"
 import SearchBar from "../components/home/SearchBar"
 
 import { Listing } from "../components/home/ListingCard"
-import SportFilterBar, { SportKey } from "../components/home/SportFilterBar"
 import { useAuth } from "../context/AuthContext"
 import { handleAppError } from "../lib/errors/appError"
-import { SPORT_CATEGORY_MAP } from "../lib/sportCategories"
 import { supabase } from "../lib/supabase"
 
 /* ---------------- CATEGORY MAPS ---------------- */
@@ -66,12 +64,16 @@ export default function HomeScreen() {
   const [scrollOffset, setScrollOffset] = useState(0)
 
   const [search, setSearch] = useState("")
+  const [showFilters, setShowFilters] = useState(false)
+  const [minPrice, setMinPrice] = useState("")
+const [maxPrice, setMaxPrice] = useState("")
 
-  const [activeSport, setActiveSport] =
-    useState<SportKey>("all")
+const [draftMinPrice, setDraftMinPrice] = useState("")
+const [draftMaxPrice, setDraftMaxPrice] = useState("")
 
-  const [activeCategory, setActiveCategory] =
-    useState<FilterKey>("all")
+
+ const [activeCategory, setActiveCategory] =
+  useState<any>("all")
 
   const [hasUnreadMessages, setHasUnreadMessages] =
     useState(false)
@@ -107,30 +109,17 @@ useEffect(() => {
   /* ---------------- CATEGORY OPTIONS BY SPORT ---------------- */
 
   const categoryOptions = useMemo(() => {
-  if (activeSport === "all") {
-    return [
-      { key: "all", label: "All" },
-      { key: "cue", label: "Cue" },
-      { key: "case", label: "Case" },
-      { key: "shaft", label: "Shaft" },
-      { key: "apparel", label: "Apparel" },
-      { key: "accessories", label: "Accessories" },
-      { key: "collectibles", label: "Collectibles" },
-      { key: "other", label: "Other" },
-    ] satisfies FilterOption[] // ✅ KEY FIX
-  }
-
-  return (
-    SPORT_CATEGORY_MAP[activeSport] ??
-    [{ key: "all", label: "All" }]
-  ) as FilterOption[] // ✅ FORCE TRUST HERE
-}, [activeSport])
-
-  /* ---------------- RESET CATEGORY WHEN SPORT CHANGES ---------------- */
-
-  useEffect(() => {
-    setActiveCategory("all")
-  }, [activeSport])
+  return [
+    { key: "all" as any, label: "All" },
+    { key: "electronics" as any, label: "Electronics" },
+    { key: "fashion" as any, label: "Clothing" },
+    { key: "home_garden" as any, label: "Home" },
+    { key: "sports_outdoors" as any, label: "Sports" },
+    { key: "collectibles" as any, label: "Collectibles" },
+    { key: "automotive" as any, label: "Automotive" },
+    { key: "other" as any, label: "Other" },
+  ]
+}, [])
 
   /* ---------------- LOAD DATA ---------------- */
 
@@ -424,139 +413,132 @@ const checkUnreadMessages = async () => {
   /* ---------------- FILTERING (FIXED & STABLE) ---------------- */
 
   const filteredListings = useMemo(() => {
-    let result = [...listings]
+  let result = [...listings]
 
-    if (search.trim()) {
-      const q = search.toLowerCase().trim()
+  if (search.trim()) {
+    const q = search.toLowerCase().trim()
 
-      result = result.filter((l) => {
-        const title = (l.title ?? "").toLowerCase()
-        const category = (l.category ?? "").toLowerCase()
+    result = result.filter((l) => {
+      const title = (l.title ?? "").toLowerCase()
+      const category = (l.category ?? "").toLowerCase()
 
-        return title.includes(q) || category.includes(q)
-      })
-    }
+      return title.includes(q) || category.includes(q)
+    })
+  }
 
-    if (activeSport !== "all") {
-      const sportCategoryKeys = (
-        SPORT_CATEGORY_MAP[activeSport] ?? []
+  if (minPrice.trim()) {
+    const min = parseFloat(minPrice)
+
+    if (!isNaN(min)) {
+      result = result.filter(
+        (l) => Number(l.price) >= min
       )
-        .map((item) => String(item.key).toLowerCase())
-        .filter((key) => key !== "all")
-
-      result = result.filter((l) => {
-        const cat = (l.category ?? "").toLowerCase()
-
-        if (sportCategoryKeys.includes(cat)) return true
-
-        if (
-          sportCategoryKeys.includes("cue") &&
-          (CUE_CATEGORIES.includes(cat) || cat.includes("cue"))
-        ) {
-          return true
-        }
-
-        if (
-          sportCategoryKeys.includes("case") &&
-          (CASE_CATEGORIES.includes(cat) || cat.includes("case"))
-        ) {
-          return true
-        }
-
-        return false
-      })
     }
+  }
 
-    if (activeCategory === "all") {
-      return result
+  if (maxPrice.trim()) {
+    const max = parseFloat(maxPrice)
+
+    if (!isNaN(max)) {
+      result = result.filter(
+        (l) => Number(l.price) <= max
+      )
     }
+  }
 
+  if (activeCategory !== "all") {
     const active = (activeCategory ?? "").toLowerCase()
 
-    if (active === "case") {
-      return result.filter((l) => {
-        const cat = (l.category ?? "").toLowerCase()
-        return CASE_CATEGORIES.includes(cat) || cat.includes("case")
-      })
-    }
-
-    if (active === "cue") {
-      return result.filter((l) => {
-        const cat = (l.category ?? "").toLowerCase()
-        return CUE_CATEGORIES.includes(cat) || cat.includes("cue")
-      })
-    }
-
-    if (active === "other") {
-      const knownCategories = [
-        ...CUE_CATEGORIES,
-        ...CASE_CATEGORIES,
-        "shaft",
-        "apparel",
-        "accessories",
-        "collectibles",
-      ]
-
-      return result.filter((l) => {
-        const cat = (l.category ?? "").toLowerCase()
-        return !knownCategories.includes(cat)
-      })
-    }
-
-    return result.filter((l) => {
+    result = result.filter((l) => {
       const cat = (l.category ?? "").toLowerCase()
       return cat === active
     })
-  }, [listings, activeCategory, activeSport, search])
+  }
 
-  const hasSearch = search.trim().length > 0
+  return result
+}, [
+  listings,
+  activeCategory,
+  search,
+  minPrice,
+  maxPrice,
+])
+
+const hasActiveFilters =
+  search.trim().length > 0 ||
+  activeCategory !== "all" ||
+  minPrice.trim().length > 0 ||
+  maxPrice.trim().length > 0
+
 const hasResults = filteredListings.length > 0
 
-  /* ---------------- RENDER ---------------- */
-
+/* ---------------- RENDER ---------------- */
   return (
     <>
       <View style={styles.screen}>
         <View style={styles.headerBlock}>
-          <GlobalHeader
-  notifCount={hasUnreadNotifications ? 1 : 0}
-  onNotificationsPress={() =>
-    requireAuth(() => router.push("/notifications"))
-  }
-  onMessagesPress={() =>
-    requireAuth(() => router.push("/messages"))
-  }
+  <GlobalHeader
+    notifCount={hasUnreadNotifications ? 1 : 0}
+    onNotificationsPress={() =>
+      requireAuth(() => router.push("/notifications"))
+    }
+    onMessagesPress={() =>
+      requireAuth(() => router.push("/messages"))
+    }
+  />
+
+ <SearchBar
+  value={search}
+  onChange={setSearch}
+  placeholder="Search marketplace..."
+  showFilters={showFilters}
+  onToggleFilters={() => setShowFilters(!showFilters)}
+  minPrice={draftMinPrice}
+  maxPrice={draftMaxPrice}
+  setMinPrice={setDraftMinPrice}
+  setMaxPrice={setDraftMaxPrice}
+  onClearFilters={() => {
+    setDraftMinPrice("")
+    setDraftMaxPrice("")
+    setMinPrice("")
+    setMaxPrice("")
+  }}
+  onApplyFilters={() => {
+    setMinPrice(draftMinPrice)
+    setMaxPrice(draftMaxPrice)
+    setShowFilters(false)
+  }}
 />
 
-          <SearchBar
-            value={search}
-            onChange={setSearch}
-            placeholder="Search listings"
-          />
+  <FilterBar
+  active={activeCategory as any}
+  onChange={(key) => setActiveCategory(key)}
+  options={categoryOptions as any}
+/>
+</View>
 
-          <SportFilterBar
-            active={activeSport}
-            onChange={setActiveSport}
-          />
-
-          <FilterBar
-            active={activeCategory}
-            onChange={setActiveCategory}
-            options={categoryOptions}
-          />
-        </View>
-
-        {loading ? (
+{loading ? (
   <ActivityIndicator style={{ marginTop: 40 }} />
 ) : (
   <>
-    {search.trim().length > 0 && filteredListings.length === 0 && (
+    {hasActiveFilters && filteredListings.length === 0 && (
       <View style={styles.noResultsWrap}>
         <Text style={styles.noResultsTitle}>
-          No results for "{search}"
+          {activeCategory !== "all" &&
+          !search.trim() &&
+          !minPrice.trim() &&
+          !maxPrice.trim()
+            ? "No items yet in this category"
+            : "No items match your filters"}
         </Text>
+
         <Text style={styles.noResultsSub}>
-          Showing featured listings instead
+          {activeCategory !== "all" &&
+          !search.trim() &&
+          !minPrice.trim() &&
+          !maxPrice.trim()
+            ? "Be the first to post!"
+            : "Showing sponsored listings instead"}
         </Text>
       </View>
     )}
@@ -722,15 +704,16 @@ function MenuDivider() {
 /* ---------------- STYLES ---------------- */
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: "#EAF4EF",
-    paddingBottom: 90,
-  },
-  headerBlock: {
-    backgroundColor: "#7FAF9B",
-    paddingBottom: 10,
-  },
+ screen: {
+  flex: 1,
+  backgroundColor: "#F8F8F8",
+  paddingBottom: 90,
+},
+
+headerBlock: {
+  backgroundColor: "#F8F8F8",
+  paddingBottom: 10,
+},
   menuOverlay: {
     position: "absolute",
     top: 0,

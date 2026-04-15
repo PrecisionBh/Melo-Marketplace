@@ -10,10 +10,12 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
 } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
+import GlobalFooter from "@/components/global/globalfooter"
+import GlobalHeader from "@/components/global/globalheader"
 import { useAuth } from "../../context/AuthContext"
 import { handleAppError } from "../../lib/errors/appError"
 import { supabase } from "../../lib/supabase"
@@ -668,96 +670,86 @@ const renderItem = ({
   )
 }
 
-/* ---------------- MAIN RETURN (THIS WAS MISSING - CRITICAL FIX) ---------------- */
-
 return (
   <View style={styles.screen}>
-    {/* HEADER */}
-    <View
-      style={[
-        styles.topBar,
-        { paddingTop: insets.top + 10 },
-      ]}
-    >
-      <TouchableOpacity onPress={() => router.back()}>
-        <Ionicons
-          name="arrow-back"
-          size={22}
-          color="#FFFFFF"
-        />
+    <GlobalHeader />
+
+    <View style={styles.chatHeaderRow}>
+      <TouchableOpacity
+        onPress={() => router.back()}
+        style={styles.backBtn}
+        activeOpacity={0.8}
+      >
+        <Ionicons name="arrow-back" size={20} color="#111" />
       </TouchableOpacity>
 
-      <View style={styles.headerCenter}>
-        {otherUserAvatar ? (
-          <Image
-            source={{ uri: otherUserAvatar }}
-            style={styles.headerAvatar}
-          />
-        ) : (
-          <Image
-            source={require("../../assets/images/avatar-placeholder.png")}
-            style={styles.headerAvatar}
-          />
-        )}
-        <Text style={styles.title}>{otherUserName}</Text>
-      </View>
+      {otherUserAvatar ? (
+        <Image
+          source={{ uri: otherUserAvatar }}
+          style={styles.chatAvatar}
+        />
+      ) : (
+        <Image
+          source={require("../../assets/images/avatar-placeholder.png")}
+          style={styles.chatAvatar}
+        />
+      )}
 
-      <View style={{ width: 22 }} />
+      <View style={{ flex: 1 }}>
+        <Text style={styles.chatName}>{otherUserName}</Text>
+        <Text style={styles.chatSub}>
+          {initialListingId ? "Re: Listing" : "Conversation"}
+        </Text>
+      </View>
     </View>
 
-    {/* CHAT BODY */}
+    {/* CHAT LIST */}
+    <FlatList
+      ref={flatListRef}
+      data={messages}
+      keyExtractor={(item) => item.id}
+      renderItem={renderItem}
+      contentContainerStyle={styles.list}
+      keyboardShouldPersistTaps="handled"
+      onContentSizeChange={() =>
+        flatListRef.current?.scrollToEnd({ animated: true })
+      }
+    />
+
+    {/* TYPING */}
+    {isOtherTyping && (
+      <View style={styles.typingFloating}>
+        <View style={styles.typingBubble}>
+          <Text style={styles.typingText}>
+            {otherUserName} is typing...
+          </Text>
+        </View>
+      </View>
+    )}
+
+    {/* INPUT */}
     <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={
-        Platform.OS === "ios" ? "padding" : "height"
-      }
-      keyboardVerticalOffset={
-        Platform.OS === "ios" ? 90 : 20
-      }
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={0}
     >
-      <FlatList
-        ref={flatListRef}
-        data={messages}
-        keyExtractor={(item) => item.id}
-        renderItem={renderItem}
-        contentContainerStyle={styles.list}
-        onContentSizeChange={() =>
-          flatListRef.current?.scrollToEnd({
-            animated: true,
-          })
-        }
-      />
-
-              {/* TYPING INDICATOR */}
-        {isOtherTyping && (
-          <View style={styles.typingContainer}>
-            <View style={styles.typingBubble}>
-              <Text style={styles.typingText}>
-                {otherUserName} is typing...
-              </Text>
-            </View>
-          </View>
-        )}
-
-        {/* INPUT */}
-        <View
-          style={[
-            styles.inputRow,
-            { paddingBottom: insets.bottom + 10 },
-          ]}
-        >
-
+      <View
+        style={[
+          styles.inputRow,
+          {
+            bottom: insets.bottom + 70,
+          },
+        ]}
+      >
         <TextInput
-  value={text}
-  onChangeText={(val) => {
-    setText(val)
-    broadcastTyping()
-  }}
-  placeholder="Message..."
-  style={styles.input}
-  multiline
-/>
-
+          value={text}
+          onChangeText={(val) => {
+            setText(val)
+            broadcastTyping()
+          }}
+          placeholder="Message..."
+          style={styles.input}
+          multiline
+        />
 
         <TouchableOpacity
           onPress={sendMessage}
@@ -771,70 +763,80 @@ return (
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
+
+    {/* FOOTER */}
+    <View style={styles.footerWrap}>
+      <GlobalFooter />
+    </View>
   </View>
 )
 }
 
-/* ---------------- STYLES ---------------- */
-
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#EAF4EF",
+    backgroundColor: "#F8F8F8",
   },
 
-  topBar: {
-    paddingHorizontal: 14,
-    paddingBottom: 10,
+  /* ---------------- CHAT SUB HEADER ---------------- */
+
+  chatHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: "#7FAF9B",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: "#F8F8F8",
     borderBottomWidth: 1,
-    borderBottomColor: "#6E9E8C",
+    borderBottomColor: "#E8E8E8",
   },
 
-  headerCenter: {
-    flexDirection: "row",
-    alignItems: "center",
+  backBtn: {
+    marginRight: 14,
   },
 
-  headerAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    marginRight: 8,
+  chatAvatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    marginRight: 12,
   },
 
-  title: {
-  fontSize: 18, // match AppHeader
-  fontWeight: "800",
-  color: "#FFFFFF",
-},
+  chatName: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#111",
+  },
 
+  chatSub: {
+    fontSize: 13,
+    color: "#6B7280",
+    marginTop: 2,
+  },
 
- list: {
-  paddingTop: 12,
-  paddingHorizontal: 12,
-  paddingBottom: 8, // 🔥 SMALL padding only (NOT 140)
-  flexGrow: 1, // 🧠 CRITICAL: makes messages stick to bottom properly
-  justifyContent: "flex-end", // 🚀 anchors last message above input
-},
+  /* ---------------- MESSAGE LIST ---------------- */
+
+  list: {
+    paddingTop: 12,
+    paddingHorizontal: 12,
+    paddingBottom: 140,
+  },
+
+  /* ---------------- PRODUCT CARD ---------------- */
 
   productCard: {
     flexDirection: "row",
-    backgroundColor: "#fff",
-    borderRadius: 12,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
     padding: 10,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: "#D6E6DE",
+    borderColor: "#E8E8E8",
   },
 
   productImage: {
     width: 54,
     height: 54,
-    borderRadius: 8,
+    borderRadius: 10,
   },
 
   productInfo: {
@@ -845,14 +847,14 @@ const styles = StyleSheet.create({
   productTitle: {
     fontSize: 14,
     fontWeight: "700",
-    color: "#0F1E17",
+    color: "#111",
   },
 
   productPrice: {
     marginTop: 2,
     fontSize: 13,
     fontWeight: "800",
-    color: "#2E5F4F",
+    color: "#D97732",
   },
 
   offerBtn: {
@@ -860,15 +862,17 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     paddingHorizontal: 10,
     borderRadius: 12,
-    backgroundColor: "#EAF4EF",
+    backgroundColor: "#FFF7ED",
     alignSelf: "flex-start",
   },
 
   offerText: {
     fontSize: 12,
     fontWeight: "800",
-    color: "#0F1E17",
+    color: "#D97732",
   },
+
+  /* ---------------- MESSAGE BUBBLES ---------------- */
 
   bubble: {
     maxWidth: "80%",
@@ -879,60 +883,72 @@ const styles = StyleSheet.create({
 
   myBubble: {
     alignSelf: "flex-end",
-    backgroundColor: "#0F1E17",
+    backgroundColor: "#D97732",
   },
 
   theirBubble: {
     alignSelf: "flex-start",
-    backgroundColor: "#D6E6DE",
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E8E8E8",
   },
 
   bubbleText: {
     fontSize: 14,
-    color: "#0F1E17",
+    color: "#111",
   },
 
   myBubbleText: {
-    color: "#fff",
+    color: "#FFF",
   },
 
   meta: {
     marginTop: 4,
     fontSize: 10,
-    color: "#CFE5DA",
+    color: "#FDE7D4",
     textAlign: "right",
   },
 
+  /* ---------------- INPUT ---------------- */
+
   inputRow: {
+    position: "absolute",
+    left: 0,
+    right: 0,
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 10,
     paddingTop: 10,
+    paddingBottom: 10,
     borderTopWidth: 1,
-    borderTopColor: "#D6E6DE",
-    backgroundColor: "#EAF4EF",
+    borderTopColor: "#E8E8E8",
+    backgroundColor: "#F8F8F8",
   },
 
   input: {
     flex: 1,
-    minHeight: 40,
+    minHeight: 44,
     maxHeight: 100,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     paddingVertical: 10,
-    backgroundColor: "#fff",
+    backgroundColor: "#FFFFFF",
     borderRadius: 18,
     fontSize: 14,
+    borderWidth: 1,
+    borderColor: "#E8E8E8",
   },
 
   sendBtn: {
     marginLeft: 8,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#0F1E17",
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "#D97732",
     alignItems: "center",
     justifyContent: "center",
   },
+
+  /* ---------------- DATE / TIME ---------------- */
 
   dateHeaderContainer: {
     alignItems: "center",
@@ -942,7 +958,7 @@ const styles = StyleSheet.create({
   dateHeader: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#6E9E8C",
+    color: "#9CA3AF",
   },
 
   timeContainer: {
@@ -961,31 +977,43 @@ const styles = StyleSheet.create({
 
   timeText: {
     fontSize: 10,
-    color: "#6E9E8C",
+    color: "#9CA3AF",
     fontWeight: "600",
   },
 
-    /* ---------------- TYPING INDICATOR ---------------- */
+  /* ---------------- TYPING ---------------- */
 
-  typingContainer: {
-    paddingHorizontal: 16,
-    marginBottom: 6,
+  typingFloating: {
+    position: "absolute",
+    left: 16,
+    right: 16,
+    bottom: 130,
   },
 
   typingBubble: {
     alignSelf: "flex-start",
-    backgroundColor: "#D6E6DE", // matches your chat theme
+    backgroundColor: "#FFFFFF",
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 14,
     maxWidth: "70%",
+    borderWidth: 1,
+    borderColor: "#E8E8E8",
   },
 
   typingText: {
     fontSize: 12,
-    color: "#2E5F4F",
+    color: "#777",
     fontStyle: "italic",
     fontWeight: "500",
   },
 
+  /* ---------------- FOOTER ---------------- */
+
+  footerWrap: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
 })

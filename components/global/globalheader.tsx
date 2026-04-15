@@ -108,7 +108,7 @@ const styles = StyleSheet.create({
   wrapper: {
     backgroundColor: "#F6EFE8",
     borderBottomWidth: 1,
-    borderBottomColor: "#E9DDD2",
+    borderBottomColor: "#D97732",
   },
 
   inner: {

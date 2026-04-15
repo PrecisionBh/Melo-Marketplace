@@ -25,7 +25,7 @@ type Props = {
 export default function ImageUpload({
   images,
   setImages,
-  max = 7,
+  max = 5,
 }: Props) {
   const [showPicker, setShowPicker] = useState(false)
 
@@ -134,12 +134,7 @@ export default function ImageUpload({
   return (
     <View style={styles.fullBleedSection}>
       <View style={styles.inner}>
-        <Text style={styles.title}>Photos *</Text>
-        <Text style={styles.subText}>
-          Add up to {max} photos. First photo will be the cover.
-        </Text>
-
-        <View style={styles.divider} />
+        <Text style={styles.title}>Photos</Text>
 
         <ScrollView
           horizontal
@@ -154,32 +149,30 @@ export default function ImageUpload({
                 style={styles.deleteButton}
                 onPress={() => removeImage(uri)}
               >
-                <Ionicons name="close" size={16} color="#fff" />
+                <Ionicons name="close" size={14} color="#fff" />
               </TouchableOpacity>
             </View>
           ))}
 
-          {Array.from({ length: remainingSlots }).map((_, i) => {
-            const isFirstSlot = images.length === 0 && i === 0
+          {Array.from({ length: remainingSlots }).map((_, i) => (
+            <TouchableOpacity
+              key={`empty-${i}`}
+              style={styles.addSquare}
+              onPress={() => setShowPicker(true)}
+            >
+              <Ionicons
+                name="image-outline"
+                size={26}
+                color="#8A8A8A"
+              />
 
-            return (
-              <TouchableOpacity
-                key={`empty-${i}`}
-                style={styles.addSquare}
-                onPress={() => setShowPicker(true)}
-              >
-                <Ionicons
-                  name={isFirstSlot ? "camera-outline" : "add"}
-                  size={30}
-                  color="#7FAF9B"
-                />
-              </TouchableOpacity>
-            )
-          })}
+              <Text style={styles.addText}>Add</Text>
+            </TouchableOpacity>
+          ))}
         </ScrollView>
       </View>
 
-      {/* 🔥 CUSTOM MODAL */}
+      {/* PICKER MODAL */}
       <Modal
         visible={showPicker}
         transparent
@@ -189,12 +182,12 @@ export default function ImageUpload({
         <Pressable style={styles.overlay} onPress={() => setShowPicker(false)}>
           <View style={styles.modal}>
             <TouchableOpacity style={styles.option} onPress={takePhoto}>
-              <Ionicons name="camera" size={20} color="#0F1E17" />
+              <Ionicons name="camera" size={20} color="#111" />
               <Text style={styles.optionText}>Take Photo</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.option} onPress={pickImage}>
-              <Ionicons name="images" size={20} color="#0F1E17" />
+              <Ionicons name="images" size={20} color="#111" />
               <Text style={styles.optionText}>Choose from Library</Text>
             </TouchableOpacity>
 
@@ -211,96 +204,104 @@ export default function ImageUpload({
   )
 }
 
-/* ---------------- STYLES ---------------- */
-
 const styles = StyleSheet.create({
   fullBleedSection: {
-    marginHorizontal: -16,
-    backgroundColor: "#EEF6F2",
+    marginTop: 4,
   },
+
   inner: {
-    paddingTop: 16,
-    paddingBottom: 18,
+    paddingBottom: 4,
   },
+
   title: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: "#0F1E17",
-    paddingHorizontal: 16,
-  },
-  subText: {
-    fontSize: 12,
-    color: "#323232",
-    paddingHorizontal: 16,
-    marginBottom: 12,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: "#DCEAE4",
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#111",
     marginBottom: 14,
   },
+
   row: {
     flexDirection: "row",
-    paddingHorizontal: 16,
     gap: 12,
   },
+
   squareWrapper: {
-    width: 120,
-    height: 120,
+    width: 110,
+    height: 110,
+    borderRadius: 18,
+    overflow: "hidden",
+    position: "relative",
+    backgroundColor: "#F3F3F3",
   },
+
   squareImage: {
     width: "100%",
     height: "100%",
   },
+
   addSquare: {
-    width: 120,
-    height: 120,
-    borderWidth: 1,
-    borderColor: "#CFE3DA",
-    backgroundColor: "#fff",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  deleteButton: {
-    position: "absolute",
-    top: 6,
-    right: 6,
-    backgroundColor: "#E5484D",
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 110,
+    height: 110,
+    borderRadius: 18,
+    borderWidth: 2,
+    borderStyle: "dashed",
+    borderColor: "#DADADA",
+    backgroundColor: "#FAFAFA",
     alignItems: "center",
     justifyContent: "center",
   },
 
-  /* MODAL */
+  addText: {
+    fontSize: 13,
+    color: "#666",
+    marginTop: 6,
+    fontWeight: "500",
+  },
+
+  deleteButton: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
   overlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.35)",
     justifyContent: "center",
     alignItems: "center",
   },
+
   modal: {
-    width: "80%",
+    width: "82%",
     backgroundColor: "#fff",
-    borderRadius: 18,
+    borderRadius: 20,
     padding: 16,
   },
+
   option: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
     paddingVertical: 14,
   },
+
   optionText: {
     fontSize: 15,
     fontWeight: "700",
-    color: "#0F1E17",
+    color: "#111",
   },
+
   cancel: {
     justifyContent: "center",
     marginTop: 6,
   },
+
   cancelText: {
     textAlign: "center",
     fontWeight: "700",

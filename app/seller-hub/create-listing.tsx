@@ -1,20 +1,25 @@
 // app/create-listing.tsx
-import AppHeader from "@/components/app-header"
-import CategoryBrandConditionSection from "@/components/create-listing/CategoryBrandConditionSection"
-import CreateListingFooter from "@/components/create-listing/CreateListingFooter"
+
+import CreateListingBoost from "@/components/create-listing/CreateListingBoost"
+import CreateListingDetails from "@/components/create-listing/CreateListingDetails"
+import CreateListingOffers from "@/components/create-listing/CreateListingOffers"
+import CreateListingSelectors from "@/components/create-listing/CreateListingSelectors"
+import CreateListingShipping from "@/components/create-listing/CreateListingShipping"
 import FullScreenSelector from "@/components/create-listing/FullScreenSelector"
 import ImageUpload from "@/components/create-listing/ImageUpload"
-import PriceOffersSection from "@/components/create-listing/PriceOffersSection"
-import Quantity from "@/components/create-listing/Quantity"
-import ShippingSection from "@/components/create-listing/ShippingSection"
-import TitleDescriptionSection from "@/components/create-listing/TitleDescriptionSection"
+
+import GlobalFooter from "@/components/global/globalfooter"
+import GlobalHeader from "@/components/global/globalheader"
+
 import ReturnAddressRequiredModal from "@/components/modals/ReturnAddressRequiredModal"
-import UpgradeToProCard from "@/components/pro/UpgradeToProCard"
+
 import { useAuth } from "@/context/AuthContext"
 import { handleAppError } from "@/lib/errors/appError"
 import { supabase } from "@/lib/supabase"
+
 import { useFocusEffect, useRouter } from "expo-router"
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useState } from "react"
+
 import {
   ActivityIndicator,
   Alert,
@@ -40,283 +45,24 @@ type SelectorOption = {
 
 /* ---------------- SELECTOR DATA ---------------- */
 
-const SPORT_TYPES: SelectorOption[] = [
-  { label: "Baseball", value: "baseball" },
-  { label: "Billiards", value: "billiards" },
-  { label: "Bowling", value: "bowling" },
-  { label: "Boxing / MMA", value: "boxing_mma" },
-  { label: "Cornhole", value: "cornhole" },
-  { label: "Darts", value: "darts" },
-  { label: "Disc Golf", value: "disc_golf" },
-  { label: "Esports / Gaming", value: "esports" },
-  { label: "Football", value: "football" },
-  { label: "Golf", value: "golf" },
-  { label: "Hockey", value: "hockey" },
-  { label: "Skateboarding", value: "skateboarding" },
-  { label: "Soccer", value: "soccer" },
-  { label: "Softball", value: "softball" },
-  { label: "Sports Cards", value: "sports_cards" },
-  { label: "Tennis", value: "tennis" },
+const MARKETPLACE_CATEGORIES: SelectorOption[] = [
+  { label: "Electronics", value: "electronics" },
+  { label: "Fashion", value: "fashion" },
+  { label: "Home & Garden", value: "home_garden" },
+  { label: "Sports & Outdoors", value: "sports_outdoors" },
+  { label: "Collectibles", value: "collectibles" },
+  { label: "Automotive", value: "automotive" },
+  { label: "Toys & Games", value: "toys_games" },
+  { label: "Baby & Kids", value: "baby_kids" },
+  { label: "Beauty & Health", value: "beauty_health" },
+  { label: "Tools", value: "tools" },
+  { label: "Music / Instruments", value: "music_instruments" },
+  { label: "Pet Supplies", value: "pet_supplies" },
+  { label: "Books & Media", value: "books_media" },
+  { label: "Office Supplies", value: "office_supplies" },
+  { label: "Art & Handmade", value: "art_handmade" },
+  { label: "Other", value: "other" },
 ]
-
-/* ---------------- SPORT → CATEGORY MAP ---------------- */
-
-const SPORT_CATEGORY_MAP: Record<string, SelectorOption[]> = {
-
-  billiards: [
-    { label: "Playing Cues", value: "playing_cue" },
-    { label: "Custom Cues", value: "custom_cue" },
-    { label: "Break Cues", value: "break_cue" },
-    { label: "Jump Cues", value: "jump_cue" },
-    { label: "Shafts", value: "shaft" },
-    { label: "Cue Cases", value: "case" },
-    { label: "Chalk", value: "chalk" },
-    { label: "Gloves", value: "gloves" },
-    { label: "Apparel", value: "apparel" },
-    { label: "Accessories", value: "accessories" },
-    { label: "Collectibles", value: "collectibles" },
-    { label: "Other", value: "other" },
-  ],
-
-  golf: [
-    { label: "Drivers", value: "drivers" },
-    { label: "Irons", value: "irons" },
-    { label: "Putters", value: "putters" },
-    { label: "Golf Bags", value: "golf_bags" },
-    { label: "Golf Balls", value: "golf_balls" },
-    { label: "Accessories", value: "golf_accessories" },
-  ],
-
-  baseball: [
-    { label: "Bats", value: "baseball_bats" },
-    { label: "Gloves", value: "baseball_gloves" },
-    { label: "Cleats", value: "baseball_cleats" },
-    { label: "Helmets", value: "baseball_helmets" },
-    { label: "Accessories", value: "baseball_accessories" },
-  ],
-
-  softball: [
-    { label: "Bats", value: "softball_bats" },
-    { label: "Gloves", value: "softball_gloves" },
-    { label: "Cleats", value: "softball_cleats" },
-    { label: "Helmets", value: "softball_helmets" },
-    { label: "Accessories", value: "softball_accessories" },
-  ],
-
-  basketball: [
-    { label: "Basketballs", value: "basketballs" },
-    { label: "Shoes", value: "basketball_shoes" },
-    { label: "Jerseys", value: "basketball_jerseys" },
-    { label: "Accessories", value: "basketball_accessories" },
-  ],
-
-  football: [
-    { label: "Helmets", value: "football_helmets" },
-    { label: "Pads", value: "football_pads" },
-    { label: "Cleats", value: "football_cleats" },
-    { label: "Accessories", value: "football_accessories" },
-  ],
-
-  soccer: [
-    { label: "Cleats", value: "soccer_cleats" },
-    { label: "Balls", value: "soccer_balls" },
-    { label: "Shin Guards", value: "shin_guards" },
-    { label: "Accessories", value: "soccer_accessories" },
-  ],
-
-  hockey: [
-    { label: "Sticks", value: "hockey_sticks" },
-    { label: "Skates", value: "hockey_skates" },
-    { label: "Helmets", value: "hockey_helmets" },
-    { label: "Pads", value: "hockey_pads" },
-    { label: "Accessories", value: "hockey_accessories" },
-  ],
-
-  tennis: [
-    { label: "Rackets", value: "tennis_rackets" },
-    { label: "Balls", value: "tennis_balls" },
-    { label: "Shoes", value: "tennis_shoes" },
-    { label: "Accessories", value: "tennis_accessories" },
-  ],
-
-  boxing_mma: [
-    { label: "Gloves", value: "boxing_gloves" },
-    { label: "Hand Wraps", value: "hand_wraps" },
-    { label: "Punching Bags", value: "punching_bags" },
-    { label: "Accessories", value: "boxing_accessories" },
-  ],
-
-  skateboarding: [
-    { label: "Decks", value: "decks" },
-    { label: "Trucks", value: "trucks" },
-    { label: "Wheels", value: "wheels" },
-    { label: "Complete Boards", value: "complete_boards" },
-    { label: "Accessories", value: "skate_accessories" },
-  ],
-
-  esports: [
-    { label: "Controllers", value: "controllers" },
-    { label: "Keyboards", value: "keyboards" },
-    { label: "Mice", value: "mice" },
-    { label: "Headsets", value: "headsets" },
-    { label: "Accessories", value: "gaming_accessories" },
-  ],
-
-  sports_cards: [
-    { label: "Graded Cards", value: "graded_cards" },
-    { label: "Raw Cards", value: "raw_cards" },
-    { label: "Sealed Boxes", value: "sealed_boxes" },
-    { label: "Packs", value: "packs" },
-    { label: "Supplies", value: "card_supplies" },
-  ],
-
-  cornhole: [
-    { label: "Cornhole Bags", value: "cornhole_bags" },
-    { label: "Boards", value: "cornhole_boards" },
-    { label: "Board Sets", value: "cornhole_sets" },
-    { label: "Jerseys", value: "cornhole_jerseys" },
-    { label: "Accessories", value: "cornhole_accessories" },
-  ],
-
-  darts: [
-    { label: "Steel Tip Darts", value: "steel_tip_darts" },
-    { label: "Soft Tip Darts", value: "soft_tip_darts" },
-    { label: "Dart Boards", value: "dart_boards" },
-    { label: "Flights", value: "dart_flights" },
-    { label: "Shafts", value: "dart_shafts" },
-    { label: "Cases", value: "dart_cases" },
-  ],
-
-  disc_golf: [
-    { label: "Drivers", value: "disc_drivers" },
-    { label: "Midrange Discs", value: "midrange_discs" },
-    { label: "Putters", value: "disc_putters" },
-    { label: "Disc Bags", value: "disc_bags" },
-    { label: "Accessories", value: "disc_accessories" },
-  ],
-
-  bowling: [
-    { label: "Bowling Balls", value: "bowling_balls" },
-    { label: "Bowling Bags", value: "bowling_bags" },
-    { label: "Shoes", value: "bowling_shoes" },
-    { label: "Accessories", value: "bowling_accessories" },
-  ],
-}
-
-/* ---------------- SPORT → BRAND MAP ---------------- */
-
-const SPORT_BRAND_MAP: Record<string, SelectorOption[]> = {
-
-  billiards: [
-    { label: "Precision", value: "precision" },
-    { label: "Predator", value: "predator" },
-    { label: "Cuetec", value: "cuetec" },
-    { label: "McDermott", value: "mcdermott" },
-    { label: "Meucci", value: "meucci" },
-    { label: "Pechauer", value: "pechauer" },
-    { label: "Jacoby", value: "jacoby" },
-    { label: "Lucasi", value: "lucasi" },
-    { label: "Mezz", value: "mezz" },
-    { label: "Schon", value: "schon" },
-    { label: "Viking", value: "viking" },
-    { label: "Other", value: "other" },
-  ],
-
-  golf: [
-    { label: "Titleist", value: "titleist" },
-    { label: "Callaway", value: "callaway" },
-    { label: "TaylorMade", value: "taylormade" },
-    { label: "Ping", value: "ping" },
-    { label: "Cobra", value: "cobra" },
-    { label: "Other", value: "other" },
-  ],
-
-  baseball: [
-    { label: "Easton", value: "easton" },
-    { label: "Rawlings", value: "rawlings" },
-    { label: "Louisville Slugger", value: "louisville_slugger" },
-    { label: "Wilson", value: "wilson" },
-    { label: "Marucci", value: "marucci" },
-    { label: "Victus", value: "victus" },
-    { label: "Other", value: "other" },
-  ],
-
-  softball: [
-    { label: "Easton", value: "easton" },
-    { label: "Rawlings", value: "rawlings" },
-    { label: "Louisville Slugger", value: "louisville_slugger" },
-    { label: "Wilson", value: "wilson" },
-    { label: "DeMarini", value: "demarini" },
-    { label: "Worth", value: "worth" },
-    { label: "Other", value: "other" },
-  ],
-
-  basketball: [
-    { label: "Nike", value: "nike" },
-    { label: "Adidas", value: "adidas" },
-    { label: "Jordan", value: "jordan" },
-    { label: "Under Armour", value: "under_armour" },
-    { label: "Wilson", value: "wilson" },
-    { label: "Spalding", value: "spalding" },
-    { label: "Molten", value: "molten" },
-    { label: "Other", value: "other" },
-  ],
-
-  football: [
-    { label: "Nike", value: "nike" },
-    { label: "Adidas", value: "adidas" },
-    { label: "Under Armour", value: "under_armour" },
-    { label: "Riddell", value: "riddell" },
-    { label: "Schutt", value: "schutt" },
-    { label: "Wilson", value: "wilson" },
-    { label: "Xenith", value: "xenith" },
-    { label: "Other", value: "other" },
-  ],
-
-  soccer: [
-    { label: "Nike", value: "nike" },
-    { label: "Adidas", value: "adidas" },
-    { label: "Puma", value: "puma" },
-    { label: "Umbro", value: "umbro" },
-    { label: "New Balance", value: "new_balance" },
-    { label: "Mizuno", value: "mizuno" },
-    { label: "Other", value: "other" },
-  ],
-
-  cornhole: [
-    { label: "AllCornhole", value: "allcornhole" },
-    { label: "BG Bags", value: "bg_bags" },
-    { label: "Reynolds Bags", value: "reynolds_bags" },
-    { label: "Ultra Bags", value: "ultra_bags" },
-    { label: "Other", value: "other" },
-  ],
-
-  darts: [
-    { label: "Winmau", value: "winmau" },
-    { label: "Target", value: "target" },
-    { label: "Harrows", value: "harrows" },
-    { label: "Red Dragon", value: "red_dragon" },
-    { label: "Other", value: "other" },
-  ],
-
-  disc_golf: [
-    { label: "Innova", value: "innova" },
-    { label: "Discraft", value: "discraft" },
-    { label: "Dynamic Discs", value: "dynamic_discs" },
-    { label: "MVP", value: "mvp" },
-    { label: "Latitude 64", value: "latitude_64" },
-    { label: "Other", value: "other" },
-  ],
-
-  bowling: [
-    { label: "Storm", value: "storm" },
-    { label: "Brunswick", value: "brunswick" },
-    { label: "Hammer", value: "hammer" },
-    { label: "Ebonite", value: "ebonite" },
-    { label: "Motiv", value: "motiv" },
-    { label: "Other", value: "other" },
-  ],
-}
 
 //conditions//
 
@@ -336,26 +82,34 @@ export default function CreateListingScreen() {
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
   const [category, setCategory] = useState<string | null>(null)
-  const [brand, setBrand] = useState<string | null>(null)
   const [condition, setCondition] = useState<string | null>(null)
 
   const [showCategoryModal, setShowCategoryModal] = useState(false)
-  const [showBrandModal, setShowBrandModal] = useState(false)
   const [showConditionModal, setShowConditionModal] = useState(false)
 
   const [isBoosted, setIsBoosted] = useState(false)
-  const [isMegaBoosted, setIsMegaBoosted] = useState(false) // 👑 NEW
+  const [isMegaBoosted, setIsMegaBoosted] = useState(false)
+
   const [quantity, setQuantity] = useState("1")
   const [boostsRemaining, setBoostsRemaining] = useState<number>(0)
-  const [megaBoostsRemaining, setMegaBoostsRemaining] = useState<number>(0) // 👑 NEW
+  const [megaBoostsRemaining, setMegaBoostsRemaining] = useState<number>(0)
 
-  const [shippingType, setShippingType] =
-    useState<"seller_pays" | "buyer_pays" | null>(null)
+const [shippingType, setShippingType] =
+  useState<"seller_pays" | "buyer_pays">("buyer_pays")
+const [weight, setWeight] = useState("")
+const [zipCode, setZipCode] = useState("")
+const [length, setLength] = useState("")
+const [width, setWidth] = useState("")
+const [height, setHeight] = useState("")
+
   const [shippingPrice, setShippingPrice] = useState("")
+  
 
   const [price, setPrice] = useState("")
+
   const [allowOffers, setAllowOffers] = useState(false)
   const [minOffer, setMinOffer] = useState("")
+
   const [submitting, setSubmitting] = useState(false)
 
   const [checkingAddress, setCheckingAddress] = useState(true)
@@ -366,25 +120,7 @@ export default function CreateListingScreen() {
   const [isPro, setIsPro] = useState<boolean>(false)
   const [showLimitModal, setShowLimitModal] = useState(false)
 
-  const [sportType, setSportType] = useState<string | null>("billiards")
-  const [showSportModal, setShowSportModal] = useState(false)
-
-  const categoriesForSport =
-  sportType && SPORT_CATEGORY_MAP[sportType]
-    ? SPORT_CATEGORY_MAP[sportType]
-    : []
-
-const brandsForSport =
-  sportType && SPORT_BRAND_MAP[sportType]
-    ? SPORT_BRAND_MAP[sportType]
-    : []
-
 /* ---------------- RESET CATEGORY + BRAND WHEN SPORT CHANGES ---------------- */
-
-useEffect(() => {
-  setCategory(null)
-  setBrand(null)
-}, [sportType])
 
 const handleCreateListing = async () => {
   if (!session?.user) return
@@ -467,8 +203,8 @@ const handleCreateListing = async () => {
   user_id: session.user.id,
   title: title.trim(),
   description: description.trim() || null,
-  sport_type: sportType,
-  brand: brand,
+  sport_type: "billiards",
+brand: "precision",
   category: category,
   condition: condition,
   price: parsedPrice,
@@ -567,255 +303,157 @@ useCallback(() => {
 )
 
 if (checkingAddress) {
-return (
-  <View style={styles.screen}>
-    <AppHeader title="Create Listing" backRoute="/seller-hub" />
-    <View style={styles.loaderWrap}>
-      <ActivityIndicator size="large" color="#7FAF9B" />
+  return (
+    <View style={styles.screen}>
+      <GlobalHeader />
+      <View style={styles.loaderWrap}>
+        <ActivityIndicator size="large" color="#D97732" />
+      </View>
     </View>
-  </View>
-)
+  )
 }
 
 return (
-<View style={styles.screen}>
-  <AppHeader title="Create Listing" backRoute="/seller-hub" />
+  <View style={styles.screen}>
+    <GlobalHeader />
 
-  {hasReturnAddress && (
-    <ScrollView contentContainerStyle={styles.content}>
-
-      {!checkingPro && !isPro && (
-  <UpgradeToProCard
-    style={{ marginHorizontal: 2, marginTop: 6, marginBottom: 8}}
-  />
-)}
-      <ImageUpload images={images} setImages={setImages} max={5} />
-
-      <TitleDescriptionSection
-        title={title}
-        setTitle={setTitle}
-        description={description}
-        setDescription={setDescription}
-      />
-
-      <CategoryBrandConditionSection
-  sportType={sportType}
-  category={category}
-  brand={brand}
-  condition={condition}
-  conditionSubtext={
-    CONDITIONS.find(c => c.value === condition)?.subtext
-  }
-
-  
-  // existing
-  onPressSportType={() => setShowSportModal(true)}
-  onPressCategory={() => setShowCategoryModal(true)}
-  onPressBrand={() => setShowBrandModal(true)}
-  onPressCondition={() => setShowConditionModal(true)}
-/>
-
-      <View style={styles.sectionSpacing}>
- <View style={styles.sectionSpacing}>
-  <View style={styles.boostSectionWrap}>
-
-    <Text style={styles.boostHeader}>Boost Your Listing</Text>
-
-    {/* 🔥 COUNTERS */}
-    <View style={styles.boostCounterRow}>
-      <Text style={styles.boostCounter}>
-        ⚡ {boostsRemaining} Boosts
-      </Text>
-      <Text style={styles.boostCounter}>
-        🔥 {megaBoostsRemaining} Mega
-      </Text>
-    </View>
-
-    <Text style={styles.boostSub}>
-      Boost your listing to get more views and sell faster.
-    </Text>
-
-    {/* OPTIONS */}
-    <View style={styles.boostRow}>
-      <TouchableOpacity
-        style={[
-          styles.boostOption,
-          isBoosted && styles.boostOptionActive,
-        ]}
-        onPress={() => {
-          setIsBoosted(true)
-          setIsMegaBoosted(false)
-        }}
-        activeOpacity={0.9}
-      >
-        <Text style={styles.boostOptionTitle}>Boost</Text>
-        <Text style={styles.boostOptionDesc}>
-          Top placement for 7 days
-        </Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={[
-          styles.boostOption,
-          isMegaBoosted && styles.boostOptionActive,
-        ]}
-        onPress={() => {
-          setIsMegaBoosted(true)
-          setIsBoosted(false)
-        }}
-        activeOpacity={0.9}
-      >
-        <Text style={styles.boostOptionTitle}>Mega Boost</Text>
-        <Text style={styles.boostOptionDesc}>
-          Full spotlight for 14 days
-        </Text>
-      </TouchableOpacity>
-    </View>
-
-    {/* LINK */}
-    <TouchableOpacity
-      onPress={() => router.push("/pro/packages")}
-      activeOpacity={0.8}
-    >
-      <Text style={styles.boostLink}>
-        🚀 Need more boosts? Get them →
-      </Text>
-    </TouchableOpacity>
-
-  </View>
-</View>
-
-  
-
-      </View>
-
-      {isPro && (
-  <View style={styles.sectionSpacing}>
-    <Quantity quantity={quantity} setQuantity={setQuantity} />
-  </View>
-)}
-
-      <View style={styles.sectionSpacing}>
-        <ShippingSection
-          shippingType={shippingType}
-          setShippingType={setShippingType}
-          shippingPrice={shippingPrice}
-          setShippingPrice={setShippingPrice}
+    {hasReturnAddress && (
+      <ScrollView contentContainerStyle={styles.content}>
+        <ImageUpload
+          images={images}
+          setImages={setImages}
+          max={5}
         />
-      </View>
 
-      <View style={styles.sectionSpacing}>
-        <PriceOffersSection
+        <CreateListingDetails
+          title={title}
+          setTitle={setTitle}
           price={price}
           setPrice={setPrice}
-          allowOffers={allowOffers}
-          setAllowOffers={setAllowOffers}
-          minOffer={minOffer}
-          setMinOffer={setMinOffer}
+          quantity={quantity}
+          setQuantity={setQuantity}
+          description={description}
+          setDescription={setDescription}
         />
-      </View>
 
-      <View style={styles.sectionSpacing}>
-        <CreateListingFooter
-          submitting={submitting}
-          onSubmit={handleCreateListing}
-          disabled={
-            submitting ||
-            !title ||
-            !sportType ||
-            !category ||
-            !condition ||
-            !price ||
-            images.length === 0 ||
-            (allowOffers && !minOffer) ||
-            !shippingType
+        <CreateListingSelectors
+          category={category}
+          condition={condition}
+          conditionSubtext={
+            CONDITIONS.find((c) => c.value === condition)?.subtext || ""
           }
+          onPressCategory={() => setShowCategoryModal(true)}
+          onPressCondition={() => setShowConditionModal(true)}
         />
-      </View>
-    </ScrollView>
-  )}
 
-  {/* SPORT SELECTOR */}
-  <FullScreenSelector
-    visible={showSportModal}
-    title="Select Sport"
-    options={SPORT_TYPES}
-    selectedValue={sportType ?? undefined}
-    onSelect={setSportType}
-    onClose={() => setShowSportModal(false)}
-  />
+        <CreateListingShipping
+          shippingType={
+            shippingType === "seller_pays" ? "free" : "buyer_pays"
+          }
+          setShippingType={(val) =>
+            setShippingType(val === "free" ? "seller_pays" : "buyer_pays")
+          }
+          weight={weight}
+          setWeight={setWeight}
+          zipCode={zipCode}
+          setZipCode={setZipCode}
+          length={length}
+          setLength={setLength}
+          width={width}
+          setWidth={setWidth}
+          height={height}
+          setHeight={setHeight}
+        />
 
-{/* CATEGORY SELECTOR */}
-<FullScreenSelector
-  visible={showCategoryModal}
-  title="Select Category"
-  options={categoriesForSport}
-  selectedValue={category ?? undefined}
-  onSelect={(value) => {
-    setCategory(value)
-    setShowCategoryModal(false)
-  }}
-  onClose={() => setShowCategoryModal(false)}
+        <CreateListingOffers
+  allowOffers={allowOffers}
+  setAllowOffers={setAllowOffers}
+  minOffer={minOffer}
+  setMinOffer={setMinOffer}
 />
 
-{/* BRAND SELECTOR */}
-<FullScreenSelector
-  visible={showBrandModal}
-  title="Select Brand"
-  options={brandsForSport}
-  selectedValue={brand ?? undefined}
-  onSelect={(value) => {
-    setBrand(value)
-    setShowBrandModal(false)
-  }}
-  onClose={() => setShowBrandModal(false)}
-/>
-
-  {/* CONDITION SELECTOR */}
-  <FullScreenSelector
-    visible={showConditionModal}
-    title="Select Condition"
-    options={CONDITIONS}
-    selectedValue={condition ?? undefined}
-    onSelect={setCondition}
-    onClose={() => setShowConditionModal(false)}
-  />
-
-  {/* FREE TIER LIMIT MODAL */}
-  <Modal visible={showLimitModal} transparent animationType="fade">
-    <View style={styles.modalOverlay}>
-      <View style={styles.modalCard}>
-        <Text style={styles.modalTitle}>
-          You have reached your free plan limit
-        </Text>
-
-        <Text style={styles.modalText}>
-          Free accounts can only have 5 active listings.
-          Upgrade to Melo Pro to unlock unlimited listings and more Pro features.
-        </Text>
-
-        <TouchableOpacity
-          style={styles.upgradeButton}
-          onPress={() => {
-            setShowLimitModal(false)
-            router.push("/melo-pro")
+        <CreateListingBoost
+          selectedBoost={
+            isMegaBoosted ? "mega" : isBoosted ? "boost" : "none"
+          }
+          setSelectedBoost={(val) => {
+            setIsBoosted(val === "boost")
+            setIsMegaBoosted(val === "mega")
           }}
-        >
-          <Text style={styles.upgradeButtonText}>Upgrade to Pro</Text>
-        </TouchableOpacity>
+          boostCredits={boostsRemaining}
+          megaCredits={megaBoostsRemaining}
+          onBuyCredits={() => router.push("/pro/packages")}
+          onPublish={handleCreateListing}
+        />
+      </ScrollView>
+    )}
 
-        <TouchableOpacity onPress={() => setShowLimitModal(false)}>
-          <Text style={styles.laterText}>Maybe Later</Text>
-        </TouchableOpacity>
+    <GlobalFooter />
+
+    <FullScreenSelector
+      visible={showCategoryModal}
+      title="Select Category"
+      options={MARKETPLACE_CATEGORIES}
+      selectedValue={category ?? undefined}
+      onSelect={(value) => {
+        setCategory(value)
+        setShowCategoryModal(false)
+      }}
+      onClose={() => setShowCategoryModal(false)}
+    />
+
+    <FullScreenSelector
+      visible={showConditionModal}
+      title="Select Condition"
+      options={CONDITIONS}
+      selectedValue={condition ?? undefined}
+      onSelect={(value) => {
+        setCondition(value)
+        setShowConditionModal(false)
+      }}
+      onClose={() => setShowConditionModal(false)}
+    />
+
+    <Modal visible={showLimitModal} transparent animationType="fade">
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalCard}>
+          <Text style={styles.modalTitle}>
+            You have reached your free plan limit
+          </Text>
+
+          <Text style={styles.modalText}>
+            Free accounts can only have 5 active listings.
+            Upgrade to Melo Pro to unlock unlimited listings and more Pro features.
+          </Text>
+
+          <TouchableOpacity
+            style={styles.upgradeButton}
+            onPress={() => {
+              setShowLimitModal(false)
+              router.push("/melo-pro")
+            }}
+          >
+            <Text style={styles.upgradeButtonText}>
+              Upgrade to Pro
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => setShowLimitModal(false)}
+          >
+            <Text style={styles.laterText}>
+              Maybe Later
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
-    </View>
-  </Modal>
+    </Modal>
 
-  <ReturnAddressRequiredModal
-    visible={showAddressModal}
-    onClose={() => setShowAddressModal(false)}
-  />
-</View>
+    <ReturnAddressRequiredModal
+      visible={showAddressModal}
+      onClose={() => setShowAddressModal(false)}
+    />
+  </View>
 )
 }
 

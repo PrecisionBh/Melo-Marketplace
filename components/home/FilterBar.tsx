@@ -6,43 +6,25 @@ import {
   View,
 } from "react-native"
 
-export type FilterKey =
-  | "all"
-  | "cue"
-  | "playing_cue"
-  | "custom_cue"
-  | "break_cue"
-  | "jump_cue"
-  | "case"
-  | "shaft"
-  | "apparel"
-  | "accessories"
-  | "collectibles"
-  | "other"
-
 export type FilterOption = {
-  key: FilterKey
+  key: string
   label: string
 }
 
 type Props = {
-  active: FilterKey
-  onChange: (key: FilterKey) => void
+  active: string
+  onChange: (key: string) => void
   options?: FilterOption[]
 }
 
-const FILTERS: FilterOption[] = [
+const DEFAULT_FILTERS: FilterOption[] = [
   { key: "all", label: "All" },
-  { key: "cue", label: "Cue" },
-  { key: "playing_cue", label: "Playing Cue" },
-  { key: "custom_cue", label: "Custom Cue" },
-  { key: "break_cue", label: "Break Cue" },
-  { key: "jump_cue", label: "Jump Cue" },
-  { key: "case", label: "Case" },
-  { key: "shaft", label: "Shaft" },
-  { key: "apparel", label: "Apparel" },
-  { key: "accessories", label: "Accessories" },
-  { key: "collectibles", label: "Collectible" },
+  { key: "electronics", label: "Electronics" },
+  { key: "fashion", label: "Clothing" },
+  { key: "home_garden", label: "Home" },
+  { key: "sports_outdoors", label: "Sports" },
+  { key: "collectibles", label: "Collectibles" },
+  { key: "automotive", label: "Automotive" },
   { key: "other", label: "Other" },
 ]
 
@@ -51,7 +33,8 @@ export default function FilterBar({
   onChange,
   options,
 }: Props) {
-  const filtersToRender = options?.length ? options : FILTERS
+  const filtersToRender =
+    options?.length ? options : DEFAULT_FILTERS
 
   return (
     <View style={styles.wrap}>
@@ -73,7 +56,12 @@ export default function FilterBar({
               onPress={() => onChange(f.key)}
               activeOpacity={0.85}
             >
-              <Text style={[styles.text, isActive && styles.activeText]}>
+              <Text
+                style={[
+                  styles.text,
+                  isActive && styles.activeText,
+                ]}
+              >
                 {f.label}
               </Text>
             </TouchableOpacity>
@@ -87,17 +75,12 @@ export default function FilterBar({
 const styles = StyleSheet.create({
   wrap: {
     marginTop: 4,
-
     backgroundColor: "#ffffff",
     borderRadius: 16,
     height: 44,
-
     justifyContent: "center",
-
-    // ✅ keeps pills inside rounded edges
     overflow: "hidden",
 
-    // subtle depth like search bar
     shadowColor: "#000",
     shadowOpacity: 0.06,
     shadowRadius: 6,
@@ -119,7 +102,7 @@ const styles = StyleSheet.create({
   },
 
   activePill: {
-    backgroundColor: "#7FAF9B",
+    backgroundColor: "#D97732",
   },
 
   text: {
@@ -129,6 +112,6 @@ const styles = StyleSheet.create({
   },
 
   activeText: {
-    color: "#0F1E17",
+    color: "#fff",
   },
 })
