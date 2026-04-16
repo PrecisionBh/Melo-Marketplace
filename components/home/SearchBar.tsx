@@ -24,6 +24,14 @@ type Props = {
   onApplyFilters: () => void
 }
 
+const QUICK_FILTERS = [
+  { label: "Under $50", max: "50" },
+  { label: "Under $100", max: "100" },
+  { label: "Under $250", max: "250" },
+  { label: "Under $500", max: "500" },
+  { label: "Under $1000", max: "1000" },
+]
+
 export default function SearchBar({
   value,
   onChange,
@@ -72,14 +80,19 @@ export default function SearchBar({
         <TouchableOpacity
           style={[
             styles.filterBtn,
-            showFilters && styles.filterBtnActive,
+            showFilters &&
+              styles.filterBtnActive,
           ]}
           onPress={onToggleFilters}
         >
           <Ionicons
             name="options-outline"
             size={18}
-            color={showFilters ? "#fff" : "#111"}
+            color={
+              showFilters
+                ? "#fff"
+                : "#111"
+            }
           />
         </TouchableOpacity>
       </View>
@@ -87,7 +100,33 @@ export default function SearchBar({
       {showFilters && (
         <View style={styles.filterPanel}>
           <Text style={styles.filterLabel}>
-            Price Range
+            Quick Price Filters
+          </Text>
+
+          <View style={styles.quickFiltersWrap}>
+            {QUICK_FILTERS.map((filter) => (
+              <TouchableOpacity
+                key={filter.max}
+                style={styles.quickChip}
+                onPress={() => {
+                  setMinPrice("")
+                  setMaxPrice(filter.max)
+                }}
+              >
+                <Text style={styles.quickChipText}>
+                  {filter.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <Text
+            style={[
+              styles.filterLabel,
+              { marginTop: 18 },
+            ]}
+          >
+            Custom Price Range
           </Text>
 
           <View style={styles.priceRow}>
@@ -95,7 +134,10 @@ export default function SearchBar({
               value={minPrice}
               onChangeText={(v) =>
                 setMinPrice(
-                  v.replace(/[^0-9.]/g, "")
+                  v.replace(
+                    /[^0-9.]/g,
+                    ""
+                  )
                 )
               }
               placeholder="Min"
@@ -103,13 +145,18 @@ export default function SearchBar({
               style={styles.priceInput}
             />
 
-            <Text style={styles.dash}>—</Text>
+            <Text style={styles.dash}>
+              —
+            </Text>
 
             <TextInput
               value={maxPrice}
               onChangeText={(v) =>
                 setMaxPrice(
-                  v.replace(/[^0-9.]/g, "")
+                  v.replace(
+                    /[^0-9.]/g,
+                    ""
+                  )
                 )
               }
               placeholder="Max"
@@ -121,9 +168,15 @@ export default function SearchBar({
           <View style={styles.actionsRow}>
             {(minPrice || maxPrice) && (
               <TouchableOpacity
-                onPress={onClearFilters}
+                onPress={
+                  onClearFilters
+                }
               >
-                <Text style={styles.clearText}>
+                <Text
+                  style={
+                    styles.clearText
+                  }
+                >
                   Clear
                 </Text>
               </TouchableOpacity>
@@ -131,9 +184,15 @@ export default function SearchBar({
 
             <TouchableOpacity
               style={styles.applyBtn}
-              onPress={onApplyFilters}
+              onPress={
+                onApplyFilters
+              }
             >
-              <Text style={styles.applyText}>
+              <Text
+                style={
+                  styles.applyText
+                }
+              >
                 Apply Filters
               </Text>
             </TouchableOpacity>
@@ -206,6 +265,27 @@ const styles = StyleSheet.create({
     color: "#111",
   },
 
+  quickFiltersWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+
+  quickChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: "#F3F4F6",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+
+  quickChipText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#374151",
+  },
+
   priceRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -231,7 +311,8 @@ const styles = StyleSheet.create({
   actionsRow: {
     marginTop: 14,
     flexDirection: "row",
-    justifyContent: "space-between",
+    justifyContent:
+      "space-between",
     alignItems: "center",
   },
 

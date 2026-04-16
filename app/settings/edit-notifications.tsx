@@ -1,17 +1,26 @@
+import GlobalFooter from "@/components/global/globalfooter"
+import GlobalHeader from "@/components/global/globalheader"
+
 import { Ionicons } from "@expo/vector-icons"
 import * as Notifications from "expo-notifications"
-import { useRouter } from "expo-router"
 import { useEffect, useState } from "react"
-import { Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import {
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native"
 
-import AppHeader from "@/components/app-header"
 import { handleAppError } from "@/lib/errors/appError"
 
 export default function NotificationsSettingsScreen() {
-  const router = useRouter()
+  const [notificationsEnabled, setNotificationsEnabled] =
+    useState(false)
 
-  const [notificationsEnabled, setNotificationsEnabled] = useState(false)
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] =
+    useState(false)
 
   useEffect(() => {
     checkPermissionStatus()
@@ -19,261 +28,275 @@ export default function NotificationsSettingsScreen() {
 
   const checkPermissionStatus = async () => {
     try {
-      const { status } = await Notifications.getPermissionsAsync()
-      setNotificationsEnabled(status === "granted")
+      const { status } =
+        await Notifications.getPermissionsAsync()
+
+      setNotificationsEnabled(
+        status === "granted"
+      )
     } catch (err) {
       handleAppError(err, {
-        context: "notifications_settings_check_permission",
-        fallbackMessage: "Failed to check notification permissions.",
+        fallbackMessage:
+          "Failed to check notification permissions.",
         silent: true,
       })
     }
   }
 
-  const handleToggleNotifications = async () => {
-    if (loading) return
+  const handleToggleNotifications =
+    async () => {
+      if (loading) return
 
-    try {
-      setLoading(true)
+      try {
+        setLoading(true)
 
-      if (!notificationsEnabled) {
-        // Request permission
-        const { status } = await Notifications.requestPermissionsAsync()
+        if (!notificationsEnabled) {
+          const { status } =
+            await Notifications.requestPermissionsAsync()
 
-        if (status !== "granted") {
+          if (status !== "granted") {
+            Alert.alert(
+              "Permission Required",
+              "Notifications are disabled at the device level. Please enable them in your phone settings."
+            )
+            return
+          }
+
+          setNotificationsEnabled(true)
+
           Alert.alert(
-            "Permission Required",
-            "Notifications are disabled at the device level. Please enable them in your phone Settings to receive Melo alerts."
+            "Notifications Enabled",
+            "You will now receive Melo alerts."
           )
-          return
+        } else {
+          setNotificationsEnabled(false)
+
+          Alert.alert(
+            "Notifications Disabled",
+            "You can re-enable notifications anytime."
+          )
         }
-
-        // Permission granted
-        setNotificationsEnabled(true)
-
-        Alert.alert(
-          "Notifications Enabled",
-          "You will now receive alerts for messages, orders, and important Melo updates."
-        )
-      } else {
-        // App-level toggle (cannot revoke OS permission programmatically)
-        setNotificationsEnabled(false)
-
-        Alert.alert(
-          "Notifications Disabled",
-          "You can re-enable notifications anytime from this screen."
-        )
+      } catch (err) {
+        handleAppError(err, {
+          fallbackMessage:
+            "Failed to update notification settings.",
+        })
+      } finally {
+        setLoading(false)
       }
-    } catch (err) {
-      handleAppError(err, {
-        context: "notifications_settings_toggle",
-        fallbackMessage:
-          "Something went wrong while updating notification settings.",
-      })
-    } finally {
-      setLoading(false)
     }
-  }
 
   return (
     <View style={styles.screen}>
-      <AppHeader
-        title="Notifications"
-        backLabel="Settings"
-        backRoute="/settings"
-      />
+      <GlobalHeader />
 
-      {/* MAIN CARD */}
-      <View style={styles.card}>
-        <Ionicons
-          name={
-            notificationsEnabled
-              ? "notifications"
-              : "notifications-outline"
-          }
-          size={42}
-          color="#7FAF9B"
-        />
-
-        <Text style={styles.title}>Push Notifications</Text>
-
-        <Text style={styles.text}>
-          Get real-time alerts for new messages, order updates, offers,
-          and important Melo activity. Keeping notifications enabled
-          ensures you never miss a sale or message.
+      <ScrollView
+        contentContainerStyle={styles.content}
+      >
+        <Text style={styles.pageTitle}>
+          Notifications
         </Text>
 
-        {/* STATUS BADGE */}
-        <View
-          style={[
-            styles.statusBadge,
-            notificationsEnabled
-              ? styles.statusOn
-              : styles.statusOff,
-          ]}
-        >
-          <Text
+        <View style={styles.card}>
+          <View style={styles.iconWrap}>
+            <Ionicons
+              name={
+                notificationsEnabled
+                  ? "notifications"
+                  : "notifications-outline"
+              }
+              size={26}
+              color="#D97732"
+            />
+          </View>
+
+          <Text style={styles.title}>
+            Push Notifications
+          </Text>
+
+          <Text style={styles.text}>
+            Get real-time alerts for new
+            messages, order updates,
+            offers, and important Melo
+            activity.
+          </Text>
+
+          <View
             style={[
-              styles.statusText,
+              styles.statusBadge,
               notificationsEnabled
-                ? styles.statusTextOn
-                : styles.statusTextOff,
+                ? styles.statusOn
+                : styles.statusOff,
             ]}
           >
-            {notificationsEnabled ? "Enabled" : "Disabled"}
+            <Text
+              style={[
+                styles.statusText,
+                notificationsEnabled
+                  ? styles.statusTextOn
+                  : styles.statusTextOff,
+              ]}
+            >
+              {notificationsEnabled
+                ? "Enabled"
+                : "Disabled"}
+            </Text>
+          </View>
+
+          <TouchableOpacity
+            style={[
+              styles.toggleBtn,
+              loading && {
+                opacity: 0.6,
+              },
+            ]}
+            onPress={
+              handleToggleNotifications
+            }
+            disabled={loading}
+          >
+            <Ionicons
+              name={
+                notificationsEnabled
+                  ? "notifications-off"
+                  : "notifications"
+              }
+              size={18}
+              color="#fff"
+            />
+
+            <Text
+              style={styles.toggleText}
+            >
+              {notificationsEnabled
+                ? "Disable Notifications"
+                : "Enable Notifications"}
+            </Text>
+          </TouchableOpacity>
+
+          <Text
+            style={styles.helperText}
+          >
+            Melo only sends relevant
+            marketplace notifications.
           </Text>
         </View>
+      </ScrollView>
 
-        {/* TOGGLE BUTTON */}
-        <TouchableOpacity
-          style={[
-            styles.toggleBtn,
-            loading && { opacity: 0.6 },
-          ]}
-          onPress={handleToggleNotifications}
-          disabled={loading}
-        >
-          <Ionicons
-            name={
-              notificationsEnabled
-                ? "notifications-off"
-                : "notifications"
-            }
-            size={18}
-            color="#FFFFFF"
-            style={{ marginRight: 6 }}
-          />
-          <Text style={styles.toggleText}>
-            {notificationsEnabled
-              ? "Disable Notifications"
-              : "Enable Notifications"}
-          </Text>
-        </TouchableOpacity>
-
-        <Text style={styles.helperText}>
-          You can change this anytime. Melo will only send important,
-          relevant notifications.
-        </Text>
-      </View>
+      <GlobalFooter />
     </View>
   )
 }
 
-/* ---------------- STYLES ---------------- */
+const styles =
+  StyleSheet.create({
+    screen: {
+      flex: 1,
+      backgroundColor:
+        "#F8F8F8",
+    },
 
-const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: "#EAF4EF",
-  },
+    content: {
+      padding: 16,
+      paddingBottom: 120,
+    },
 
-  /* (Old header styles kept temporarily for safety during refactor) */
-  headerWrap: {
-    backgroundColor: "#7FAF9B",
-    paddingTop: 60,
-    paddingBottom: 12,
-    paddingHorizontal: 14,
-  },
+    pageTitle: {
+      fontSize: 28,
+      fontWeight: "800",
+      color: "#111",
+      marginBottom: 24,
+    },
 
-  headerRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
+    card: {
+      backgroundColor:
+        "#fff",
+      borderRadius: 22,
+      borderWidth: 1,
+      borderColor: "#E8E8E8",
+      padding: 22,
+      alignItems: "center",
+    },
 
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#ffffff",
-  },
+    iconWrap: {
+      width: 64,
+      height: 64,
+      borderRadius: 20,
+      backgroundColor:
+        "#FFF7ED",
+      alignItems: "center",
+      justifyContent:
+        "center",
+      marginBottom: 16,
+    },
 
-  headerBtn: {
-    alignItems: "center",
-    minWidth: 60,
-  },
+    title: {
+      fontSize: 18,
+      fontWeight: "800",
+      color: "#111",
+      marginBottom: 10,
+    },
 
-  headerSub: {
-    marginTop: 2,
-    fontSize: 11,
-    fontWeight: "600",
-    color: "#0F1E17",
-  },
+    text: {
+      textAlign: "center",
+      fontSize: 14,
+      color: "#666",
+      lineHeight: 21,
+      marginBottom: 18,
+    },
 
-  card: {
-    margin: 20,
-    padding: 24,
-    borderRadius: 18,
-    backgroundColor: "#FFFFFF",
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 3,
-  },
+    statusBadge: {
+      paddingHorizontal: 14,
+      paddingVertical: 7,
+      borderRadius: 999,
+      marginBottom: 20,
+    },
 
-  title: {
-    marginTop: 14,
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#0F1E17",
-  },
+    statusOn: {
+      backgroundColor:
+        "#ECFDF5",
+    },
 
-  text: {
-    marginTop: 10,
-    textAlign: "center",
-    fontSize: 13,
-    color: "#6B8F7D",
-    lineHeight: 18,
-  },
+    statusOff: {
+      backgroundColor:
+        "#F3F4F6",
+    },
 
-  statusBadge: {
-    marginTop: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 999,
-  },
+    statusText: {
+      fontSize: 12,
+      fontWeight: "800",
+    },
 
-  statusOn: {
-    backgroundColor: "#E6F4EE",
-  },
+    statusTextOn: {
+      color: "#16A34A",
+    },
 
-  statusOff: {
-    backgroundColor: "#F1F1F1",
-  },
+    statusTextOff: {
+      color: "#6B7280",
+    },
 
-  statusText: {
-    fontSize: 12,
-    fontWeight: "700",
-  },
+    toggleBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      backgroundColor:
+        "#D97732",
+      paddingVertical: 14,
+      paddingHorizontal: 22,
+      borderRadius: 18,
+    },
 
-  statusTextOn: {
-    color: "#2E7D5B",
-  },
+    toggleText: {
+      color: "#fff",
+      fontWeight: "800",
+      fontSize: 14,
+    },
 
-  statusTextOff: {
-    color: "#888888",
-  },
-
-  toggleBtn: {
-    marginTop: 20,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#0F1E17",
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 14,
-  },
-
-  toggleText: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "700",
-  },
-
-  helperText: {
-    marginTop: 14,
-    textAlign: "center",
-    fontSize: 12,
-    color: "#8AA79A",
-  },
-})
+    helperText: {
+      marginTop: 14,
+      textAlign: "center",
+      fontSize: 12,
+      color: "#888",
+      lineHeight: 18,
+    },
+  })

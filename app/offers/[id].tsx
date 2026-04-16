@@ -1,6 +1,12 @@
 import GlobalFooter from "@/components/global/globalfooter"
 import GlobalHeader from "@/components/global/globalheader"
 
+import OfferActionButtons from "@/components/offers/OfferActionButtons"
+import OfferActionResultModal from "@/components/offers/OfferActionResultModal"
+import OfferExpiryTimer from "@/components/offers/OfferExpiryTimer"
+import OfferReceiptCard from "@/components/offers/OfferReceiptCard"
+import OfferSummaryCard from "@/components/offers/OfferSummaryCard"
+
 import { useAuth } from "@/context/AuthContext"
 import { handleAppError } from "@/lib/errors/appError"
 import { supabase } from "@/lib/supabase"
@@ -9,8 +15,6 @@ import { useLocalSearchParams, useRouter } from "expo-router"
 import { useEffect, useMemo, useState } from "react"
 import {
     ActivityIndicator,
-    Alert,
-    Image,
     Modal,
     ScrollView,
     StyleSheet,
@@ -20,42 +24,6 @@ import {
     View,
 } from "react-native"
 
-type OfferStatus =
-  | "pending"
-  | "countered"
-  | "accepted"
-  | "declined"
-  | "expired"
-
-type Offer = {
-  id: string
-  listing_id: string
-  buyer_id: string
-  seller_id: string
-  current_amount: number
-  quantity: number
-  counter_count: number
-  last_actor: "buyer" | "seller"
-  status: OfferStatus
-  created_at: string
-  updated_at?: string | null
-
-  accepted_price?: number | null
-  accepted_title?: string | null
-  accepted_image_url?: string | null
-  accepted_shipping_type?: "seller_pays" | "buyer_pays" | null
-  accepted_shipping_price?: number | null
-
-  listings: {
-    id: string
-    title: string
-    image_urls: string[] | null
-    shipping_type: "seller_pays" | "buyer_pays"
-    shipping_price: number | null
-    is_sold?: boolean
-  } | null
-}
-
 export default function OfferDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const { session } = useAuth()
@@ -64,15 +32,31 @@ export default function OfferDetailScreen() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
 
-  const [offer, setOffer] = useState<Offer | null>(null)
-  const [showCounter, setShowCounter] = useState(false)
-  const [counterAmount, setCounterAmount] = useState("")
+  const [offer, setOffer] = useState<any>(null)
+
+  const [showCounter, setShowCounter] =
+    useState(false)
+  const [counterAmount, setCounterAmount] =
+    useState("")
+
+  const [resultModal, setResultModal] =
+    useState<{
+      visible: boolean
+      title: string
+      message: string
+      primaryText?: string
+      secondaryText?: string
+      onPrimary?: () => void
+      onSecondary?: () => void
+    }>({
+      visible: false,
+      title: "",
+      message: "",
+    })
 
   useEffect(() => {
     if (id && session?.user?.id) {
       loadOffer()
-    } else {
-      setLoading(false)
     }
   }, [id, session?.user?.id])
 
@@ -82,55 +66,25 @@ export default function OfferDetailScreen() {
 
       const { data, error } = await supabase
         .from("offers")
-        .select(`
-          id,
-          listing_id,
-          buyer_id,
-          seller_id,
-          current_amount,
-          quantity,
-          counter_count,
-          last_actor,
-          status,
-          created_at,
-          updated_at,
-          accepted_price,
-          accepted_title,
-          accepted_image_url,
-          accepted_shipping_type,
-          accepted_shipping_price,
+        .select(
+          `
+          *,
           listings (
-            id,
-            title,
-            image_urls,
-            shipping_type,
-            shipping_price,
-            is_sold
+            *
           )
-        `)
+        `
+        )
         .eq("id", id)
-        .single<Offer>()
+        .single()
 
       if (error) throw error
-      if (!data) throw new Error("Offer not found")
-
-      const userId = session?.user?.id
-
-      if (
-        userId !== data.buyer_id &&
-        userId !== data.seller_id
-      ) {
-        Alert.alert("Access denied")
-        router.back()
-        return
-      }
 
       setOffer(data)
     } catch (err) {
       handleAppError(err, {
-        fallbackMessage: "Failed to load offer.",
+        fallbackMessage:
+          "Failed to load offer.",
       })
-      setOffer(null)
     } finally {
       setLoading(false)
     }
@@ -141,9 +95,12 @@ export default function OfferDetailScreen() {
   const isSeller = offer?.seller_id === userId
 
   const isExpired = useMemo(() => {
-    if (!offer) return false
-    const created = new Date(offer.created_at).getTime()
-    return Date.now() > created + 24 * 60 * 60 * 1000
+    if (!offer?.expires_at) return false
+
+    return (
+      Date.now() >
+      new Date(offer.expires_at).getTime()
+    )
   }, [offer])
 
   if (loading) {
@@ -157,369 +114,170 @@ export default function OfferDetailScreen() {
   if (!offer) return null
 
   const quantity = offer.quantity ?? 1
-
-  const displayTitle =
-    offer.accepted_title ||
-    offer.listings?.title ||
-    "Offer"
-
-  const displayImage =
-    offer.accepted_image_url ||
-    offer.listings?.image_urls?.[0] ||
-    "https://via.placeholder.com/300"
-
-  const unitPrice =
-    offer.status === "accepted" &&
-    offer.accepted_price != null
-      ? offer.accepted_price
-      : offer.current_amount
-
+  const unitPrice = offer.current_amount
   const itemTotal = unitPrice * quantity
 
-  const shippingType =
-    offer.status === "accepted" &&
-    offer.accepted_shipping_type
-      ? offer.accepted_shipping_type
-      : offer.listings?.shipping_type ?? "seller_pays"
-
-  const shippingPrice =
-    offer.status === "accepted" &&
-    offer.accepted_shipping_price != null
-      ? offer.accepted_shipping_price
-      : offer.listings?.shipping_price ?? 0
-
   const shippingCost =
-    shippingType === "buyer_pays"
-      ? shippingPrice ?? 0
+    offer.listings?.shipping_type ===
+    "buyer_pays"
+      ? offer.listings?.shipping_price ?? 0
       : 0
 
-  const buyerFeeRate = 0.044
-  const buyerFlatFee = 0.3
-
   const buyerFee = Number(
-    (itemTotal * buyerFeeRate + buyerFlatFee).toFixed(2)
+    (itemTotal * 0.044 + 0.3).toFixed(2)
   )
 
   const buyerTotal = Number(
-    (itemTotal + shippingCost + buyerFee).toFixed(2)
+    (
+      itemTotal +
+      shippingCost +
+      buyerFee
+    ).toFixed(2)
   )
 
-  const sellerFeeRate = 0.05
   const sellerFee = Number(
-    ((itemTotal + shippingCost) * sellerFeeRate).toFixed(2)
+    (
+      (itemTotal + shippingCost) *
+      0.05
+    ).toFixed(2)
   )
 
   const sellerPayout = Number(
-    (itemTotal + shippingCost - sellerFee).toFixed(2)
+    (
+      itemTotal +
+      shippingCost -
+      sellerFee
+    ).toFixed(2)
   )
 
-  const canBuyerRespond =
-    isBuyer &&
-    !isExpired &&
-    offer.status !== "accepted" &&
-    offer.status !== "declined" &&
-    offer.counter_count < 6 &&
-    offer.last_actor === "seller"
-
-  const canSellerRespond =
-    isSeller &&
-    !isExpired &&
-    offer.status !== "accepted" &&
-    offer.status !== "declined" &&
-    offer.counter_count < 6 &&
-    offer.last_actor === "buyer"
-
-  const canBuyerCancel =
-    isBuyer &&
-    !isExpired &&
-    (offer.status === "pending" ||
-      offer.status === "countered")
+  const receiptRows = isBuyer
+    ? [
+        {
+          label: "Unit Price",
+          value: `$${unitPrice.toFixed(2)}`,
+        },
+        {
+          label: "Quantity",
+          value: `x${quantity}`,
+        },
+        {
+          label: "Offer Total",
+          value: `$${itemTotal.toFixed(2)}`,
+        },
+        {
+          label: "Shipping",
+          value:
+            shippingCost > 0
+              ? `$${shippingCost.toFixed(2)}`
+              : "Free",
+        },
+        {
+          label:
+            "Buyer Protection & Processing",
+          value: `$${buyerFee.toFixed(2)}`,
+        },
+        {
+          label: "Total Due",
+          value: `$${buyerTotal.toFixed(2)}`,
+          bold: true,
+        },
+      ]
+    : [
+        {
+          label: "Unit Price",
+          value: `$${unitPrice.toFixed(2)}`,
+        },
+        {
+          label: "Quantity",
+          value: `x${quantity}`,
+        },
+        {
+          label: "Offer Total",
+          value: `$${itemTotal.toFixed(2)}`,
+        },
+        {
+          label: "Shipping",
+          value:
+            shippingCost > 0
+              ? `$${shippingCost.toFixed(2)}`
+              : "Free",
+        },
+        {
+          label: "Seller Fee",
+          value: `-$${sellerFee.toFixed(2)}`,
+        },
+        {
+          label: "You Receive",
+          value: `$${sellerPayout.toFixed(2)}`,
+          bold: true,
+        },
+      ]
 
   const canBuyerPay =
     isBuyer &&
     offer.status === "accepted" &&
     !isExpired
 
-  const renderStatusBadge = () => {
-    if (offer.listings?.is_sold && offer.status !== "accepted") {
-      return (
-        <View style={[styles.badge, { borderColor: "#C0392B" }]}>
-          <Text style={[styles.badgeText, { color: "#C0392B" }]}>
-            Item Sold
-          </Text>
-        </View>
-      )
-    }
+  const awaitingSeller =
+  !isExpired &&
+  offer.status === "pending" &&
+  isBuyer &&
+  offer.last_actor === "buyer"
 
-    if (isExpired) {
-      return (
-        <View style={[styles.badge, { borderColor: "#C0392B" }]}>
-          <Text style={[styles.badgeText, { color: "#C0392B" }]}>
-            Expired
-          </Text>
-        </View>
-      )
-    }
+const awaitingBuyer =
+  !isExpired &&
+  offer.status === "countered" &&
+  isSeller &&
+  offer.last_actor === "seller"
 
-    if (offer.status === "accepted") {
-      return (
-        <View style={[styles.badge, { borderColor: "#1F7A63" }]}>
-          <Text style={[styles.badgeText, { color: "#1F7A63" }]}>
-            Accepted • Waiting on payment
-          </Text>
-        </View>
-      )
-    }
+const canSellerRespond =
+  !isExpired &&
+  !offer.listings?.is_sold &&
+  (
+    offer.status === "pending" ||
+    offer.status === "countered"
+  ) &&
+  offer.counter_count < 6 &&
+  isSeller &&
+  offer.last_actor === "buyer"
 
-    if (offer.status === "declined") {
-      return (
-        <View style={[styles.badge, { borderColor: "#EB5757" }]}>
-          <Text style={[styles.badgeText, { color: "#EB5757" }]}>
-            Declined
-          </Text>
-        </View>
-      )
-    }
+const canBuyerRespond =
+  !isExpired &&
+  !offer.listings?.is_sold &&
+  offer.status === "countered" &&
+  offer.counter_count < 6 &&
+  isBuyer &&
+  offer.last_actor === "seller"
 
-    if (offer.status === "countered") {
-      if (offer.last_actor === "buyer") {
-        return (
-          <View style={[styles.badge, { borderColor: "#E67E22" }]}>
-            <Text style={[styles.badgeText, { color: "#E67E22" }]}>
-              Buyer Countered
-            </Text>
-          </View>
-        )
-      }
-
-      if (offer.last_actor === "seller") {
-        return (
-          <View style={[styles.badge, { borderColor: "#2980B9" }]}>
-            <Text style={[styles.badgeText, { color: "#2980B9" }]}>
-              Seller Countered
-            </Text>
-          </View>
-        )
-      }
-    }
-
-    return (
-      <View style={[styles.badge, { borderColor: "#6B7280" }]}>
-        <Text style={[styles.badgeText, { color: "#6B7280" }]}>
-          Pending Offer
-        </Text>
-      </View>
-    )
-  }
-
-  const acceptOffer = async () => {
-    if (!offer || saving || isExpired) return
-
-    try {
-      setSaving(true)
-
-      const updatePayload = {
-        status: "accepted",
-        last_actor: isBuyer ? "buyer" : "seller",
-        last_action: "accepted",
-        accepted_price: offer.current_amount,
-        accepted_title: offer.listings?.title ?? displayTitle,
-        accepted_image_url:
-          offer.listings?.image_urls?.[0] ?? null,
-        accepted_shipping_type:
-          offer.listings?.shipping_type ?? "seller_pays",
-        accepted_shipping_price:
-          offer.listings?.shipping_type === "buyer_pays"
-            ? offer.listings?.shipping_price ?? 0
-            : 0,
-        updated_at: new Date().toISOString(),
-      }
-
-      let query = supabase
-        .from("offers")
-        .update(updatePayload)
-        .eq("id", offer.id)
-
-      if (isBuyer) {
-        query = query.eq("status", "countered")
-      }
-
-      const { error } = await query
-      if (error) throw error
-
-      if (isSeller) {
-        try {
-          await supabase.functions.invoke("send-notification", {
-            body: {
-              userId: offer.buyer_id,
-              type: "offer",
-              title: "Offer accepted!",
-              body: "Your offer was accepted. Complete payment to secure the item.",
-              data: {
-                route: "/offer/[id]",
-                params: { id: offer.id },
-              },
-              dedupeKey: `offer-accepted-buyer-${offer.id}`,
-            },
-          })
-        } catch {}
-      }
-
-      if (isBuyer) {
-        try {
-          await supabase.functions.invoke("send-notification", {
-            body: {
-              userId: offer.seller_id,
-              type: "offer",
-              title: "Counter accepted!",
-              body: "The buyer accepted your counter offer.",
-              data: {
-                route: "/offer/[id]",
-                params: { id: offer.id },
-              },
-              dedupeKey: `offer-accepted-seller-${offer.id}`,
-            },
-          })
-        } catch {}
-      }
-
-      await loadOffer()
-    } catch (err) {
-      handleAppError(err, {
-        fallbackMessage: "Failed to accept offer.",
-      })
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const declineOffer = async () => {
-    if (!offer || saving) return
-
-    try {
-      setSaving(true)
-
-      const { error } = await supabase
-        .from("offers")
-        .update({
-          status: "declined",
-          last_actor: isBuyer ? "buyer" : "seller",
-          last_action: "declined",
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", offer.id)
-
-      if (error) throw error
-
-      try {
-        await supabase.functions.invoke("send-notification", {
-          body: {
-            userId: isBuyer ? offer.seller_id : offer.buyer_id,
-            type: "offer",
-            title: "Offer declined",
-            body: isBuyer
-              ? "The buyer declined your counter offer."
-              : "The seller declined your offer.",
-            data: {
-              route: "/offer/[id]",
-              params: { id: offer.id },
-            },
-            dedupeKey: `offer-declined-${offer.id}-${isBuyer ? "buyer" : "seller"}`,
-          },
-        })
-      } catch {}
-
-      await loadOffer()
-    } catch (err) {
-      handleAppError(err, {
-        fallbackMessage: "Failed to decline offer.",
-      })
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const cancelOffer = async () => {
-    if (!offer || saving) return
-
-    Alert.alert(
-      "Cancel Offer",
-      "Are you sure you want to cancel this offer?",
-      [
-        { text: "No", style: "cancel" },
-        {
-          text: "Yes",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              setSaving(true)
-
-              const { error } = await supabase
-                .from("offers")
-                .update({
-                  status: "declined",
-                  last_actor: "buyer",
-                  last_action: "cancelled",
-                  updated_at: new Date().toISOString(),
-                })
-                .eq("id", offer.id)
-                .eq("buyer_id", session?.user?.id)
-
-              if (error) throw error
-
-              try {
-                await supabase.functions.invoke("send-notification", {
-                  body: {
-                    userId: offer.seller_id,
-                    type: "offer",
-                    title: "Offer cancelled",
-                    body: "The buyer cancelled their offer.",
-                    data: {
-                      route: "/offer/[id]",
-                      params: { id: offer.id },
-                    },
-                    dedupeKey: `offer-cancelled-${offer.id}`,
-                  },
-                })
-              } catch {}
-
-              await loadOffer()
-            } catch (err) {
-              handleAppError(err, {
-                fallbackMessage: "Failed to cancel offer.",
-              })
-            } finally {
-              setSaving(false)
-            }
-          },
-        },
-      ]
-    )
-  }
+const canRespond =
+  canSellerRespond || canBuyerRespond
 
   const submitCounter = async () => {
-    if (!offer || saving || isExpired) return
-
     const amount = Number(counterAmount)
 
-    if (!amount || amount <= 0) {
-      Alert.alert("Enter a valid counter amount")
-      return
-    }
+    if (!amount || amount <= 0) return
 
     try {
       setSaving(true)
+
+      const newExpiresAt = new Date(
+        Date.now() +
+          24 * 60 * 60 * 1000
+      ).toISOString()
 
       const { error } = await supabase
         .from("offers")
         .update({
           current_amount: amount,
-          counter_amount: amount,
-          counter_count: offer.counter_count + 1,
-          last_actor: isBuyer ? "buyer" : "seller",
-          last_action: "countered",
+          counter_count:
+            offer.counter_count + 1,
+          last_actor: isBuyer
+            ? "buyer"
+            : "seller",
           status: "countered",
-          updated_at: new Date().toISOString(),
+          expires_at: newExpiresAt,
+          updated_at:
+            new Date().toISOString(),
         })
         .eq("id", offer.id)
 
@@ -528,176 +286,268 @@ export default function OfferDetailScreen() {
       setShowCounter(false)
       setCounterAmount("")
 
-      try {
-        await supabase.functions.invoke("send-notification", {
-          body: {
-            userId: isBuyer ? offer.seller_id : offer.buyer_id,
-            type: "offer",
-            title: "Offer countered",
-            body: isBuyer
-              ? "The buyer sent a counter offer."
-              : "The seller sent a counter offer.",
-            data: {
-              route: "/offer/[id]",
-              params: { id: offer.id },
-            },
-            dedupeKey: `offer-countered-${offer.id}-${isBuyer ? "buyer" : "seller"}`,
-          },
-        })
-      } catch {}
+      setResultModal({
+        visible: true,
+        title: "Counter Sent",
+        message: isBuyer
+          ? "Seller has been notified of your counter offer."
+          : "Buyer has been notified of your counter offer.",
+        onPrimary: () =>
+          setResultModal((p) => ({
+            ...p,
+            visible: false,
+          })),
+      })
 
       await loadOffer()
     } catch (err) {
       handleAppError(err, {
-        fallbackMessage: "Failed to send counter offer.",
+        fallbackMessage:
+          "Failed to send counter.",
       })
     } finally {
       setSaving(false)
     }
   }
 
-  const goToPay = () => {
-    router.push({
-      pathname: "/checkout",
-      params: { offerId: offer.id },
+  const acceptOffer = async () => {
+    try {
+      setSaving(true)
+
+      if (isSeller) {
+        const { data: listingCheck } =
+          await supabase
+            .from("listings")
+            .select("is_sold")
+            .eq("id", offer.listing_id)
+            .single()
+
+        if (listingCheck?.is_sold) {
+          throw new Error(
+            "Item already sold."
+          )
+        }
+
+        const { error } = await supabase
+          .from("offers")
+          .update({
+            status: "accepted",
+            last_actor: "seller",
+            accepted_price:
+              offer.current_amount,
+            accepted_title:
+              offer.listings.title,
+            accepted_image_url:
+              offer.listings
+                .image_urls?.[0] ?? null,
+            accepted_shipping_type:
+              offer.listings
+                .shipping_type,
+            accepted_shipping_price:
+              offer.listings
+                .shipping_type ===
+              "buyer_pays"
+                ? offer.listings
+                    .shipping_price ?? 0
+                : 0,
+            updated_at:
+              new Date().toISOString(),
+          })
+          .eq("id", offer.id)
+
+        if (error) throw error
+
+        await supabase
+          .from("listings")
+          .update({
+            is_sold: true,
+          })
+          .eq("id", offer.listing_id)
+
+        setResultModal({
+          visible: true,
+          title: "Offer Accepted",
+          message:
+            "Buyer has been notified and prompted to complete payment.",
+          onPrimary: () => {
+            setResultModal((p) => ({
+              ...p,
+              visible: false,
+            }))
+            router.push("/profile")
+          },
+        })
+      } else {
+        router.push({
+          pathname: "/cart/[offerId]",
+          params: { offerId: offer.id },
+        })
+      }
+
+      await loadOffer()
+    } catch (err) {
+      handleAppError(err, {
+        fallbackMessage:
+          "Failed to accept offer.",
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const cancelOffer = async () => {
+  try {
+    setSaving(true)
+
+    await supabase
+      .from("offers")
+      .update({
+        status: "cancelled",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", offer.id)
+
+    setResultModal({
+      visible: true,
+      title: "Offer Cancelled",
+      message:
+        "Your offer has been cancelled.",
+      onPrimary: () => {
+        setResultModal((p) => ({
+          ...p,
+          visible: false,
+        }))
+        router.push("/profile")
+      },
     })
+
+    await loadOffer()
+  } finally {
+    setSaving(false)
+  }
+}
+
+  const declineOffer = async () => {
+    try {
+      setSaving(true)
+
+      await supabase
+        .from("offers")
+        .update({
+          status: "declined",
+          updated_at:
+            new Date().toISOString(),
+        })
+        .eq("id", offer.id)
+
+      setResultModal({
+        visible: true,
+        title: "Offer Declined",
+        message:
+          "The other party has been notified.",
+        onPrimary: () => {
+          setResultModal((p) => ({
+            ...p,
+            visible: false,
+          }))
+          router.push("/profile")
+        },
+      })
+
+      await loadOffer()
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
     <View style={styles.screen}>
       <GlobalHeader />
 
-      <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.card}>
-          <Image
-            source={{ uri: displayImage }}
-            style={styles.image}
-          />
+      <ScrollView
+        contentContainerStyle={styles.content}
+      >
+        <OfferSummaryCard
+          offer={offer}
+          isExpired={isExpired}
+        />
 
-          <Text style={styles.title}>{displayTitle}</Text>
-
-          <Text style={styles.subText}>
-            Offer ID: {offer.id}
-          </Text>
-
-          {renderStatusBadge()}
-
-          <View style={styles.receipt}>
-            <Row
-              label="Unit Price"
-              value={`$${unitPrice.toFixed(2)}`}
-            />
-            <Row
-              label="Quantity"
-              value={`x${quantity}`}
-            />
-            <Row
-              label="Offer Total"
-              value={`$${itemTotal.toFixed(2)}`}
-            />
-            <Row
-              label="Shipping"
-              value={
-                shippingCost > 0
-                  ? `$${shippingCost.toFixed(2)}`
-                  : "Free / Included"
+        {!isExpired &&
+          offer.expires_at && (
+            <OfferExpiryTimer
+              expiresAt={
+                offer.expires_at
               }
             />
+          )}
 
-            <View style={styles.divider} />
+        <OfferReceiptCard
+          rows={receiptRows}
+        />
 
-            {isBuyer ? (
-              <>
-                <Row
-                  label="Buyer Protection & Processing"
-                  value={`$${buyerFee.toFixed(2)}`}
-                />
-                <Row
-                  label="Total Due"
-                  value={`$${buyerTotal.toFixed(2)}`}
-                  bold
-                />
-              </>
-            ) : (
-              <>
-                <Row
-                  label="Seller Fee (5%)"
-                  value={`-$${sellerFee.toFixed(2)}`}
-                />
-                <Row
-                  label="You Receive"
-                  value={`$${sellerPayout.toFixed(2)}`}
-                  bold
-                />
-              </>
-            )}
-          </View>
-        </View>
+        {awaitingSeller && (
+  <>
+    <View style={styles.waitCard}>
+      <Text style={styles.waitTitle}>
+        Awaiting Seller Decision
+      </Text>
 
-        <View style={styles.noteCard}>
-          <Text style={styles.noteTitle}>Logic Note</Text>
-          <Text style={styles.noteText}>
-            Once an offer is accepted, the buyer must complete payment
-            before the order is officially created and processed. This
-            page handles the negotiation flow first, then pushes the
-            buyer into checkout.
-          </Text>
-        </View>
+      <Text style={styles.waitSub}>
+        Your offer has been sent. You may cancel it before the seller responds.
+      </Text>
+    </View>
 
-        {canBuyerPay && (
-          <TouchableOpacity
-            style={styles.acceptBtn}
-            onPress={goToPay}
-            disabled={saving}
-          >
-            <Text style={styles.acceptText}>
-              Pay Now • ${buyerTotal.toFixed(2)}
-            </Text>
-          </TouchableOpacity>
-        )}
+    <OfferActionButtons
+  tertiaryText="Cancel Offer"
+  onTertiary={cancelOffer}
+/>
+  </>
+)}
 
-        {(canSellerRespond || canBuyerRespond) && (
-          <View style={styles.actionStack}>
-            <TouchableOpacity
-              style={styles.acceptBtn}
-              onPress={acceptOffer}
-              disabled={saving}
-            >
-              <Text style={styles.acceptText}>
-                {isSeller ? "Accept Offer" : "Accept Counter"}
-              </Text>
-            </TouchableOpacity>
+{awaitingBuyer && (
+  <View style={styles.waitCard}>
+    <Text style={styles.waitTitle}>
+      Awaiting Buyer Decision
+    </Text>
 
-            <TouchableOpacity
-              style={styles.counterBtn}
-              onPress={() => setShowCounter(true)}
-              disabled={saving}
-            >
-              <Text style={styles.counterText}>Counter</Text>
-            </TouchableOpacity>
+    <Text style={styles.waitSub}>
+      Your counter offer has been sent to the buyer.
+    </Text>
+  </View>
+)}
 
-            <TouchableOpacity
-              style={styles.declineBtn}
-              onPress={declineOffer}
-              disabled={saving}
-            >
-              <Text style={styles.declineText}>Decline</Text>
-            </TouchableOpacity>
-          </View>
-        )}
+{canBuyerPay && (
+  <OfferActionButtons
+    primaryText={`Pay Now • $${buyerTotal.toFixed(
+      2
+    )}`}
+    onPrimary={acceptOffer}
+  />
+)}
 
-        {canBuyerCancel && (
-          <TouchableOpacity
-            style={styles.cancelBtn}
-            onPress={cancelOffer}
-            disabled={saving}
-          >
-            <Text style={styles.cancelText}>Cancel Offer</Text>
-          </TouchableOpacity>
-        )}
+{canRespond && !canBuyerPay && (
+  <OfferActionButtons
+    primaryText={
+      isSeller
+        ? "Accept Offer"
+        : "Accept Counter"
+    }
+    secondaryText="Counter"
+    tertiaryText="Decline"
+    onPrimary={acceptOffer}
+    onSecondary={() =>
+      setShowCounter(true)
+    }
+    onTertiary={declineOffer}
+  />
+)}
       </ScrollView>
 
-      <Modal visible={showCounter} transparent animationType="fade">
+      <Modal
+        visible={showCounter}
+        transparent
+        animationType="fade"
+      >
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>
@@ -706,7 +556,7 @@ export default function OfferDetailScreen() {
 
             <TextInput
               style={styles.input}
-              placeholder="Enter counter amount"
+              placeholder="Enter amount"
               keyboardType="decimal-pad"
               value={counterAmount}
               onChangeText={setCounterAmount}
@@ -714,48 +564,49 @@ export default function OfferDetailScreen() {
 
             <View style={styles.modalActions}>
               <TouchableOpacity
-                style={styles.modalCancel}
-                onPress={() => setShowCounter(false)}
+                onPress={() =>
+                  setShowCounter(false)
+                }
               >
-                <Text style={styles.modalCancelText}>Cancel</Text>
+                <Text>Cancel</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={styles.modalConfirm}
                 onPress={submitCounter}
               >
-                <Text style={styles.modalConfirmText}>Send</Text>
+                <Text>Send</Text>
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
 
-      <GlobalFooter />
-    </View>
-  )
-}
+      <OfferActionResultModal
+        visible={resultModal.visible}
+        title={resultModal.title}
+        message={resultModal.message}
+        primaryText={
+          resultModal.primaryText
+        }
+        secondaryText={
+          resultModal.secondaryText
+        }
+        onPrimary={
+          resultModal.onPrimary ??
+          (() => {})
+        }
+        onSecondary={
+          resultModal.onSecondary
+        }
+        onClose={() =>
+          setResultModal((p) => ({
+            ...p,
+            visible: false,
+          }))
+        }
+      />
 
-function Row({
-  label,
-  value,
-  bold,
-}: {
-  label: string
-  value: string
-  bold?: boolean
-}) {
-  return (
-    <View style={styles.row}>
-      <Text style={styles.rowLabel}>{label}</Text>
-      <Text
-        style={[
-          styles.rowValue,
-          bold && styles.rowValueBold,
-        ]}
-      >
-        {value}
-      </Text>
+      <GlobalFooter />
     </View>
   )
 }
@@ -770,7 +621,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#F8F8F8",
   },
 
   content: {
@@ -778,180 +628,32 @@ const styles = StyleSheet.create({
     paddingBottom: 120,
   },
 
-  card: {
-    backgroundColor: "#fff",
-    borderRadius: 20,
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: "#E8E8E8",
-  },
+  waitCard: {
+  backgroundColor: "#fff",
+  borderRadius: 18,
+  borderWidth: 1,
+  borderColor: "#E8E8E8",
+  padding: 16,
+  marginBottom: 14,
+},
 
-  image: {
-    width: "100%",
-    height: 220,
-    borderRadius: 16,
-    backgroundColor: "#EEE",
-    marginBottom: 14,
-  },
+waitTitle: {
+  fontSize: 15,
+  fontWeight: "800",
+  color: "#111",
+  marginBottom: 4,
+},
 
-  title: {
-    fontSize: 20,
-    fontWeight: "900",
-    color: "#111",
-    marginBottom: 4,
-  },
-
-  subText: {
-    fontSize: 13,
-    color: "#6B7280",
-    marginBottom: 12,
-  },
-
-  badge: {
-    alignSelf: "flex-start",
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-    marginBottom: 14,
-    backgroundColor: "#fff",
-  },
-
-  badgeText: {
-    fontSize: 12,
-    fontWeight: "800",
-  },
-
-  receipt: {
-    backgroundColor: "#F9FAFB",
-    borderRadius: 16,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-  },
-
-  row: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 7,
-  },
-
-  rowLabel: {
-    fontSize: 14,
-    color: "#6B7280",
-    fontWeight: "600",
-  },
-
-  rowValue: {
-    fontSize: 14,
-    color: "#111",
-    fontWeight: "700",
-  },
-
-  rowValueBold: {
-    fontSize: 16,
-    color: "#111",
-    fontWeight: "900",
-  },
-
-  divider: {
-    height: 1,
-    backgroundColor: "#E5E7EB",
-    marginVertical: 10,
-  },
-
-  noteCard: {
-    backgroundColor: "#fff7ed",
-    borderRadius: 20,
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: "#fed7aa",
-  },
-
-  noteTitle: {
-    fontSize: 16,
-    fontWeight: "900",
-    color: "#9A3412",
-    marginBottom: 6,
-  },
-
-  noteText: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: "#7C2D12",
-    fontWeight: "600",
-  },
-
-  actionStack: {
-    gap: 10,
-    marginBottom: 12,
-  },
-
-  acceptBtn: {
-    backgroundColor: "#D97732",
-    paddingVertical: 15,
-    borderRadius: 16,
-    alignItems: "center",
-    marginBottom: 10,
-  },
-
-  acceptText: {
-    color: "#fff",
-    fontWeight: "900",
-    fontSize: 15,
-  },
-
-  counterBtn: {
-    backgroundColor: "#fff",
-    borderWidth: 1.5,
-    borderColor: "#D97732",
-    paddingVertical: 15,
-    borderRadius: 16,
-    alignItems: "center",
-  },
-
-  counterText: {
-    color: "#D97732",
-    fontWeight: "900",
-    fontSize: 15,
-  },
-
-  declineBtn: {
-    backgroundColor: "#fff",
-    borderWidth: 1.5,
-    borderColor: "#DC2626",
-    paddingVertical: 15,
-    borderRadius: 16,
-    alignItems: "center",
-  },
-
-  declineText: {
-    color: "#DC2626",
-    fontWeight: "900",
-    fontSize: 15,
-  },
-
-  cancelBtn: {
-    backgroundColor: "#fff",
-    borderWidth: 1.5,
-    borderColor: "#6B7280",
-    paddingVertical: 15,
-    borderRadius: 16,
-    alignItems: "center",
-  },
-
-  cancelText: {
-    color: "#374151",
-    fontWeight: "900",
-    fontSize: 15,
-  },
+waitSub: {
+  fontSize: 13,
+  color: "#6B7280",
+  lineHeight: 18,
+},
 
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.45)",
+    backgroundColor:
+      "rgba(0,0,0,0.4)",
     justifyContent: "center",
     padding: 24,
   },
@@ -963,51 +665,22 @@ const styles = StyleSheet.create({
   },
 
   modalTitle: {
-    fontSize: 17,
-    fontWeight: "900",
-    color: "#111",
-    marginBottom: 12,
+    fontSize: 16,
+    fontWeight: "800",
+    marginBottom: 14,
   },
 
   input: {
-    backgroundColor: "#F9FAFB",
-    borderRadius: 12,
-    padding: 14,
     borderWidth: 1,
     borderColor: "#E5E7EB",
-    fontSize: 16,
-    marginBottom: 8,
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 16,
   },
 
   modalActions: {
     flexDirection: "row",
-    gap: 10,
-    marginTop: 14,
-  },
-
-  modalCancel: {
-    flex: 1,
-    backgroundColor: "#F3F4F6",
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: "center",
-  },
-
-  modalCancelText: {
-    color: "#111",
-    fontWeight: "800",
-  },
-
-  modalConfirm: {
-    flex: 1,
-    backgroundColor: "#D97732",
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: "center",
-  },
-
-  modalConfirmText: {
-    color: "#fff",
-    fontWeight: "900",
+    justifyContent:
+      "space-between",
   },
 })

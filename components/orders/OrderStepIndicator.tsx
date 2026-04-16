@@ -5,17 +5,63 @@ import {
 } from "react-native"
 
 const MAIN_STEPS = [
-  { key: "paid", label: "Order Placed", subBuyer: "Payment received", subSeller: "Prepare shipment" },
-  { key: "shipped", label: "Shipped", subBuyer: "Your item is on the way", subSeller: "In transit to buyer" },
-  { key: "delivered", label: "Delivered", subBuyer: "Delivered to you", subSeller: "Awaiting buyer action" },
-  { key: "completed", label: "Completed", subBuyer: "Order complete", subSeller: "Funds released" },
+  {
+    key: "paid",
+    label: "Order Placed",
+    subBuyer: "Payment received",
+    subSeller: "Prepare shipment",
+  },
+  {
+    key: "in_transit",
+    label: "Shipped",
+    subBuyer: "Your item is on the way",
+    subSeller: "In transit to buyer",
+  },
+  {
+    key: "out_for_delivery",
+    label: "Out For Delivery",
+    subBuyer: "Arriving today",
+    subSeller: "Out for final delivery",
+  },
+  {
+    key: "delivered",
+    label: "Delivered",
+    subBuyer: "Delivered to you",
+    subSeller: "Awaiting buyer action",
+  },
+  {
+    key: "completed",
+    label: "Completed",
+    subBuyer: "Order complete",
+    subSeller: "Funds released",
+  },
 ]
 
 const RETURN_STEPS = [
-  { key: "delivered", label: "Delivered", subBuyer: "Delivered to you", subSeller: "Delivered to buyer" },
-  { key: "return_started", label: "Return Started", subBuyer: "Return initiated", subSeller: "Buyer started return" },
-  { key: "return_processing", label: "Return Processing", subBuyer: "Return in progress", subSeller: "Awaiting return completion" },
-  { key: "completed", label: "Resolved", subBuyer: "Order resolved", subSeller: "Order resolved" },
+  {
+    key: "delivered",
+    label: "Delivered",
+    subBuyer: "Delivered to you",
+    subSeller: "Delivered to buyer",
+  },
+  {
+    key: "return_started",
+    label: "Return Started",
+    subBuyer: "Return initiated",
+    subSeller: "Buyer started return",
+  },
+  {
+    key: "return_processing",
+    label: "Return Processing",
+    subBuyer: "Return in progress",
+    subSeller: "Awaiting return completion",
+  },
+  {
+    key: "completed",
+    label: "Resolved",
+    subBuyer: "Order resolved",
+    subSeller: "Order resolved",
+  },
 ]
 
 function getStepSet(status: string) {
@@ -29,25 +75,36 @@ function getStepSet(status: string) {
   return MAIN_STEPS
 }
 
-function getCurrentStepIndex(status: string, isDisputed?: boolean) {
+function getCurrentStepIndex(
+  order: any,
+  isDisputed?: boolean
+) {
   if (isDisputed) return 2
 
-  switch (status) {
+  const trackingStatus =
+    order.tracking_status?.toLowerCase()
+
+  if (order.status === "completed") return 4
+  if (order.status === "delivered") return 3
+
+  if (trackingStatus === "out_for_delivery") return 2
+  if (trackingStatus === "in_transit") return 1
+  if (trackingStatus === "delivered") return 3
+
+  switch (order.status) {
     case "paid":
-      return 0
     case "label_purchased":
       return 0
+
     case "shipped":
-    case "in_transit":
       return 1
-    case "delivered":
-      return 2
-    case "completed":
-      return 3
+
     case "return_started":
       return 1
+
     case "return_processing":
       return 2
+
     default:
       return 0
   }
@@ -61,8 +118,9 @@ export default function OrderStepIndicator({
   role?: "buyer" | "seller"
 }) {
   const steps = getStepSet(order.status)
+
   const currentIndex = getCurrentStepIndex(
-    order.status,
+    order,
     order.is_disputed
   )
 
@@ -94,7 +152,8 @@ export default function OrderStepIndicator({
                   <View
                     style={[
                       styles.line,
-                      index < currentIndex && styles.lineDone,
+                      index < currentIndex &&
+                        styles.lineDone,
                     ]}
                   />
                 )}
@@ -104,8 +163,10 @@ export default function OrderStepIndicator({
                 <Text
                   style={[
                     styles.stepLabel,
-                    isActive && styles.stepLabelActive,
-                    isDone && styles.stepLabelDone,
+                    isActive &&
+                      styles.stepLabelActive,
+                    isDone &&
+                      styles.stepLabelDone,
                   ]}
                 >
                   {step.label}

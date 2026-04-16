@@ -12,9 +12,7 @@ import {
 } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
-type GlobalFooterProps = {
-  cartCount?: number
-}
+import { useCart } from "@/context/CartContext"
 
 type IoniconName =
   React.ComponentProps<
@@ -28,7 +26,7 @@ const NAV_ITEMS: {
   label: string
 }[] = [
   {
-    path: "/",
+    path: "/home",
     icon: "home-outline",
     activeIcon: "home",
     label: "Home",
@@ -59,12 +57,19 @@ const NAV_ITEMS: {
   },
 ]
 
-export default function GlobalFooter({
-  cartCount = 0,
-}: GlobalFooterProps) {
+export default function GlobalFooter() {
   const router = useRouter()
   const pathname = usePathname()
   const insets = useSafeAreaInsets()
+
+  const { cartCount } = useCart()
+
+  const isActive = (path: string) => {
+    return (
+      pathname === path ||
+      pathname.startsWith(path + "/")
+    )
+  }
 
   return (
     <View
@@ -81,10 +86,7 @@ export default function GlobalFooter({
       <View style={styles.inner}>
         {NAV_ITEMS.map((item) => {
           const active =
-            pathname === item.path ||
-            pathname.startsWith(
-              item.path + "/"
-            )
+            isActive(item.path)
 
           return (
             <TouchableOpacity

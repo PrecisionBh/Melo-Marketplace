@@ -9,6 +9,7 @@ import {
 import { GestureHandlerRootView } from "react-native-gesture-handler"
 
 import { AuthProvider, useAuth } from "../context/AuthContext"
+import { CartProvider } from "../context/CartContext"
 
 /* 🔥 FORCE LTR (GLOBAL FIX) */
 I18nManager.allowRTL(false)
@@ -29,7 +30,6 @@ function AuthGate() {
       segments[0] === "verify-otp" ||
       segments[0] === "reset-password"
 
-    // ✅ ONLY redirect logged-in users away from auth screens
     if (session && inAuthGroup) {
       router.replace("/home")
     }
@@ -37,7 +37,13 @@ function AuthGate() {
 
   if (loading) {
     return (
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+      <View
+        style={{
+          flex: 1,
+          justifyContent: "center",
+          alignItems: "center",
+        }}
+      >
         <ActivityIndicator />
       </View>
     )
@@ -50,22 +56,29 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <StripeProvider
-        publishableKey={process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY!}
+        publishableKey={
+          process.env
+            .EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY!
+        }
       >
         <AuthProvider>
-          {/* ✅ Auth logic */}
-          <AuthGate />
+          <CartProvider>
+            <AuthGate />
 
-          {/* ✅ App screens */}
-          <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="index" />
-            <Stack.Screen name="signinscreen" />
-            <Stack.Screen name="register" />
-            <Stack.Screen name="forgot-password" />
-            <Stack.Screen name="verify-otp" />
-            <Stack.Screen name="reset-password" />
-            <Stack.Screen name="home" />
-          </Stack>
+            <Stack
+              screenOptions={{
+                headerShown: false,
+              }}
+            >
+              <Stack.Screen name="index" />
+              <Stack.Screen name="signinscreen" />
+              <Stack.Screen name="register" />
+              <Stack.Screen name="forgot-password" />
+              <Stack.Screen name="verify-otp" />
+              <Stack.Screen name="reset-password" />
+              <Stack.Screen name="home" />
+            </Stack>
+          </CartProvider>
         </AuthProvider>
       </StripeProvider>
     </GestureHandlerRootView>

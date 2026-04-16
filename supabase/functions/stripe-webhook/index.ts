@@ -241,6 +241,39 @@ console.log("💰 Dynamic seller fee applied", {
       })
       .eq("id", resolvedListingId)
   }
+
+ if (resolvedListingId) {
+  // 🛒 Remove purchased item from buyer cart after successful payment
+  try {
+    const { error: cartDeleteErr } =
+      await supabase
+        .from("cart_items")
+        .delete()
+        .eq("user_id", order.buyer_id)
+        .eq("listing_id", resolvedListingId)
+
+    if (cartDeleteErr) {
+      console.error(
+        "❌ Failed removing purchased item from cart",
+        cartDeleteErr
+      )
+    } else {
+      console.log(
+        "🛒 Purchased item removed from cart",
+        {
+          buyer_id: order.buyer_id,
+          listing_id: resolvedListingId,
+        }
+      )
+    }
+  } catch (cartErr) {
+    console.error(
+      "❌ Cart cleanup exception:",
+      cartErr
+    )
+  }
+}
+
 // 🔔 Send notifications (buyer + seller)
 try {
   console.log("🔔 Notification Debug:", {
@@ -417,19 +450,54 @@ serve(async (req) => {
   const metadata = session.metadata || {}
 
   const orderId = metadata.order_id
-  const userId = metadata.user_id
-  const type = metadata.type
+const orderIdsRaw = metadata.order_ids
+const userId = metadata.user_id
+const type = metadata.type
 
-  if (orderId) {
-    return await markOrderPaid({
-      orderId,
-      sessionId: session.id,
-      paymentIntentId: session.payment_intent as string | null,
-      amountTotal: session.amount_total ?? null,
+// ---------------- SINGLE ORDER ----------------
+if (orderId) {
+  return await markOrderPaid({
+    orderId,
+    sessionId: session.id,
+    paymentIntentId:
+      session.payment_intent as string | null,
+    amountTotal:
+      session.amount_total ?? null,
+  })
+}
+
+// ---------------- MULTI ORDER CART ----------------
+if (orderIdsRaw) {
+  try {
+    const orderIds: string[] =
+      JSON.parse(orderIdsRaw)
+
+    for (const id of orderIds) {
+      await markOrderPaid({
+        orderId: id,
+        sessionId: session.id,
+        paymentIntentId:
+          session.payment_intent as string | null,
+      })
+    }
+
+    return json(200, {
+      received: true,
+    })
+  } catch (err) {
+    console.error(
+      "❌ Failed parsing order_ids:",
+      err
+    )
+
+    return json(400, {
+      error:
+        "Invalid order_ids metadata",
     })
   }
+}
 
-  return json(200, { received: true })
+return json(200, { received: true })
 }
 
 if (event.type === "payout.paid") {

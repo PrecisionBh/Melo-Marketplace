@@ -1,27 +1,26 @@
-import { useRouter } from "expo-router"
+import GlobalFooter from "@/components/global/globalfooter"
+import GlobalHeader from "@/components/global/globalheader"
+
+import React from "react"
 import {
-    ScrollView,
-    StyleSheet,
-    Text,
-    View,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from "react-native"
 
-import AppHeader from "@/components/app-header"
-
 export default function ContactScreen() {
-  const router = useRouter()
-
   return (
     <View style={styles.screen}>
-      {/* HEADER */}
-      <AppHeader
-        title="Contact Support"
-        backLabel="Legal"
-        backRoute="/legal"
-      />
+      <GlobalHeader />
 
-      {/* CONTENT */}
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+      >
+        <Text style={styles.pageTitle}>
+          Contact Support
+        </Text>
+
         <Section title="Contact Melo Support">
           <Text style={styles.text}>
             If you need assistance with an order, payment, dispute,
@@ -77,11 +76,11 @@ export default function ContactScreen() {
           orders, payments, disputes, listings, and technical problems.
         </Text>
       </ScrollView>
+
+      <GlobalFooter />
     </View>
   )
 }
-
-/* ---------------- COMPONENT ---------------- */
 
 function Section({
   title,
@@ -91,19 +90,19 @@ function Section({
   children: React.ReactNode
 }) {
   return (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{title}</Text>
+    <View style={styles.sectionCard}>
+      <Text style={styles.sectionTitle}>
+        {title}
+      </Text>
       {children}
     </View>
   )
 }
 
-/* ---------------- STYLES ---------------- */
-
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#EAF4EF",
+    backgroundColor: "#F8F8F8",
   },
 
   content: {
@@ -111,41 +110,53 @@ const styles = StyleSheet.create({
     paddingBottom: 120,
   },
 
-  section: {
-    marginBottom: 20,
+  pageTitle: {
+    fontSize: 28,
+    fontWeight: "800",
+    color: "#111",
+    marginBottom: 24,
+  },
+
+  sectionCard: {
+    backgroundColor: "#fff",
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: "#E8E8E8",
+    padding: 18,
+    marginBottom: 16,
   },
 
   sectionTitle: {
     fontSize: 15,
     fontWeight: "800",
-    color: "#0F1E17",
-    marginBottom: 6,
+    color: "#111",
+    marginBottom: 10,
   },
 
   text: {
-    fontSize: 13,
-    lineHeight: 19,
-    color: "#0F1E17",
+    fontSize: 14,
+    lineHeight: 22,
+    color: "#555",
+    marginBottom: 10,
   },
 
   list: {
-    marginTop: 6,
-    marginBottom: 6,
-    fontSize: 13,
-    lineHeight: 20,
-    color: "#0F1E17",
+    fontSize: 14,
+    lineHeight: 22,
+    color: "#555",
   },
 
   email: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#1F7A63",
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#D97732",
   },
 
   footer: {
-    marginTop: 24,
-    fontSize: 12,
-    color: "#6B8F7D",
+    marginTop: 8,
+    marginBottom: 8,
     textAlign: "center",
+    fontSize: 12,
+    color: "#6B7280",
   },
 })

@@ -1,4 +1,10 @@
-import { useRouter } from "expo-router"
+import GlobalFooter from "@/components/global/globalfooter"
+import GlobalHeader from "@/components/global/globalheader"
+
+import { useAuth } from "../../context/AuthContext"
+import { handleAppError } from "../../lib/errors/appError"
+import { supabase } from "../../lib/supabase"
+
 import { useState } from "react"
 import {
   Alert,
@@ -12,45 +18,47 @@ import {
   View,
 } from "react-native"
 
-import AppHeader from "@/components/app-header"
-import { useAuth } from "../../context/AuthContext"
-import { handleAppError } from "../../lib/errors/appError"
-import { supabase } from "../../lib/supabase"
-
 export default function EditAccountScreen() {
-  const router = useRouter()
   const { session } = useAuth()
 
   const userEmail = session?.user?.email ?? ""
 
-  const [currentPassword, setCurrentPassword] = useState("")
+  const [currentPassword, setCurrentPassword] =
+    useState("")
 
-  const [newEmail, setNewEmail] = useState("")
-  const [confirmEmail, setConfirmEmail] = useState("")
+  const [newEmail, setNewEmail] =
+    useState("")
+  const [confirmEmail, setConfirmEmail] =
+    useState("")
 
-  const [newPassword, setNewPassword] = useState("")
-  const [confirmPassword, setConfirmPassword] = useState("")
+  const [newPassword, setNewPassword] =
+    useState("")
+  const [confirmPassword, setConfirmPassword] =
+    useState("")
 
-  const [loading, setLoading] = useState(false)
-
-  /* ---------------- REAUTH ---------------- */
+  const [loading, setLoading] =
+    useState(false)
 
   const reauthenticate = async () => {
     try {
       if (!userEmail || !currentPassword) {
-        Alert.alert("Missing password", "Please enter your current password.")
+        Alert.alert(
+          "Missing Password",
+          "Please enter your current password."
+        )
         return false
       }
 
-      const { error } = await supabase.auth.signInWithPassword({
-        email: userEmail,
-        password: currentPassword,
-      })
+      const { error } =
+        await supabase.auth.signInWithPassword({
+          email: userEmail,
+          password: currentPassword,
+        })
 
       if (error) {
         handleAppError(error, {
-          context: "edit_account_reauth_failed",
-          fallbackMessage: "Current password is incorrect.",
+          fallbackMessage:
+            "Current password is incorrect.",
         })
         return false
       }
@@ -58,311 +66,304 @@ export default function EditAccountScreen() {
       return true
     } catch (err) {
       handleAppError(err, {
-        context: "edit_account_reauth_catch",
-        fallbackMessage: "Authentication failed. Please try again.",
+        fallbackMessage:
+          "Authentication failed.",
       })
       return false
     }
   }
 
-  /* ---------------- UPDATE EMAIL ---------------- */
-
-  const updateEmail = async () => {
+  const handleSave = async () => {
     try {
-      if (!newEmail || !confirmEmail) {
-        Alert.alert("Missing email", "Please fill out both email fields.")
-        return
-      }
-
-      if (newEmail !== confirmEmail) {
-        Alert.alert("Email mismatch", "Emails do not match.")
-        return
-      }
-
-      if (!session?.user) {
-        handleAppError(new Error("Session missing"), {
-          context: "edit_account_update_email_no_session",
-          fallbackMessage: "Your session expired. Please sign in again.",
-        })
+      if (
+        !newEmail &&
+        !newPassword
+      ) {
+        Alert.alert(
+          "Nothing To Update",
+          "Enter a new email or password first."
+        )
         return
       }
 
       setLoading(true)
 
-      const ok = await reauthenticate()
+      const ok =
+        await reauthenticate()
+
       if (!ok) {
         setLoading(false)
         return
       }
 
-      const { error } = await supabase.auth.updateUser({
-        email: newEmail.trim(),
-      })
+      /* EMAIL */
+      if (newEmail) {
+        if (
+          newEmail !== confirmEmail
+        ) {
+          Alert.alert(
+            "Email Mismatch",
+            "Emails do not match."
+          )
+          setLoading(false)
+          return
+        }
 
-      if (error) {
-        handleAppError(error, {
-          context: "edit_account_update_email",
-          fallbackMessage: "Failed to update email.",
-        })
-        setLoading(false)
-        return
+        const { error } =
+          await supabase.auth.updateUser({
+            email: newEmail.trim(),
+          })
+
+        if (error) throw error
       }
 
-      setLoading(false)
+      /* PASSWORD */
+      if (newPassword) {
+        if (
+          newPassword.length < 6
+        ) {
+          Alert.alert(
+            "Invalid Password",
+            "Password must be at least 6 characters."
+          )
+          setLoading(false)
+          return
+        }
+
+        if (
+          newPassword !==
+          confirmPassword
+        ) {
+          Alert.alert(
+            "Password Mismatch",
+            "Passwords do not match."
+          )
+          setLoading(false)
+          return
+        }
+
+        const { error } =
+          await supabase.auth.updateUser({
+            password: newPassword,
+          })
+
+        if (error) throw error
+      }
 
       Alert.alert(
-        "Email updated",
-        "Please check your new email to confirm the change."
+        "Success",
+        "Account updated successfully."
       )
 
+      setCurrentPassword("")
       setNewEmail("")
       setConfirmEmail("")
-      setCurrentPassword("")
-    } catch (err) {
-      setLoading(false)
-      handleAppError(err, {
-        context: "edit_account_update_email_catch",
-        fallbackMessage: "Failed to update email. Please try again.",
-      })
-    }
-  }
-
-  /* ---------------- UPDATE PASSWORD ---------------- */
-
-  const updatePassword = async () => {
-    try {
-      if (!newPassword || !confirmPassword) {
-        Alert.alert("Missing password", "Please fill out both password fields.")
-        return
-      }
-
-      if (newPassword.length < 6) {
-        Alert.alert("Invalid password", "Password must be at least 6 characters.")
-        return
-      }
-
-      if (newPassword !== confirmPassword) {
-        Alert.alert("Password mismatch", "Passwords do not match.")
-        return
-      }
-
-      if (!session?.user) {
-        handleAppError(new Error("Session missing"), {
-          context: "edit_account_update_password_no_session",
-          fallbackMessage: "Your session expired. Please sign in again.",
-        })
-        return
-      }
-
-      setLoading(true)
-
-      const ok = await reauthenticate()
-      if (!ok) {
-        setLoading(false)
-        return
-      }
-
-      const { error } = await supabase.auth.updateUser({
-        password: newPassword,
-      })
-
-      if (error) {
-        handleAppError(error, {
-          context: "edit_account_update_password",
-          fallbackMessage: "Failed to update password.",
-        })
-        setLoading(false)
-        return
-      }
-
-      setLoading(false)
-
-      Alert.alert("Password updated", "Your password has been changed.")
-
       setNewPassword("")
       setConfirmPassword("")
-      setCurrentPassword("")
     } catch (err) {
-      setLoading(false)
       handleAppError(err, {
-        context: "edit_account_update_password_catch",
-        fallbackMessage: "Failed to update password. Please try again.",
+        fallbackMessage:
+          "Failed to update account.",
       })
+    } finally {
+      setLoading(false)
     }
   }
-
-  /* ---------------- UI ---------------- */
 
   return (
     <View style={styles.screen}>
-      <AppHeader
-        title="Edit Account"
-        backLabel="Settings"
-        backRoute="/settings"
-      />
+      <GlobalHeader />
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 20}
+        behavior={
+          Platform.OS === "ios"
+            ? "padding"
+            : "height"
+        }
+        keyboardVerticalOffset={
+          Platform.OS === "ios"
+            ? 90
+            : 20
+        }
       >
         <ScrollView
-          style={{ flex: 1 }}
-          contentContainerStyle={{
-            flexGrow: 1,
-            padding: 20,
-            paddingBottom: 220,
-          }}
+          contentContainerStyle={
+            styles.content
+          }
           keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
+          showsVerticalScrollIndicator={
+            false
+          }
         >
-          {/* CURRENT PASSWORD */}
-          <Text style={styles.label}>Current Password *</Text>
-          <TextInput
-            value={currentPassword}
-            onChangeText={setCurrentPassword}
-            secureTextEntry
-            style={styles.input}
-          />
+          <Text style={styles.pageTitle}>
+            Edit Account
+          </Text>
 
-          {/* EMAIL */}
-          <Text style={styles.section}>Change Email</Text>
+          <View style={styles.card}>
+            <Text
+              style={styles.sectionTitle}
+            >
+              Security Verification
+            </Text>
 
-          <TextInput
-            value={newEmail}
-            onChangeText={setNewEmail}
-            placeholder="New email"
-            autoCapitalize="none"
-            keyboardType="email-address"
-            style={styles.input}
-          />
+            <TextInput
+              value={
+                currentPassword
+              }
+              onChangeText={
+                setCurrentPassword
+              }
+              secureTextEntry
+              placeholder="Current Password"
+              style={styles.input}
+            />
+          </View>
 
-          <TextInput
-            value={confirmEmail}
-            onChangeText={setConfirmEmail}
-            placeholder="Confirm new email"
-            autoCapitalize="none"
-            keyboardType="email-address"
-            style={styles.input}
-          />
+          <View style={styles.card}>
+            <Text
+              style={styles.sectionTitle}
+            >
+              Change Email
+            </Text>
+
+            <TextInput
+              value={newEmail}
+              onChangeText={
+                setNewEmail
+              }
+              placeholder="New Email"
+              autoCapitalize="none"
+              keyboardType="email-address"
+              style={styles.input}
+            />
+
+            <TextInput
+              value={confirmEmail}
+              onChangeText={
+                setConfirmEmail
+              }
+              placeholder="Confirm New Email"
+              autoCapitalize="none"
+              keyboardType="email-address"
+              style={styles.input}
+            />
+          </View>
+
+          <View style={styles.card}>
+            <Text
+              style={styles.sectionTitle}
+            >
+              Change Password
+            </Text>
+
+            <TextInput
+              value={newPassword}
+              onChangeText={
+                setNewPassword
+              }
+              placeholder="New Password"
+              secureTextEntry
+              style={styles.input}
+            />
+
+            <TextInput
+              value={
+                confirmPassword
+              }
+              onChangeText={
+                setConfirmPassword
+              }
+              placeholder="Confirm New Password"
+              secureTextEntry
+              style={styles.input}
+            />
+          </View>
 
           <TouchableOpacity
             style={styles.saveBtn}
-            onPress={updateEmail}
+            onPress={handleSave}
             disabled={loading}
           >
-            <Text style={styles.saveText}>Update Email</Text>
+            <Text
+              style={styles.saveText}
+            >
+              {loading
+                ? "Saving..."
+                : "Save Changes"}
+            </Text>
           </TouchableOpacity>
-
-          {/* PASSWORD */}
-          <Text style={styles.section}>Change Password</Text>
-
-          <TextInput
-            value={newPassword}
-            onChangeText={setNewPassword}
-            placeholder="New password"
-            secureTextEntry
-            style={styles.input}
-          />
-
-          <TextInput
-            value={confirmPassword}
-            onChangeText={setConfirmPassword}
-            placeholder="Confirm new password"
-            secureTextEntry
-            style={styles.input}
-          />
-
-          <TouchableOpacity
-            style={styles.saveBtn}
-            onPress={updatePassword}
-            disabled={loading}
-          >
-            <Text style={styles.saveText}>Update Password</Text>
-          </TouchableOpacity>
-
-          <View style={{ height: 40 }} />
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <GlobalFooter />
     </View>
   )
 }
 
-/* ---------------- STYLES ---------------- */
+const styles =
+  StyleSheet.create({
+    screen: {
+      flex: 1,
+      backgroundColor:
+        "#F8F8F8",
+    },
 
-const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: "#EAF4EF",
-  },
+    content: {
+      padding: 16,
+      paddingBottom: 120,
+    },
 
-  headerWrap: {
-    backgroundColor: "#7FAF9B",
-    paddingTop: 60,
-    paddingBottom: 12,
-    paddingHorizontal: 14,
-  },
+    pageTitle: {
+      fontSize: 28,
+      fontWeight: "800",
+      color: "#111",
+      marginBottom: 24,
+    },
 
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
+    card: {
+      backgroundColor:
+        "#fff",
+      borderRadius: 22,
+      borderWidth: 1,
+      borderColor: "#E8E8E8",
+      padding: 18,
+      marginBottom: 16,
+    },
 
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#0F1E17",
-  },
+    sectionTitle: {
+      fontSize: 15,
+      fontWeight: "800",
+      color: "#111",
+      marginBottom: 14,
+    },
 
-  headerBtn: {
-    alignItems: "center",
-    minWidth: 60,
-  },
+    input: {
+      backgroundColor:
+        "#F9FAFB",
+      borderWidth: 1,
+      borderColor: "#E5E7EB",
+      borderRadius: 14,
+      paddingHorizontal: 14,
+      paddingVertical: 14,
+      fontSize: 14,
+      marginBottom: 12,
+    },
 
-  headerSub: {
-    marginTop: 2,
-    fontSize: 11,
-    fontWeight: "600",
-    color: "#0F1E17",
-  },
+    saveBtn: {
+      backgroundColor:
+        "#D97732",
+      height: 54,
+      borderRadius: 18,
+      alignItems: "center",
+      justifyContent:
+        "center",
+      marginTop: 8,
+    },
 
-  label: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#6B8F7D",
-    marginBottom: 6,
-  },
-
-  section: {
-    marginTop: 24,
-    marginBottom: 8,
-    fontSize: 15,
-    fontWeight: "800",
-    color: "#0F1E17",
-  },
-
-  input: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 15,
-    marginBottom: 12,
-  },
-
-  saveBtn: {
-    marginTop: 8,
-    backgroundColor: "#0F1E17",
-    borderRadius: 22,
-    height: 44,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  saveText: {
-    color: "#fff",
-    fontWeight: "800",
-    fontSize: 15,
-  },
-})
+    saveText: {
+      color: "#fff",
+      fontWeight: "800",
+      fontSize: 15,
+    },
+  })

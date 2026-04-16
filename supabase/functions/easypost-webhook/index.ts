@@ -58,37 +58,36 @@ serve(async (req) => {
     const newStatus = mapStatus(tracker.status)
 
     // ----------------------------------
-    // Match forward shipment first
+    // Match forward shipment(s) first
     // ----------------------------------
-    let { data: order } = await supabase
+    const { data: matchedOrders } = await supabase
       .from("orders")
       .select("*")
       .or(
         `easypost_tracker_id.eq.${trackerId},tracking_number.eq.${trackingCode}`
       )
-      .maybeSingle()
 
     let isReturn = false
+    let orders = matchedOrders || []
 
     // ----------------------------------
-    // Fallback to return shipment
+    // Fallback to return shipment(s)
     // ----------------------------------
-    if (!order) {
-      const { data: returnOrder } = await supabase
+    if (!orders.length) {
+      const { data: returnOrders } = await supabase
         .from("orders")
         .select("*")
         .or(
           `return_easypost_tracker_id.eq.${trackerId},return_tracking_number.eq.${trackingCode}`
         )
-        .maybeSingle()
 
-      if (returnOrder) {
-        order = returnOrder
+      if (returnOrders?.length) {
+        orders = returnOrders
         isReturn = true
       }
     }
 
-    if (!order) {
+    if (!orders.length) {
       console.log("⚠️ No matching order found")
       return new Response("No order match", { status: 200 })
     }
@@ -97,30 +96,32 @@ serve(async (req) => {
     // RETURN FLOW
     // ----------------------------------
     if (isReturn) {
-      const updateData: any = {
-        return_tracking_status: newStatus,
-        updated_at: new Date().toISOString(),
+      for (const order of orders) {
+        const updateData: any = {
+          return_tracking_status: newStatus,
+          updated_at: new Date().toISOString(),
+        }
+
+        if (
+          newStatus === "delivered" &&
+          !order.return_delivered_at
+        ) {
+          const now = new Date()
+
+          updateData.return_received = true
+          updateData.return_delivered_at =
+            now.toISOString()
+
+          updateData.return_refund_at = new Date(
+            now.getTime() + 2 * 24 * 60 * 60 * 1000
+          ).toISOString()
+        }
+
+        await supabase
+          .from("orders")
+          .update(updateData)
+          .eq("id", order.id)
       }
-
-      if (
-        newStatus === "delivered" &&
-        !order.return_delivered_at
-      ) {
-        const now = new Date()
-
-        updateData.return_received = true
-        updateData.return_delivered_at =
-          now.toISOString()
-
-        updateData.return_refund_at = new Date(
-          now.getTime() + 2 * 24 * 60 * 60 * 1000
-        ).toISOString()
-      }
-
-      await supabase
-        .from("orders")
-        .update(updateData)
-        .eq("id", order.id)
 
       return new Response("Return updated", {
         status: 200,
@@ -130,31 +131,33 @@ serve(async (req) => {
     // ----------------------------------
     // FORWARD SHIPMENT FLOW
     // ----------------------------------
-    const updateData: any = {
-      tracking_status: newStatus,
-      updated_at: new Date().toISOString(),
+    for (const order of orders) {
+      const updateData: any = {
+        tracking_status: newStatus,
+        updated_at: new Date().toISOString(),
+      }
+
+      if (
+        newStatus === "delivered" &&
+        !order.delivered_at
+      ) {
+        const now = new Date()
+
+        updateData.delivered_at =
+          now.toISOString()
+
+        updateData.escrow_release_at =
+          new Date(
+            now.getTime() +
+              2 * 24 * 60 * 60 * 1000
+          ).toISOString()
+      }
+
+      await supabase
+        .from("orders")
+        .update(updateData)
+        .eq("id", order.id)
     }
-
-    if (
-      newStatus === "delivered" &&
-      !order.delivered_at
-    ) {
-      const now = new Date()
-
-      updateData.delivered_at =
-        now.toISOString()
-
-      updateData.escrow_release_at =
-        new Date(
-          now.getTime() +
-            2 * 24 * 60 * 60 * 1000
-        ).toISOString()
-    }
-
-    await supabase
-      .from("orders")
-      .update(updateData)
-      .eq("id", order.id)
 
     return new Response("Shipment updated", {
       status: 200,

@@ -380,7 +380,7 @@ const styles = StyleSheet.create({
   sendOfferBtn: {
     height: 54,
     borderRadius: 16,
-    backgroundColor: "#F3F3F3",
+    backgroundColor: "#D97732",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -388,6 +388,6 @@ const styles = StyleSheet.create({
   sendOfferText: {
     fontSize: 15,
     fontWeight: "700",
-    color: "#888",
+    color: "#ffffff",
   },
 })

@@ -18,36 +18,49 @@ const STATUS_CONFIG: Record<
     bg: "#FEF3C7",
     text: "#92400E",
   },
+
   shipped: {
     label: "Shipped",
     bg: "#DBEAFE",
     text: "#1D4ED8",
   },
+
   in_transit: {
     label: "In Transit",
     bg: "#E0E7FF",
     text: "#4338CA",
   },
+
+  out_for_delivery: {
+    label: "Out For Delivery",
+    bg: "#DDD6FE",
+    text: "#6D28D9",
+  },
+
   delivered: {
     label: "Delivered",
     bg: "#CCFBF1",
     text: "#0F766E",
   },
+
   completed: {
     label: "Completed",
     bg: "#DCFCE7",
     text: "#15803D",
   },
+
   return_started: {
     label: "Return Started",
     bg: "#FEF3C7",
     text: "#92400E",
   },
+
   return_processing: {
     label: "Return Processing",
     bg: "#FECACA",
     text: "#991B1B",
   },
+
   disputed: {
     label: "Disputed",
     bg: "#FECACA",
@@ -60,8 +73,36 @@ export default function OrderSummaryCard({
 }: {
   order: any
 }) {
+  const derivedStatus = (() => {
+    if (order.is_disputed) return "disputed"
+
+    if (
+      order.status === "completed" ||
+      order.status === "return_started" ||
+      order.status === "return_processing"
+    ) {
+      return order.status
+    }
+
+    if (order.tracking_status === "delivered")
+      return "delivered"
+
+    if (
+      order.tracking_status ===
+      "out_for_delivery"
+    )
+      return "out_for_delivery"
+
+    if (
+      order.tracking_status === "in_transit"
+    )
+      return "in_transit"
+
+    return order.status
+  })()
+
   const cfg =
-    STATUS_CONFIG[order.status] ??
+    STATUS_CONFIG[derivedStatus] ??
     STATUS_CONFIG.paid
 
   const image =

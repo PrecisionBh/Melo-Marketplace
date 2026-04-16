@@ -1,76 +1,98 @@
+import GlobalFooter from "@/components/global/globalfooter"
+import GlobalHeader from "@/components/global/globalheader"
+
+import { supabase } from "@/lib/supabase"
+
 import { useRouter } from "expo-router"
 import { useEffect, useState } from "react"
 import {
-    ActivityIndicator,
-    Modal,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native"
 
-import AppHeader from "@/components/app-header"
-import { supabase } from "@/lib/supabase"
-
-const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL
+const SUPABASE_URL =
+  process.env.EXPO_PUBLIC_SUPABASE_URL
 
 export default function DeleteAccountScreen() {
   const router = useRouter()
 
-  const [visible, setVisible] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [isPro, setIsPro] = useState(false)
-
-  /* ---------------- LOAD PROFILE ---------------- */
+  const [visible, setVisible] =
+    useState(false)
+  const [loading, setLoading] =
+    useState(false)
+  const [isPro, setIsPro] =
+    useState(false)
 
   useEffect(() => {
     const loadProfile = async () => {
       try {
-        const { data: userData } = await supabase.auth.getUser()
-        const userId = userData?.user?.id
+        const { data: userData } =
+          await supabase.auth.getUser()
+
+        const userId =
+          userData?.user?.id
 
         if (!userId) return
 
-        const { data } = await supabase
-          .from("profiles")
-          .select("is_pro")
-          .eq("id", userId)
-          .single()
+        const { data } =
+          await supabase
+            .from("profiles")
+            .select("is_pro")
+            .eq("id", userId)
+            .single()
 
         setIsPro(!!data?.is_pro)
       } catch (err) {
-        console.error("Profile load error:", err)
+        console.error(
+          "Profile load error:",
+          err
+        )
       }
     }
 
     loadProfile()
   }, [])
 
-  /* ---------------- DELETE FLOW ---------------- */
-
   const handleDelete = async () => {
     try {
       setLoading(true)
 
-      const { data } = await supabase.auth.getUser()
-      const userId = data?.user?.id
+      const { data } =
+        await supabase.auth.getUser()
 
-      if (!userId) throw new Error("No user found")
+      const userId =
+        data?.user?.id
 
-      await fetch(`${SUPABASE_URL}/functions/v1/delete-user`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ user_id: userId }),
-      })
+      if (!userId)
+        throw new Error("No user found")
+
+      await fetch(
+        `${SUPABASE_URL}/functions/v1/delete-user`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+          body: JSON.stringify({
+            user_id: userId,
+          }),
+        }
+      )
 
       await supabase.auth.signOut()
 
-      // ✅ Reset stack so user can't go back
       router.replace("/login")
     } catch (err) {
-      console.error("Delete account error:", err)
+      console.error(
+        "Delete account error:",
+        err
+      )
     } finally {
       setLoading(false)
       setVisible(false)
@@ -79,183 +101,278 @@ export default function DeleteAccountScreen() {
 
   return (
     <View style={styles.screen}>
-      <AppHeader
-        title="Delete Account"
-        backLabel="Back"
-        onBack={() => router.back()}
-      />
+      <GlobalHeader />
 
-      {/* CONTENT */}
-      <View style={styles.content}>
-        <Text style={styles.title}>Delete Your Account</Text>
-
-        <Text style={styles.description}>
-          Deleting your account will permanently remove your profile, listings,
-          messages, wallet data, and all associated activity.
+      <ScrollView
+        contentContainerStyle={styles.content}
+      >
+        <Text style={styles.pageTitle}>
+          Delete Account
         </Text>
 
-        <Text style={styles.warning}>
-          This action cannot be undone.
-        </Text>
-
-        {/* 🔥 PRO USER WARNING */}
-        {isPro && (
-          <Text style={styles.proWarning}>
-            You currently have an active Melo Pro subscription. Deleting your
-            account will NOT cancel your subscription. You must cancel it in your
-            iPhone Settings under Subscriptions.
+        <View style={styles.card}>
+          <Text style={styles.title}>
+            Delete Your Account
           </Text>
-        )}
 
-        {/* DELETE BUTTON */}
+          <Text style={styles.description}>
+            Deleting your account will
+            permanently remove your
+            profile, listings, messages,
+            wallet data, and all
+            associated activity.
+          </Text>
+
+          <View style={styles.warningBox}>
+            <Text style={styles.warning}>
+              This action cannot be
+              undone.
+            </Text>
+          </View>
+
+          {isPro && (
+            <View
+              style={styles.proWarningBox}
+            >
+              <Text
+                style={styles.proWarning}
+              >
+                You currently have an
+                active Melo Pro
+                subscription. Deleting
+                your account will NOT
+                cancel your subscription.
+                You must cancel it in
+                your App Store /
+                Play Store settings.
+              </Text>
+            </View>
+          )}
+        </View>
+
         <TouchableOpacity
           style={styles.deleteButton}
-          onPress={() => setVisible(true)}
+          onPress={() =>
+            setVisible(true)
+          }
         >
-          <Text style={styles.deleteText}>Delete Account</Text>
+          <Text style={styles.deleteText}>
+            Delete My Account
+          </Text>
         </TouchableOpacity>
-      </View>
+      </ScrollView>
 
-      {/* CONFIRM MODAL */}
-      <Modal visible={visible} transparent animationType="fade">
+      <Modal
+        visible={visible}
+        transparent
+        animationType="fade"
+      >
         <View style={styles.overlay}>
           <View style={styles.modal}>
-            <Text style={styles.modalTitle}>Final Confirmation</Text>
-
-            <Text style={styles.modalText}>
-              Are you absolutely sure you want to delete your account? This
-              action cannot be reversed.
+            <Text
+              style={styles.modalTitle}
+            >
+              Final Confirmation
             </Text>
 
-            <View style={styles.actions}>
+            <Text
+              style={styles.modalText}
+            >
+              Are you absolutely sure
+              you want to delete your
+              account? This action
+              cannot be reversed.
+            </Text>
+
+            <View
+              style={styles.actions}
+            >
               <TouchableOpacity
-                style={styles.cancelButton}
-                onPress={() => setVisible(false)}
+                style={
+                  styles.cancelButton
+                }
+                onPress={() =>
+                  setVisible(false)
+                }
                 disabled={loading}
               >
-                <Text style={styles.cancelText}>Cancel</Text>
+                <Text
+                  style={
+                    styles.cancelText
+                  }
+                >
+                  Cancel
+                </Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={styles.confirmDelete}
-                onPress={handleDelete}
+                style={
+                  styles.confirmDelete
+                }
+                onPress={
+                  handleDelete
+                }
                 disabled={loading}
               >
                 {loading ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
-                  <Text style={styles.confirmText}>Delete</Text>
+                  <Text
+                    style={
+                      styles.confirmText
+                    }
+                  >
+                    Delete
+                  </Text>
                 )}
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
+
+      <GlobalFooter />
     </View>
   )
 }
 
-/* ---------------- STYLES ---------------- */
-
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#fff",
+    backgroundColor: "#F8F8F8",
   },
 
   content: {
-    padding: 20,
+    padding: 16,
+    paddingBottom: 120,
+  },
+
+  pageTitle: {
+    fontSize: 28,
+    fontWeight: "800",
+    color: "#111",
+    marginBottom: 24,
+  },
+
+  card: {
+    backgroundColor: "#fff",
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: "#E8E8E8",
+    padding: 18,
+    marginBottom: 20,
   },
 
   title: {
-    fontSize: 20,
-    fontWeight: "700",
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#111",
     marginBottom: 12,
   },
 
   description: {
     fontSize: 14,
     color: "#555",
-    marginBottom: 10,
-  },
-
-  warning: {
-    color: "#FF3B30",
-    fontWeight: "600",
+    lineHeight: 21,
     marginBottom: 16,
   },
 
-  proWarning: {
-    color: "#FF9500",
+  warningBox: {
+    backgroundColor: "#FEF2F2",
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 14,
+  },
+
+  warning: {
+    color: "#DC2626",
+    fontWeight: "700",
     fontSize: 13,
-    marginBottom: 20,
+  },
+
+  proWarningBox: {
+    backgroundColor: "#FFF7ED",
+    borderRadius: 16,
+    padding: 14,
+  },
+
+  proWarning: {
+    color: "#EA580C",
+    fontSize: 13,
+    lineHeight: 20,
+    fontWeight: "600",
   },
 
   deleteButton: {
-    backgroundColor: "#FF3B30",
-    padding: 14,
-    borderRadius: 10,
+    backgroundColor: "#DC2626",
+    height: 54,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   deleteText: {
     color: "#fff",
-    textAlign: "center",
-    fontWeight: "700",
+    fontWeight: "800",
+    fontSize: 15,
   },
 
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
+    backgroundColor:
+      "rgba(0,0,0,0.45)",
     justifyContent: "center",
-    padding: 20,
+    padding: 24,
   },
 
   modal: {
     backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 20,
+    borderRadius: 24,
+    padding: 22,
   },
 
   modalTitle: {
     fontSize: 18,
-    fontWeight: "700",
+    fontWeight: "800",
+    color: "#111",
     marginBottom: 10,
   },
 
   modalText: {
     fontSize: 14,
     color: "#555",
+    lineHeight: 21,
     marginBottom: 20,
   },
 
   actions: {
     flexDirection: "row",
+    gap: 10,
   },
 
   cancelButton: {
     flex: 1,
-    marginRight: 10,
-    padding: 12,
-    backgroundColor: "#eee",
-    borderRadius: 10,
+    backgroundColor: "#F3F4F6",
+    paddingVertical: 14,
+    borderRadius: 16,
+    alignItems: "center",
   },
 
   cancelText: {
-    textAlign: "center",
-    fontWeight: "600",
+    fontWeight: "700",
+    color: "#111",
   },
 
   confirmDelete: {
     flex: 1,
-    marginLeft: 10,
-    padding: 12,
-    backgroundColor: "#FF3B30",
-    borderRadius: 10,
+    backgroundColor: "#DC2626",
+    paddingVertical: 14,
+    borderRadius: 16,
+    alignItems: "center",
   },
 
   confirmText: {
     color: "#fff",
-    textAlign: "center",
-    fontWeight: "700",
+    fontWeight: "800",
   },
 })

@@ -1,0 +1,640 @@
+import * as Linking from "expo-linking"
+
+import BuyerProtectionNotice from "@/components/checkout/BuyerProtectionNotice"
+import CheckoutShippingCard from "@/components/checkout/CheckoutShippingCard"
+import CheckoutSummaryCard from "@/components/checkout/CheckoutSummaryCard"
+import GlobalFooter from "@/components/global/globalfooter"
+import GlobalHeader from "@/components/global/globalheader"
+
+import { useAuth } from "@/context/AuthContext"
+import { handleAppError } from "@/lib/errors/appError"
+import { supabase } from "@/lib/supabase"
+
+import { useLocalSearchParams } from "expo-router"
+import { useEffect, useMemo, useState } from "react"
+import {
+    ActivityIndicator,
+    Alert,
+    Image,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    View,
+} from "react-native"
+
+type OfferCheckoutData = {
+  offer_id: string
+  listing_id: string
+  seller_id: string
+  buyer_id: string
+  quantity: number
+  accepted_price: number
+  accepted_title: string | null
+  accepted_image_url: string | null
+  accepted_shipping_type: "buyer_pays" | "seller_pays"
+  accepted_shipping_price: number
+  status: string
+  listings?: {
+    id: string
+    title: string | null
+    image_urls: string[] | null
+    user_id: string
+    quantity_available: number | null
+    shipping_type: "buyer_pays" | "seller_pays" | null
+    shipping_price: number | null
+    price: number | null
+  } | null
+}
+
+export default function OfferCheckoutScreen() {
+  const { offerId } = useLocalSearchParams<{
+    offerId: string
+  }>()
+  const { session } = useAuth()
+
+  const [loading, setLoading] = useState(true)
+  const [paying, setPaying] = useState(false)
+  const [offer, setOffer] =
+    useState<OfferCheckoutData | null>(null)
+
+  const [shippingExpanded, setShippingExpanded] =
+    useState(true)
+
+  const [saveAsDefault, setSaveAsDefault] =
+    useState(false)
+
+  const [name, setName] = useState("")
+  const [line1, setLine1] = useState("")
+  const [line2, setLine2] = useState("")
+  const [city, setCity] = useState("")
+  const [state, setState] = useState("")
+  const [postal, setPostal] = useState("")
+  const [phone, setPhone] = useState("")
+
+  useEffect(() => {
+    if (!session?.user?.id || !offerId) {
+      setLoading(false)
+      return
+    }
+
+    loadOffer()
+    loadSavedAddress()
+  }, [session?.user?.id, offerId])
+
+  const loadOffer = async () => {
+    try {
+      setLoading(true)
+
+      const { data, error } = await supabase
+        .from("offers")
+        .select(
+          `
+          id,
+          listing_id,
+          seller_id,
+          buyer_id,
+          quantity,
+          status,
+          accepted_price,
+          accepted_title,
+          accepted_image_url,
+          accepted_shipping_type,
+          accepted_shipping_price,
+          listings (
+            id,
+            title,
+            image_urls,
+            user_id,
+            quantity_available,
+            shipping_type,
+            shipping_price,
+            price
+          )
+        `
+        )
+        .eq("id", offerId)
+        .single()
+
+      if (error) throw error
+      if (!data) throw new Error("Offer not found.")
+
+      const typed = data as any
+
+      if (typed.buyer_id !== session?.user?.id) {
+        throw new Error(
+          "You are not authorized to pay for this offer."
+        )
+      }
+
+      if (typed.status !== "accepted") {
+        throw new Error(
+          "This offer is not currently awaiting payment."
+        )
+      }
+
+      const quantity = Number(typed.quantity ?? 1)
+
+      setOffer({
+        offer_id: typed.id,
+        listing_id: typed.listing_id,
+        seller_id: typed.seller_id,
+        buyer_id: typed.buyer_id,
+        quantity,
+        accepted_price: Number(
+          typed.accepted_price ?? 0
+        ),
+        accepted_title:
+          typed.accepted_title ?? null,
+        accepted_image_url:
+          typed.accepted_image_url ?? null,
+        accepted_shipping_type:
+          typed.accepted_shipping_type ===
+          "buyer_pays"
+            ? "buyer_pays"
+            : "seller_pays",
+        accepted_shipping_price: Number(
+          typed.accepted_shipping_price ?? 0
+        ),
+        status: typed.status,
+        listings: typed.listings
+          ? {
+              id: typed.listings.id,
+              title: typed.listings.title ?? null,
+              image_urls:
+                typed.listings.image_urls ?? null,
+              user_id: typed.listings.user_id,
+              quantity_available:
+                typed.listings.quantity_available ?? null,
+              shipping_type:
+                typed.listings.shipping_type ??
+                null,
+              shipping_price:
+                typed.listings.shipping_price ?? null,
+              price: typed.listings.price ?? null,
+            }
+          : null,
+      })
+    } catch (err) {
+      handleAppError(err, {
+        fallbackMessage:
+          "Failed to load offer checkout.",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const loadSavedAddress = async () => {
+    if (!session?.user?.id) return
+
+    const { data } = await supabase
+      .from("profiles")
+      .select(`
+        shipping_name,
+        address_line1,
+        address_line2,
+        city,
+        state,
+        postal_code,
+        shipping_phone
+      `)
+      .eq("id", session.user.id)
+      .single()
+
+    if (!data) return
+
+    setName(data.shipping_name ?? "")
+    setLine1(data.address_line1 ?? "")
+    setLine2(data.address_line2 ?? "")
+    setCity(data.city ?? "")
+    setState(data.state ?? "")
+    setPostal(data.postal_code ?? "")
+    setPhone(data.shipping_phone ?? "")
+  }
+
+  const image =
+    offer?.accepted_image_url ??
+    offer?.listings?.image_urls?.[0] ??
+    null
+
+  const title =
+    offer?.accepted_title ??
+    offer?.listings?.title ??
+    "Accepted Offer"
+
+  const quantity = offer?.quantity ?? 1
+
+  const subtotalCents = useMemo(() => {
+    if (!offer) return 0
+    return (
+      Math.round(offer.accepted_price * 100) *
+      quantity
+    )
+  }, [offer, quantity])
+
+  const shippingCents = useMemo(() => {
+    if (!offer) return 0
+
+    if (
+      offer.accepted_shipping_type ===
+      "buyer_pays"
+    ) {
+      return Math.round(
+        offer.accepted_shipping_price * 100
+      )
+    }
+
+    return 0
+  }, [offer])
+
+  const buyerFeeCents = useMemo(() => {
+    const escrow =
+      subtotalCents + shippingCents
+
+    return Math.round(
+      escrow * 0.03
+    ) + 30
+  }, [subtotalCents, shippingCents])
+
+  const taxCents = useMemo(() => {
+    const escrow =
+      subtotalCents + shippingCents
+
+    return Math.round(
+      escrow * 0.075
+    )
+  }, [subtotalCents, shippingCents])
+
+  const totalCents =
+    subtotalCents +
+    shippingCents +
+    buyerFeeCents +
+    taxCents
+
+  const handleCheckout = async () => {
+    if (!session?.user?.id || !offer) return
+
+    const valid =
+      name.trim() &&
+      line1.trim() &&
+      city.trim() &&
+      state.trim() &&
+      postal.trim()
+
+    if (!valid) {
+      Alert.alert(
+        "Missing Shipping Info",
+        "Please complete your shipping address."
+      )
+      return
+    }
+
+    setPaying(true)
+
+    try {
+      if (saveAsDefault) {
+        await supabase
+          .from("profiles")
+          .update({
+            shipping_name: name.trim(),
+            address_line1: line1.trim(),
+            address_line2:
+              line2.trim() || null,
+            city: city.trim(),
+            state: state.trim(),
+            postal_code: postal.trim(),
+            shipping_phone:
+              phone.trim() || null,
+          })
+          .eq("id", session.user.id)
+      }
+
+      const { data: existingPendingOrder } =
+        await supabase
+          .from("orders")
+          .select("id")
+          .eq("buyer_id", session.user.id)
+          .eq("offer_id", offer.offer_id)
+          .eq("status", "pending_payment")
+          .maybeSingle()
+
+      let orderId = existingPendingOrder?.id
+
+      if (!orderId) {
+        const listingSnapshot = {
+          ...(offer.listings ?? {}),
+          accepted_offer: true,
+          accepted_price:
+            offer.accepted_price,
+          accepted_quantity: offer.quantity,
+          accepted_shipping_type:
+            offer.accepted_shipping_type,
+          accepted_shipping_price:
+            offer.accepted_shipping_price,
+          accepted_title: title,
+          accepted_image_url: image,
+        }
+
+        const escrowCents =
+          subtotalCents + shippingCents
+
+        const { data: order, error } =
+          await supabase
+            .from("orders")
+            .insert({
+              buyer_id: session.user.id,
+              seller_id: offer.seller_id,
+              listing_id: offer.listing_id,
+              offer_id: offer.offer_id,
+
+              status: "pending_payment",
+              quantity: offer.quantity,
+
+              image_url: image,
+
+              amount_cents: totalCents,
+              currency: "usd",
+
+              item_price_cents:
+                subtotalCents,
+              shipping_amount_cents:
+                shippingCents,
+              tax_cents: taxCents,
+              buyer_fee_cents:
+                buyerFeeCents,
+              escrow_amount_cents:
+                escrowCents,
+
+              listing_snapshot:
+                listingSnapshot,
+
+              shipping_name: name.trim(),
+              shipping_line1: line1.trim(),
+              shipping_line2:
+                line2.trim() || null,
+              shipping_city: city.trim(),
+              shipping_state: state.trim(),
+              shipping_postal_code:
+                postal.trim(),
+              shipping_country: "US",
+              shipping_phone:
+                phone.trim() || null,
+            })
+            .select("id")
+            .single()
+
+        if (error || !order) {
+          console.error(
+            "❌ OFFER ORDER INSERT FAILED",
+            JSON.stringify(error, null, 2)
+          )
+
+          throw new Error(
+            error?.message ||
+              "Failed creating offer order."
+          )
+        }
+
+        orderId = order.id
+      }
+
+      const { data, error } =
+        await supabase.functions.invoke(
+          "create-cart-checkout-session",
+          {
+            body: {
+              order_ids: [orderId],
+              amount: totalCents,
+              email: session.user.email,
+            },
+          }
+        )
+
+      if (error || !data?.url) {
+        throw new Error(
+          "Failed to create checkout session."
+        )
+      }
+
+      await Linking.openURL(data.url)
+    } catch (err) {
+      handleAppError(err, {
+        fallbackMessage:
+          "Checkout failed.",
+      })
+    } finally {
+      setPaying(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <View style={styles.loaderWrap}>
+        <ActivityIndicator />
+      </View>
+    )
+  }
+
+  if (!offer) {
+    return (
+      <View style={styles.screen}>
+        <GlobalHeader />
+        <View style={styles.emptyWrap}>
+          <Text style={styles.emptyText}>
+            Offer checkout not found.
+          </Text>
+        </View>
+        <GlobalFooter />
+      </View>
+    )
+  }
+
+  return (
+    <View style={styles.screen}>
+      <GlobalHeader />
+
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={
+          Platform.OS === "ios"
+            ? "padding"
+            : undefined
+        }
+      >
+        <ScrollView
+          contentContainerStyle={
+            styles.content
+          }
+        >
+          <Text style={styles.title}>
+            Accepted Offer Checkout
+          </Text>
+
+          <View style={styles.previewCard}>
+            {image ? (
+              <Image
+                source={{ uri: image }}
+                style={styles.previewImage}
+              />
+            ) : (
+              <View
+                style={styles.previewPlaceholder}
+              />
+            )}
+
+            <View style={styles.previewInfo}>
+              <Text
+                style={styles.previewTitle}
+                numberOfLines={2}
+              >
+                {title}
+              </Text>
+
+              <Text style={styles.previewMeta}>
+                Accepted Price: $
+                {offer.accepted_price.toFixed(2)}
+              </Text>
+
+              <Text style={styles.previewMeta}>
+                Quantity: {quantity}
+              </Text>
+            </View>
+          </View>
+
+          <CheckoutShippingCard
+            expanded={
+              shippingExpanded
+            }
+            setExpanded={
+              setShippingExpanded
+            }
+            name={name}
+            setName={setName}
+            line1={line1}
+            setLine1={setLine1}
+            line2={line2}
+            setLine2={setLine2}
+            city={city}
+            setCity={setCity}
+            state={state}
+            setState={setState}
+            postal={postal}
+            setPostal={setPostal}
+            phone={phone}
+            setPhone={setPhone}
+            saveAsDefault={
+              saveAsDefault
+            }
+            setSaveAsDefault={
+              setSaveAsDefault
+            }
+          />
+
+          <CheckoutSummaryCard
+            subtotalCents={
+              subtotalCents
+            }
+            shippingCents={
+              shippingCents
+            }
+            buyerFeeCents={
+              buyerFeeCents
+            }
+            taxCents={taxCents}
+            totalCents={totalCents}
+            paying={paying}
+            onPay={handleCheckout}
+          />
+
+          <BuyerProtectionNotice />
+        </ScrollView>
+      </KeyboardAvoidingView>
+
+      <GlobalFooter />
+    </View>
+  )
+}
+
+const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: "#F8F8F8",
+  },
+
+  loaderWrap: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F8F8F8",
+  },
+
+  emptyWrap: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+  },
+
+  emptyText: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#111",
+  },
+
+  content: {
+    padding: 16,
+    paddingBottom: 140,
+  },
+
+  title: {
+    fontSize: 28,
+    fontWeight: "800",
+    color: "#111",
+    marginBottom: 20,
+  },
+
+  previewCard: {
+    flexDirection: "row",
+    backgroundColor: "#fff",
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#E8E8E8",
+    padding: 14,
+    marginBottom: 16,
+  },
+
+  previewImage: {
+    width: 74,
+    height: 74,
+    borderRadius: 16,
+    marginRight: 12,
+  },
+
+  previewPlaceholder: {
+    width: 74,
+    height: 74,
+    borderRadius: 16,
+    backgroundColor: "#EEE",
+    marginRight: 12,
+  },
+
+  previewInfo: {
+    flex: 1,
+    justifyContent: "center",
+  },
+
+  previewTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#111",
+    marginBottom: 6,
+  },
+
+  previewMeta: {
+    fontSize: 13,
+    color: "#666",
+    marginBottom: 4,
+  },
+})

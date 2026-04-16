@@ -1,379 +1,291 @@
-import { Ionicons } from "@expo/vector-icons"
-import * as ImagePicker from "expo-image-picker"
-import { useRouter } from "expo-router"
-import { useEffect, useMemo, useState } from "react"
+import GlobalFooter from "@/components/global/globalfooter"
+import GlobalHeader from "@/components/global/globalheader"
+
+import { handleAppError } from "@/lib/errors/appError"
+import { supabase } from "@/lib/supabase"
+
+import { useEffect, useState } from "react"
 import {
   Alert,
-  Image,
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native"
 
-import AppHeader from "@/components/app-header"
-import UpgradeToProCard from "@/components/pro/UpgradeToProCard"
-import ProfileInfoCard from "@/components/profile/ProfileInfoCard"
-import ReturnAddressCard from "@/components/profile/ReturnAddressCard"
-import { useAuth } from "../../context/AuthContext"
-import { handleAppError } from "../../lib/errors/appError"
-import { supabase } from "../../lib/supabase"
-                  
-export default function EditProfileScreen() {
-  const router = useRouter()
-  const { session } = useAuth()
-  const userId = session?.user?.id ?? null
+export default function ReturnAddressScreen() {
+  const [loading, setLoading] =
+    useState(false)
 
-  const [displayName, setDisplayName] = useState("")
-  const [bio, setBio] = useState("")
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
-  const [uploading, setUploading] = useState(false)
-
-  // ✅ PRO STATE
-  const [loadingPro, setLoadingPro] = useState(true)
-  const [isPro, setIsPro] = useState(false)
-
-  /* ---------------- LOAD PROFILE ---------------- */
+  const [fullName, setFullName] =
+    useState("")
+  const [line1, setLine1] =
+    useState("")
+  const [line2, setLine2] =
+    useState("")
+  const [city, setCity] =
+    useState("")
+  const [state, setState] =
+    useState("")
+  const [zip, setZip] =
+    useState("")
 
   useEffect(() => {
-    if (!userId) {
-      handleAppError(new Error("Missing user session"), {
-        context: "edit_profile_no_user",
-        silent: true,
-      })
-      return
-    }
+    loadAddress()
+  }, [])
 
-    const loadProfile = async () => {
-      try {
-        const { data, error } = await supabase
-          .from("profiles")
-          .select("display_name, bio, avatar_url")
-          .eq("id", userId)
-          .single()
-
-        if (error) throw error
-
-        if (data) {
-          setDisplayName(data.display_name ?? "")
-          setBio(data.bio ?? "")
-          setAvatarUrl(data.avatar_url ?? null)
-        }
-      } catch (err) {
-        handleAppError(err, {
-          context: "edit_profile_load",
-          fallbackMessage: "Failed to load profile.",
-        })
-      }
-    }
-
-    loadProfile()
-  }, [userId])
-
-  /* ---------------- LOAD PRO STATUS ---------------- */
-
-  useEffect(() => {
-    if (!userId) return
-
-    const loadPro = async () => {
-      setLoadingPro(true)
-
-      try {
-        const { data, error } = await supabase
-          .from("profiles")
-          .select("is_pro")
-          .eq("id", userId)
-          .single()
-
-        if (error) throw error
-
-        setIsPro(Boolean((data as any)?.is_pro))
-      } catch (err) {
-        handleAppError(err, {
-          context: "edit_profile_load_pro",
-          silent: true,
-        })
-        setIsPro(false)
-      } finally {
-        setLoadingPro(false)
-      }
-    }
-
-    loadPro()
-  }, [userId])
-
-  const proLabel = useMemo(() => {
-    if (loadingPro) return "Checking Melo Pro…"
-    return isPro ? "Melo Pro Active" : "Upgrade to Melo Pro"
-  }, [loadingPro, isPro])
-
-  /* ---------------- IMAGE PICK ---------------- */
-
-  const pickImage = async () => {
+  const loadAddress = async () => {
     try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.9,
-      })
+      const { data: userData } =
+        await supabase.auth.getUser()
 
-      if (result.canceled) return
+      const userId =
+        userData?.user?.id
 
-      await uploadAvatar(result.assets[0].uri)
+      if (!userId) return
+
+      const { data } =
+        await supabase
+          .from("profiles")
+          .select(`
+            return_full_name,
+            return_address_line1,
+            return_address_line2,
+            return_city,
+            return_state,
+            return_zip
+          `)
+          .eq("id", userId)
+          .single()
+
+      if (!data) return
+
+      setFullName(
+        data.return_full_name ?? ""
+      )
+      setLine1(
+        data.return_address_line1 ?? ""
+      )
+      setLine2(
+        data.return_address_line2 ?? ""
+      )
+      setCity(
+        data.return_city ?? ""
+      )
+      setState(
+        data.return_state ?? ""
+      )
+      setZip(
+        data.return_zip ?? ""
+      )
     } catch (err) {
       handleAppError(err, {
-        context: "edit_profile_image_picker",
-        fallbackMessage: "Failed to select image. Please try again.",
+        fallbackMessage:
+          "Failed to load address.",
       })
     }
   }
 
-  /* ---------------- AVATAR UPLOAD ---------------- */
-
-  const uploadAvatar = async (uri: string) => {
-    if (!userId) {
-      handleAppError(new Error("Missing user ID"), {
-        context: "edit_profile_upload_no_user",
-        silent: true,
-      })
-      return
-    }
-
+  const saveAddress = async () => {
     try {
-      setUploading(true)
+      setLoading(true)
 
-      const path = `${userId}.jpg`
+      const { data: userData } =
+        await supabase.auth.getUser()
 
-      const formData = new FormData()
-      formData.append("file", {
-        uri,
-        name: path,
-        type: "image/jpeg",
-      } as any)
+      const userId =
+        userData?.user?.id
 
-      const { error } = await supabase.storage
-        .from("profile-images")
-        .upload(path, formData, { upsert: true })
+      if (!userId) return
+
+      const { error } =
+        await supabase
+          .from("profiles")
+          .update({
+            return_full_name:
+              fullName.trim(),
+            return_address_line1:
+              line1.trim(),
+            return_address_line2:
+              line2.trim(),
+            return_city:
+              city.trim(),
+            return_state:
+              state.trim(),
+            return_zip:
+              zip.trim(),
+          })
+          .eq("id", userId)
 
       if (error) throw error
 
-      const { data: urlData } = supabase.storage
-        .from("profile-images")
-        .getPublicUrl(path)
-
-      if (!urlData?.publicUrl) {
-        throw new Error("Failed to retrieve public URL")
-      }
-
-      setAvatarUrl(`${urlData.publicUrl}?t=${Date.now()}`)
+      Alert.alert(
+        "Saved",
+        "Return address updated successfully."
+      )
     } catch (err) {
       handleAppError(err, {
-        context: "edit_profile_avatar_upload",
-        fallbackMessage: "Profile photo upload failed. Please try again.",
+        fallbackMessage:
+          "Failed to save address.",
       })
     } finally {
-      setUploading(false)
+      setLoading(false)
     }
   }
-
-  /* ---------------- SAVE PROFILE ---------------- */
-
-  const saveProfile = async () => {
-    if (!userId) {
-      handleAppError(new Error("Missing user session"), {
-        context: "edit_profile_save_no_user",
-        silent: true,
-      })
-      return
-    }
-
-    try {
-      const { error } = await supabase
-        .from("profiles")
-        .update({
-          display_name: displayName.trim(),
-          bio: bio.trim(),
-          avatar_url: avatarUrl,
-        })
-        .eq("id", userId)
-
-      if (error) throw error
-
-      Alert.alert("Success", "Profile updated successfully.")
-      router.back()
-    } catch (err) {
-      handleAppError(err, {
-        context: "edit_profile_save",
-        fallbackMessage: "Failed to save profile changes.",
-      })
-    }
-  }
-
-  /* ---------------- UI ---------------- */
 
   return (
     <View style={styles.screen}>
-      <AppHeader
-        title="Edit Profile"
-        backLabel="Settings"
-        backRoute="/settings"
-      />
+      <GlobalHeader />
 
-      <ScrollView
-  contentContainerStyle={{
-    paddingBottom: 450, // 👈 THIS IS THE FIX
-    flexGrow: 1,
-  }}
-  keyboardShouldPersistTaps="handled"
-  showsVerticalScrollIndicator={false}
->
-        {/* ✅ MELO PRO */}
-        <View style={styles.proWrap}>
-          <View style={styles.proHeaderRow}>
-            <Text style={styles.proTitle}>Melo Pro</Text>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={
+          Platform.OS === "ios"
+            ? "padding"
+            : "height"
+        }
+        keyboardVerticalOffset={
+          Platform.OS === "ios"
+            ? 90
+            : 20
+        }
+      >
+        <ScrollView
+          contentContainerStyle={
+            styles.content
+          }
+          keyboardShouldPersistTaps="handled"
+        >
+          <Text style={styles.pageTitle}>
+            Return Address
+          </Text>
 
-            {isPro ? (
-              <View style={styles.proBadge}>
-                <Ionicons name="checkmark-circle" size={16} color="#0F1E17" />
-                <Text style={styles.proBadgeText}>Active</Text>
-              </View>
-            ) : null}
+          <View style={styles.card}>
+            <Text style={styles.helper}>
+              This address will be used to
+              auto-fill your return labels
+              and may be used for future
+              shipping defaults.
+            </Text>
+
+            <TextInput
+              value={fullName}
+              onChangeText={
+                setFullName
+              }
+              placeholder="Full Name"
+              style={styles.input}
+            />
+
+            <TextInput
+              value={line1}
+              onChangeText={setLine1}
+              placeholder="Address Line 1"
+              style={styles.input}
+            />
+
+            <TextInput
+              value={line2}
+              onChangeText={setLine2}
+              placeholder="Address Line 2 (Optional)"
+              style={styles.input}
+            />
+
+            <TextInput
+              value={city}
+              onChangeText={setCity}
+              placeholder="City"
+              style={styles.input}
+            />
+
+            <TextInput
+              value={state}
+              onChangeText={setState}
+              placeholder="State"
+              style={styles.input}
+            />
+
+            <TextInput
+              value={zip}
+              onChangeText={setZip}
+              placeholder="ZIP Code"
+              keyboardType="number-pad"
+              style={styles.input}
+            />
           </View>
 
-          <Text style={styles.proSub}>{proLabel}</Text>
-
-          {!loadingPro && !isPro ? (
-            <View style={{ marginTop: 12 }}>
-              <UpgradeToProCard/>
-            </View>
-          ) : null}
-        </View>
-
-        {/* PROFILE PHOTO */}
-        <View style={styles.avatarSection}>
-          <TouchableOpacity onPress={pickImage} disabled={uploading}>
-            <View style={styles.avatarWrap}>
-              {avatarUrl ? (
-                <Image source={{ uri: avatarUrl }} style={styles.avatar} />
-              ) : (
-                <Ionicons name="person" size={48} color="#7FAF9B" />
-              )}
-            </View>
+          <TouchableOpacity
+            style={styles.saveBtn}
+            onPress={saveAddress}
+            disabled={loading}
+          >
+            <Text style={styles.saveText}>
+              {loading
+                ? "Saving..."
+                : "Save Address"}
+            </Text>
           </TouchableOpacity>
-          <Text style={styles.changePhoto}>
-            {uploading ? "Uploading..." : "Change Profile Photo"}
-          </Text>
-        </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
 
-        {/* 🧾 PROFILE INFO CARD (WHITE SHADOW BOX) */}
-        <ProfileInfoCard
-          displayName={displayName}
-          setDisplayName={setDisplayName}
-          bio={bio}
-          setBio={setBio}
-        />
-
-        {/* 📦 RETURN ADDRESS CARD (MATCHING STYLE BOX) */}
-        <ReturnAddressCard />
-
-        <TouchableOpacity style={styles.saveBtn} onPress={saveProfile}>
-          <Text style={styles.saveText}>Save Changes</Text>
-        </TouchableOpacity>
-      </ScrollView>
+      <GlobalFooter />
     </View>
   )
 }
 
-/* ---------------- STYLES ---------------- */
-
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#F7FBF9",
+    backgroundColor: "#F8F8F8",
   },
 
-  proWrap: {
-    marginTop: 16,
-    marginHorizontal: 20,
+  content: {
+    padding: 16,
+    paddingBottom: 120,
+  },
+
+  pageTitle: {
+    fontSize: 28,
+    fontWeight: "800",
+    color: "#111",
+    marginBottom: 24,
+  },
+
+  card: {
     backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 14,
+    borderRadius: 22,
     borderWidth: 1,
-    borderColor: "#D6E6DE",
+    borderColor: "#E8E8E8",
+    padding: 18,
+    marginBottom: 18,
   },
 
-  proHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-
-  proTitle: {
-    fontSize: 15,
-    fontWeight: "900",
-    color: "#0F1E17",
-  },
-
-  proSub: {
-    marginTop: 6,
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#6B8F7D",
-  },
-
-  proBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: "#EAF4EF",
-    borderWidth: 1,
-    borderColor: "#CFE5DB",
-  },
-
-  proBadgeText: {
-    fontSize: 12,
-    fontWeight: "900",
-    color: "#0F1E17",
-  },
-
-  avatarSection: {
-    alignItems: "center",
-    marginTop: 20,
-  },
-
-  avatarWrap: {
-    width: 110,
-    height: 110,
-    borderRadius: 55,
-   backgroundColor: "#EAF4EF",
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
-  },
-
-  avatar: {
-    width: "100%",
-    height: "100%",
-  },
-
-  changePhoto: {
-    marginTop: 8,
+  helper: {
     fontSize: 13,
-    fontWeight: "600",
-    color: "#7FAF9B",
+    color: "#6B7280",
+    lineHeight: 20,
+    marginBottom: 16,
+  },
+
+  input: {
+    backgroundColor: "#F9FAFB",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    fontSize: 14,
+    marginBottom: 12,
   },
 
   saveBtn: {
-    marginTop: 24,
-    marginHorizontal: 20,
-    backgroundColor: "#0F1E17",
-    borderRadius: 22,
-    height: 48,
+    backgroundColor: "#D97732",
+    height: 54,
+    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
   },

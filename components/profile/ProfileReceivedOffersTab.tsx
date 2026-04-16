@@ -19,6 +19,8 @@ type OfferStatus =
   | "countered"
   | "accepted"
   | "declined"
+  | "cancelled"
+  | "expired"
 
 type Offer = {
   id: string
@@ -44,7 +46,8 @@ function isExpired(createdAt: string) {
 
   const now = Date.now()
   const diffMs = now - createdTime
-  const expiryMs = OFFER_EXPIRY_HOURS * 60 * 60 * 1000
+  const expiryMs =
+    OFFER_EXPIRY_HOURS * 60 * 60 * 1000
 
   return diffMs >= expiryMs
 }
@@ -80,12 +83,19 @@ function getStatusText(offer: Offer) {
   switch (derivedStatus) {
     case "pending":
       return "Awaiting your response"
+
     case "countered":
       return "Negotiation ongoing"
+
     case "accepted":
       return "Accepted • Awaiting payment"
+
     case "declined":
       return "Declined"
+
+    case "cancelled":
+      return "Cancelled"
+
     default:
       return ""
   }
@@ -93,10 +103,16 @@ function getStatusText(offer: Offer) {
 
 export default function ProfileReceivedOffersTab() {
   const router = useRouter()
-  const { session, loading: authLoading } = useAuth()
+  const {
+    session,
+    loading: authLoading,
+  } = useAuth()
 
-  const [offers, setOffers] = useState<Offer[]>([])
-  const [loading, setLoading] = useState(true)
+  const [offers, setOffers] = useState<
+    Offer[]
+  >([])
+  const [loading, setLoading] =
+    useState(true)
 
   useEffect(() => {
     if (authLoading) return
@@ -120,45 +136,60 @@ export default function ProfileReceivedOffersTab() {
 
       setLoading(true)
 
-      const { data, error } = await supabase
-        .from("offers")
-        .select(`
-          id,
-          current_amount,
-          counter_count,
-          status,
-          created_at,
-          listings (
+      const { data, error } =
+        await supabase
+          .from("offers")
+          .select(`
             id,
-            title,
-            image_urls,
-            is_sold
+            current_amount,
+            counter_count,
+            status,
+            created_at,
+            listings (
+              id,
+              title,
+              image_urls,
+              is_sold
+            )
+          `)
+          .eq(
+            "seller_id",
+            session.user.id
           )
-        `)
-        .eq("seller_id", session.user.id)
-        .order("created_at", { ascending: false })
-        .returns<Offer[]>()
+          .order("created_at", {
+            ascending: false,
+          })
+          .returns<Offer[]>()
 
       if (error) throw error
 
       setOffers(data ?? [])
     } catch (err) {
       handleAppError(err, {
-        fallbackMessage: "Failed to load received offers.",
-        context: "profile_received_offers_load",
+        fallbackMessage:
+          "Failed to load received offers.",
+        context:
+          "profile_received_offers_load",
       })
+
       setOffers([])
     } finally {
       setLoading(false)
     }
   }
 
-  const visibleOffers = useMemo(() => offers, [offers])
+  const visibleOffers = useMemo(
+    () => offers,
+    [offers]
+  )
 
   if (authLoading || loading) {
     return (
       <View style={styles.loadingWrap}>
-        <ActivityIndicator size="large" color="#7FAF9B" />
+        <ActivityIndicator
+          size="large"
+          color="#7FAF9B"
+        />
       </View>
     )
   }
@@ -172,7 +203,10 @@ export default function ProfileReceivedOffersTab() {
           color="#9CA3AF"
           style={{ marginBottom: 10 }}
         />
-        <Text style={styles.emptyTitle}>No offers received yet</Text>
+
+        <Text style={styles.emptyTitle}>
+          No offers received yet
+        </Text>
       </View>
     )
   }
@@ -180,69 +214,102 @@ export default function ProfileReceivedOffersTab() {
   return (
     <View style={styles.listWrap}>
       {visibleOffers.map((offer) => {
-        const derivedStatus = getDerivedStatus(offer)
+        const derivedStatus =
+          getDerivedStatus(offer)
+
         const image =
           offer.listings?.image_urls?.[0] ??
           "https://via.placeholder.com/150"
 
-       return (
-  <TouchableOpacity
-    key={offer.id}
-    activeOpacity={0.9}
-    style={styles.card}
-    onPress={() =>
-      router.push({
-        pathname: "/offers/[id]",
-        params: { id: String(offer.id) },
-      })
-    }
-  >
-    <Image
-      source={{ uri: image }}
-      style={styles.image}
-    />
+        return (
+          <TouchableOpacity
+            key={offer.id}
+            activeOpacity={0.9}
+            style={styles.card}
+            onPress={() =>
+              router.push({
+                pathname:
+                  "/offers/[id]",
+                params: {
+                  id: String(
+                    offer.id
+                  ),
+                },
+              })
+            }
+          >
+            <Image
+              source={{ uri: image }}
+              style={styles.image}
+            />
 
-    <View style={styles.infoWrap}>
-      <Text
-        style={styles.title}
-        numberOfLines={2}
-      >
-        {offer.listings?.title || "Offer"}
-      </Text>
+            <View style={styles.infoWrap}>
+              <Text
+                style={styles.title}
+                numberOfLines={2}
+              >
+                {offer.listings?.title ||
+                  "Offer"}
+              </Text>
 
-      <Text style={styles.amount}>
-        Offer: ${offer.current_amount.toFixed(2)}
-      </Text>
+              <Text style={styles.amount}>
+                Offer: $
+                {offer.current_amount.toFixed(
+                  2
+                )}
+              </Text>
 
-      <Text style={styles.meta}>
-        {getStatusText(offer)}
-        {offer.counter_count > 0 &&
-          ` • ${offer.counter_count} counter${
-            offer.counter_count === 1 ? "" : "s"
-          }`}
-      </Text>
+              <Text style={styles.meta}>
+                {getStatusText(offer)}
+                {offer.counter_count >
+                  0 &&
+                  ` • ${offer.counter_count} counter${
+                    offer.counter_count ===
+                    1
+                      ? ""
+                      : "s"
+                  }`}
+              </Text>
+            </View>
+
+            {derivedStatus ===
+              "sold" && (
+              <View
+                style={
+                  styles.soldBadge
+                }
+              >
+                <Text
+                  style={
+                    styles.soldBadgeText
+                  }
+                >
+                  ITEM SOLD
+                </Text>
+              </View>
+            )}
+
+            {derivedStatus ===
+              "expired" && (
+              <View
+                style={
+                  styles.expiredBadge
+                }
+              >
+                <Text
+                  style={
+                    styles.expiredBadgeText
+                  }
+                >
+                  OFFER EXPIRED
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        )
+      })}
     </View>
-
-    {derivedStatus === "sold" && (
-      <View style={styles.soldBadge}>
-        <Text style={styles.soldBadgeText}>
-          ITEM SOLD
-        </Text>
-      </View>
-    )}
-
-    {derivedStatus === "expired" && (
-      <View style={styles.expiredBadge}>
-        <Text style={styles.expiredBadgeText}>
-          OFFER EXPIRED
-        </Text>
-      </View>
-    )}
-  </TouchableOpacity>
-)
-})}
-</View>
-)
+  )
 }
 
 const styles = StyleSheet.create({

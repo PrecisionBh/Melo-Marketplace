@@ -17,20 +17,32 @@ export default function SellerShippingActions({
   onCancelOrder?: () => void
 }) {
   const status = order.status
+  const trackingStatus =
+    order.tracking_status?.toLowerCase()
 
   const canShip =
     status === "paid" ||
     status === "label_purchased"
 
-  const shipped =
-    status === "shipped" ||
-    status === "in_transit"
-
-  const delivered =
-    status === "delivered"
-
   const completed =
     status === "completed"
+
+  const delivered =
+    !completed &&
+    (trackingStatus === "delivered" ||
+      status === "delivered")
+
+  const outForDelivery =
+    !completed &&
+    !delivered &&
+    trackingStatus === "out_for_delivery"
+
+  const inTransit =
+    !completed &&
+    !delivered &&
+    !outForDelivery &&
+    (status === "shipped" ||
+      trackingStatus === "in_transit")
 
   return (
     <View style={styles.card}>
@@ -38,7 +50,7 @@ export default function SellerShippingActions({
         Seller Actions
       </Text>
 
-      {canShip && (
+      {canShip ? (
         <>
           <TouchableOpacity
             style={styles.primaryBtn}
@@ -58,22 +70,17 @@ export default function SellerShippingActions({
             </Text>
           </TouchableOpacity>
         </>
-      )}
-
-      {shipped && (
-        <View style={styles.noticeBox}>
-          <Text style={styles.noticeTitle}>
-            Tracking Submitted
+      ) : completed ? (
+        <View style={styles.successBox}>
+          <Text style={styles.successTitle}>
+            Order Complete
           </Text>
 
-          <Text style={styles.noticeSub}>
-            Buyer has been notified and
-            shipment is in transit.
+          <Text style={styles.successSub}>
+            Escrow has been released.
           </Text>
         </View>
-      )}
-
-      {delivered && (
+      ) : delivered ? (
         <View style={styles.noticeBox}>
           <Text style={styles.noticeTitle}>
             Delivered
@@ -84,19 +91,29 @@ export default function SellerShippingActions({
             order or initiate return.
           </Text>
         </View>
-      )}
-
-      {completed && (
-        <View style={styles.successBox}>
-          <Text style={styles.successTitle}>
-            Order Complete
+      ) : outForDelivery ? (
+        <View style={styles.noticeBox}>
+          <Text style={styles.noticeTitle}>
+            Out For Delivery
           </Text>
 
-          <Text style={styles.successSub}>
-            Escrow has been released.
+          <Text style={styles.noticeSub}>
+            Package is out for final
+            delivery to buyer.
           </Text>
         </View>
-      )}
+      ) : inTransit ? (
+        <View style={styles.noticeBox}>
+          <Text style={styles.noticeTitle}>
+            In Transit
+          </Text>
+
+          <Text style={styles.noticeSub}>
+            Buyer has been notified and
+            shipment is in transit.
+          </Text>
+        </View>
+      ) : null}
     </View>
   )
 }

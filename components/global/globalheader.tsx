@@ -41,8 +41,30 @@ export default function GlobalHeader({
       ]}
     >
       <View style={styles.inner}>
-        <View style={styles.leftSpacer} />
+        {/* LEFT SETTINGS */}
+        <View style={styles.leftActions}>
+          <TouchableOpacity
+            onPress={() => router.push("/settings")}
+            activeOpacity={0.8}
+            style={styles.iconButton}
+          >
+            <Ionicons
+              name={
+                isActive("/settings")
+                  ? "settings"
+                  : "settings-outline"
+              }
+              size={22}
+              color={
+                isActive("/settings")
+                  ? "#D97732"
+                  : "#0F172A"
+              }
+            />
+          </TouchableOpacity>
+        </View>
 
+        {/* CENTER BRAND */}
         <Link href="/" asChild>
           <TouchableOpacity
             activeOpacity={0.8}
@@ -52,11 +74,14 @@ export default function GlobalHeader({
           </TouchableOpacity>
         </Link>
 
+        {/* RIGHT ACTIONS */}
         <View style={styles.rightActions}>
           <TouchableOpacity
             onPress={() => {
-              if (onNotificationsPress) onNotificationsPress()
-              else router.push("/notifications")
+              if (onNotificationsPress)
+                onNotificationsPress()
+              else
+                router.push("/notifications")
             }}
             activeOpacity={0.8}
             style={styles.iconButton}
@@ -70,7 +95,9 @@ export default function GlobalHeader({
             {notifCount > 0 && (
               <View style={styles.badge}>
                 <Text style={styles.badgeText}>
-                  {notifCount > 99 ? "99+" : notifCount}
+                  {notifCount > 99
+                    ? "99+"
+                    : notifCount}
                 </Text>
               </View>
             )}
@@ -78,7 +105,8 @@ export default function GlobalHeader({
 
           <TouchableOpacity
             onPress={() => {
-              if (onMessagesPress) onMessagesPress()
+              if (onMessagesPress)
+                onMessagesPress()
               else router.push("/messages")
             }}
             activeOpacity={0.8}
@@ -119,8 +147,11 @@ const styles = StyleSheet.create({
     position: "relative",
   },
 
-  leftSpacer: {
+  leftActions: {
     flex: 1,
+    flexDirection: "row",
+    justifyContent: "flex-start",
+    alignItems: "center",
   },
 
   centerBrandWrap: {

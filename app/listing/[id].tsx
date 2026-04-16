@@ -21,6 +21,7 @@ import ListingPurchaseActions from "@/components/listing-v2/ListingPurchaseActio
 import OwnerListingActions from "@/components/listing-v2/OwnerListingActions"
 import SellerProfileCard from "@/components/listing-v2/SellerProfileCard"
 
+import { useCart } from "@/context/CartContext"
 import { useAuth } from "../../context/AuthContext"
 import { handleAppError } from "../../lib/errors/appError"
 import { supabase } from "../../lib/supabase"
@@ -68,6 +69,7 @@ const [isSellerPro, setIsSellerPro] =
 
   const [liked, setLiked] = useState(false)
   const [likesCount, setLikesCount] = useState(0)
+  const { refreshCartCount } = useCart()
 
   const [quantity, setQuantity] = useState(1)
   const [following, setFollowing] = useState(false)
@@ -450,20 +452,39 @@ setIsSellerPro(!!data?.is_pro)
   await supabase
     .from("offers")
     .insert({
-      listing_id: listing.id,
-      buyer_id: session!.user.id,
-      seller_id: listing.user_id,
+  listing_id: listing.id,
+  buyer_id: session!.user.id,
+  seller_id: listing.user_id,
 
-      current_amount: parsed,
-      quantity: quantity,
-      counter_count: 0,
-      last_actor: "buyer",
+  offer_amount: parsed,
+  original_offer: parsed,
+  current_amount: parsed,
 
-      message:
-        offerMessage.trim() || null,
+  quantity: quantity,
+  counter_count: 0,
+  last_actor: "buyer",
 
-      status: "pending",
-    })
+  buyer_fee: Number(
+    ((parsed * quantity) * 0.044 + 0.30).toFixed(2)
+  ),
+
+  total_due: Number(
+    (
+      (parsed * quantity) +
+      (
+        listing.shipping_type === "buyer_pays"
+          ? (listing.shipping_price ?? 0)
+          : 0
+      ) +
+      ((parsed * quantity) * 0.044 + 0.30)
+    ).toFixed(2)
+  ),
+
+  message:
+    offerMessage.trim() || null,
+
+  status: "pending",
+})
     .select("id")
     .single()
 
@@ -487,84 +508,88 @@ router.push({
 }
 
   const handleAddToCart = async () => {
-    requireAuth(async () => {
-      try {
-        if (!listing || !session?.user?.id) return
+  requireAuth(async () => {
+    try {
+      if (!listing || !session?.user?.id) return
 
-        if (listing.quantity_available <= 0) {
-          Alert.alert(
-            "Unavailable",
-            "This listing is out of stock."
-          )
-          return
-        }
+      if (listing.quantity_available <= 0) {
+        Alert.alert(
+          "Unavailable",
+          "This listing is out of stock."
+        )
+        return
+      }
 
-        const safeQty = Math.min(
-          Math.max(1, quantity),
+      const safeQty = Math.min(
+        Math.max(1, quantity),
+        listing.quantity_available
+      )
+
+      const { data: existing, error: existingError } =
+        await supabase
+          .from("cart_items")
+          .select("id, quantity")
+          .eq("user_id", session.user.id)
+          .eq("listing_id", listing.id)
+          .maybeSingle()
+
+      if (existingError) throw existingError
+
+      if (existing) {
+        const nextQty = Math.min(
+          (existing.quantity ?? 0) + safeQty,
           listing.quantity_available
         )
 
-        const { data: existing, error: existingError } =
+        const { error: updateError } =
           await supabase
             .from("cart_items")
-            .select("id, quantity")
-            .eq("user_id", session.user.id)
-            .eq("listing_id", listing.id)
-            .maybeSingle()
+            .update({
+              quantity: nextQty,
+              updated_at:
+                new Date().toISOString(),
+            })
+            .eq("id", existing.id)
 
-        if (existingError) throw existingError
+        if (updateError) throw updateError
+      } else {
+        const { error: insertError } =
+          await supabase
+            .from("cart_items")
+            .insert({
+              user_id: session.user.id,
+              listing_id: listing.id,
+              seller_id: listing.user_id,
+              quantity: safeQty,
+              title: listing.title,
+              price: listing.price,
+              image_url:
+                listing.image_urls?.[0] ?? null,
+              shipping_type:
+                listing.shipping_type,
+              shipping_price:
+                listing.shipping_price ?? 0,
+            })
 
-        if (existing) {
-          const nextQty = Math.min(
-            (existing.quantity ?? 0) + safeQty,
-            listing.quantity_available
-          )
-
-          const { error: updateError } =
-            await supabase
-              .from("cart_items")
-              .update({
-                quantity: nextQty,
-                updated_at: new Date().toISOString(),
-              })
-              .eq("id", existing.id)
-
-          if (updateError) throw updateError
-        } else {
-          const { error: insertError } =
-            await supabase
-              .from("cart_items")
-              .insert({
-                user_id: session.user.id,
-                listing_id: listing.id,
-                seller_id: listing.user_id,
-                quantity: safeQty,
-                title: listing.title,
-                price: listing.price,
-                image_url:
-                  listing.image_urls?.[0] ?? null,
-                shipping_type: listing.shipping_type,
-                shipping_price:
-                  listing.shipping_price ?? 0,
-              })
-
-          if (insertError) throw insertError
-        }
-
-        Alert.alert(
-          "Added to Cart",
-          `${safeQty} ${
-            safeQty === 1 ? "item" : "items"
-          } added to your cart.`
-        )
-      } catch (err) {
-        handleAppError(err, {
-          fallbackMessage:
-            "Failed to add item to cart.",
-        })
+        if (insertError) throw insertError
       }
-    })
-  }
+
+      await refreshCartCount()
+
+      Alert.alert(
+        "Added to Cart",
+        `${safeQty} ${
+          safeQty === 1 ? "item" : "items"
+        } added to your cart.`
+      )
+    } catch (err) {
+      handleAppError(err, {
+        fallbackMessage:
+          "Failed to add item to cart.",
+      })
+    }
+  })
+}
 
   const toggleListingActive = async () => {
   if (!listing) return

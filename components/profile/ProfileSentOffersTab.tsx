@@ -19,6 +19,7 @@ type OfferStatus =
   | "countered"
   | "accepted"
   | "declined"
+  | "cancelled"
 
 type Offer = {
   id: string
@@ -86,6 +87,8 @@ function getStatusText(offer: Offer) {
       return "Accepted"
     case "declined":
       return "Declined"
+    case "cancelled":
+      return "Cancelled"
     default:
       return ""
   }
@@ -191,7 +194,7 @@ export default function ProfileSentOffersTab() {
             activeOpacity={0.9}
             style={styles.card}
             onPress={() =>
-              router.push(`/buyer-hub/offers/${offer.id}`)
+              router.push(`/offers/${offer.id}`)
             }
           >
             <Image

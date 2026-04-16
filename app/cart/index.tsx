@@ -1,6 +1,7 @@
 import GlobalFooter from "@/components/global/globalfooter"
 import GlobalHeader from "@/components/global/globalheader"
 import { useAuth } from "@/context/AuthContext"
+import { useCart } from "@/context/CartContext"
 import { handleAppError } from "@/lib/errors/appError"
 import { supabase } from "@/lib/supabase"
 import { Ionicons } from "@expo/vector-icons"
@@ -33,57 +34,144 @@ export default function CartScreen() {
 
   const [cart, setCart] = useState<CartItem[]>([])
   const [loading, setLoading] = useState(true)
+  const { refreshCartCount } = useCart()
 
   useEffect(() => {
+  if (session?.user?.id) {
     loadCart()
-  }, [])
-
-  const loadCart = async () => {
-    try {
-      if (!session?.user?.id) return
-
-      setLoading(true)
-
-      const { data, error } = await supabase
-        .from("cart_items")
-        .select("*")
-        .eq("user_id", session.user.id)
-        .order("created_at", {
-          ascending: false,
-        })
-
-      if (error) throw error
-
-      setCart(data ?? [])
-    } catch (err) {
-      handleAppError(err, {
-        fallbackMessage:
-          "Failed to load cart.",
-      })
-    } finally {
-      setLoading(false)
-    }
   }
+}, [session?.user?.id])
 
-  const removeItem = async (id: string) => {
-    try {
-      const { error } = await supabase
+ const loadCart = async () => {
+  if (!session?.user?.id) return
+
+  const { data, error } = await supabase
+    .from("cart_items")
+    .select("*")
+    .eq("user_id", session.user.id)
+
+  if (error) {
+  handleAppError(error)
+  setLoading(false)
+  return
+}
+
+  const cartItems = data ?? []
+
+  if (cartItems.length === 0) {
+  setCart([])
+  await refreshCartCount()
+  setLoading(false)
+  return
+}
+
+  const listingIds = cartItems.map(
+    (item) => item.listing_id
+  )
+
+  const {
+    data: listings,
+    error: listingsError,
+  } = await supabase
+    .from("listings")
+    .select(
+      "id, is_sold, status, quantity_available"
+    )
+    .in("id", listingIds)
+
+  if (listingsError) {
+  handleAppError(listingsError)
+  setLoading(false)
+  return
+}
+
+  const listingMap = new Map(
+    (listings ?? []).map((listing) => [
+      listing.id,
+      listing,
+    ])
+  )
+
+  const invalidCartItemIds: string[] = []
+
+  const validCartItems = cartItems.filter(
+    (item) => {
+      const listing = listingMap.get(
+        item.listing_id
+      )
+
+      if (!listing) {
+        invalidCartItemIds.push(item.id)
+        return false
+      }
+
+      const unavailable =
+        listing.is_sold === true ||
+        listing.status !== "active" ||
+        (listing.quantity_available ?? 0) <
+          item.quantity
+
+      if (unavailable) {
+        invalidCartItemIds.push(item.id)
+        return false
+      }
+
+      return true
+    }
+  )
+
+  if (invalidCartItemIds.length > 0) {
+    const { error: deleteError } =
+      await supabase
         .from("cart_items")
         .delete()
-        .eq("id", id)
+        .in("id", invalidCartItemIds)
 
-      if (error) throw error
-
-      setCart((prev) =>
-        prev.filter((x) => x.id !== id)
+    if (deleteError) {
+      handleAppError(deleteError)
+    } else {
+      Alert.alert(
+        "Cart Updated",
+        "Some items were removed because they are no longer available."
       )
-    } catch (err) {
-      handleAppError(err, {
-        fallbackMessage:
-          "Failed to remove item.",
-      })
     }
   }
+
+  setCart(validCartItems)
+
+await refreshCartCount()
+
+setLoading(false)
+}
+
+ const removeItem = async (id: string) => {
+  try {
+    console.log("🗑 Removing cart item:", id)
+
+    const { data, error } = await supabase
+      .from("cart_items")
+      .delete()
+      .eq("id", id)
+      .select()
+
+    console.log("DELETE RESULT:", data)
+
+    if (error) throw error
+
+    setCart((prev) =>
+      prev.filter((x) => x.id !== id)
+    )
+
+    await refreshCartCount()
+  } catch (err) {
+    console.error("DELETE FAILED:", err)
+
+    handleAppError(err, {
+      fallbackMessage:
+        "Failed to remove item.",
+    })
+  }
+}
 
   const subtotal = useMemo(() => {
     return cart.reduce(
@@ -113,7 +201,7 @@ export default function CartScreen() {
       return
     }
 
-    router.push("/checkout/cart")
+    router.push("/cart/checkout")
   }
 
   return (
@@ -252,7 +340,6 @@ export default function CartScreen() {
       )}
 
       <GlobalFooter
-        cartCount={cart.length}
       />
     </View>
   )
