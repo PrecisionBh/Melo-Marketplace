@@ -1,8 +1,8 @@
 import {
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native"
 
 export default function BuyerActions({
@@ -17,6 +17,7 @@ export default function BuyerActions({
   onStartReturn?: () => void
 }) {
   const status = order.status
+  const isPendingPayment = status === "pending_payment"
 
   const deliveredAt = order.delivered_at
     ? new Date(order.delivered_at)
@@ -55,6 +56,18 @@ export default function BuyerActions({
       <Text style={styles.title}>
         Buyer Actions
       </Text>
+
+      {isPendingPayment && (
+  <View style={styles.noticeBox}>
+    <Text style={styles.noticeTitle}>
+      Awaiting Payment
+    </Text>
+
+    <Text style={styles.noticeSub}>
+      Complete your payment to proceed with this order.
+    </Text>
+  </View>
+)}
 
       {returnWindowActive && (
         <>

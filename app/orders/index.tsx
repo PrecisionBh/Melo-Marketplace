@@ -8,13 +8,13 @@ import { useFocusEffect, useRouter } from "expo-router"
 
 import { useCallback, useState } from "react"
 import {
-    ActivityIndicator,
-    Image,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native"
 
 const STATUS_CONFIG: Record<
@@ -105,8 +105,24 @@ export default function OrdersScreen() {
       if (sellingRes.error) throw sellingRes.error
       if (buyingRes.error) throw buyingRes.error
 
-      setSellingOrders(sellingRes.data ?? [])
-      setBuyingOrders(buyingRes.data ?? [])
+      const filteredSellingOrders = (sellingRes.data ?? []).filter(
+  (order) =>
+    !(
+      order.status === "pending_payment" &&
+      !order.offer_id
+    )
+)
+
+const filteredBuyingOrders = (buyingRes.data ?? []).filter(
+  (order) =>
+    !(
+      order.status === "pending_payment" &&
+      !order.offer_id
+    )
+)
+
+setSellingOrders(filteredSellingOrders)
+setBuyingOrders(filteredBuyingOrders)
     } catch (err) {
       handleAppError(err, {
         fallbackMessage: "Failed to load orders.",
@@ -186,14 +202,15 @@ export default function OrdersScreen() {
           </View>
         ) : (
           activeOrders.map((order) => (
-            <OrderCard
-              key={order.id}
-              order={order}
-              onPress={() =>
-                router.push(`/orders/${order.id}`)
-              }
-            />
-          ))
+  <OrderCard
+    key={order.id}
+    order={order}
+    currentUserId={session?.user?.id ?? ""}
+    onPress={() =>
+      router.push(`/orders/${order.id}`)
+    }
+  />
+))
         )}
       </ScrollView>
 
@@ -205,13 +222,36 @@ export default function OrdersScreen() {
 function OrderCard({
   order,
   onPress,
+  currentUserId,
 }: {
   order: any
   onPress: () => void
+  currentUserId: string
 }) {
-  const cfg =
+  const isBuyer = order.buyer_id === currentUserId
+  const isSeller = order.seller_id === currentUserId
+
+  let cfg =
     STATUS_CONFIG[order.status] ??
     STATUS_CONFIG.paid
+
+  // 🔥 BUYER NEEDS TO PAY
+  if (isBuyer && order.status === "pending_payment") {
+    cfg = {
+      label: "Pay Now",
+      bg: "#D97732",
+      text: "#fff",
+    }
+  }
+
+  // 🔥 SELLER NEEDS TO SHIP
+  if (isSeller && order.status === "paid") {
+    cfg = {
+      label: "Awaiting Label",
+      bg: "#FEF3C7",
+      text: "#92400E",
+    }
+  }
 
   const image =
     order.listing_snapshot?.image_urls?.[0] ??

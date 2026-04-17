@@ -437,8 +437,7 @@ setIsSellerPro(!!data?.is_pro)
         return
       }
 
-      const parsed =
-        parseFloat(offerAmount)
+      const parsed = parseFloat(offerAmount)
 
       if (isNaN(parsed) || parsed <= 0) {
         Alert.alert(
@@ -449,54 +448,80 @@ setIsSellerPro(!!data?.is_pro)
       }
 
       const { data: newOffer, error } =
-  await supabase
-    .from("offers")
-    .insert({
-  listing_id: listing.id,
-  buyer_id: session!.user.id,
-  seller_id: listing.user_id,
+        await supabase
+          .from("offers")
+          .insert({
+            listing_id: listing.id,
+            buyer_id: session!.user.id,
+            seller_id: listing.user_id,
 
-  offer_amount: parsed,
-  original_offer: parsed,
-  current_amount: parsed,
+            offer_amount: parsed,
+            original_offer: parsed,
+            current_amount: parsed,
 
-  quantity: quantity,
-  counter_count: 0,
-  last_actor: "buyer",
+            quantity: quantity,
+            counter_count: 0,
+            last_actor: "buyer",
 
-  buyer_fee: Number(
-    ((parsed * quantity) * 0.044 + 0.30).toFixed(2)
-  ),
+            buyer_fee: Number(
+              ((parsed * quantity) * 0.044 + 0.30).toFixed(2)
+            ),
 
-  total_due: Number(
-    (
-      (parsed * quantity) +
-      (
-        listing.shipping_type === "buyer_pays"
-          ? (listing.shipping_price ?? 0)
-          : 0
-      ) +
-      ((parsed * quantity) * 0.044 + 0.30)
-    ).toFixed(2)
-  ),
+            total_due: Number(
+              (
+                (parsed * quantity) +
+                (
+                  listing.shipping_type === "buyer_pays"
+                    ? (listing.shipping_price ?? 0)
+                    : 0
+                ) +
+                ((parsed * quantity) * 0.044 + 0.30)
+              ).toFixed(2)
+            ),
 
-  message:
-    offerMessage.trim() || null,
+            message:
+              offerMessage.trim() || null,
 
-  status: "pending",
-})
-    .select("id")
-    .single()
+            status: "pending",
+          })
+          .select("id, seller_id")
+          .single()
 
-if (error) throw error
+      if (error) throw error
 
-setOfferAmount("")
-setOfferMessage("")
+      // 🔥 SEND NOTIFICATION TO SELLER
+      try {
+        await supabase.functions.invoke(
+          "send-notification",
+          {
+            body: {
+              userId: newOffer.seller_id,
+              type: "offer_received",
+              title: "New Offer Received 💰",
+              body: `You received a new offer on "${listing.title}"`,
+              data: {
+                route: "/offers/[id]",
+                params: {
+                  id: newOffer.id,
+                },
+              },
+            },
+          }
+        )
+      } catch (notifErr) {
+        console.log(
+          "⚠️ Notification failed (non-blocking)",
+          notifErr
+        )
+      }
 
-router.push({
-  pathname: "/offers/[id]",
-  params: { id: String(newOffer.id) },
-})
+      setOfferAmount("")
+      setOfferMessage("")
+
+      router.push({
+        pathname: "/offers/[id]",
+        params: { id: String(newOffer.id) },
+      })
 
     } catch (err) {
       handleAppError(err, {

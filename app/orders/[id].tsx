@@ -1,39 +1,36 @@
 import GlobalFooter from "@/components/global/globalfooter"
 import GlobalHeader from "@/components/global/globalheader"
 
-import ConfirmDeliveryModal from "@/components/buyer-hub/orders/ConfirmDeliveryModal"
-import ActionConfirmModal from "@/components/orders/ActionConfirmModal"
-import BuyerActions from "@/components/orders/BuyerActions"
-import BuyerDisputeResponseCard from "@/components/orders/BuyerDisputeResponseCard"
-import BuyerRespondDisputeModal from "@/components/orders/BuyerRespondDisputeModal"
-import OpenDisputeModal from "@/components/orders/OpenDisputeModal"
+import AddTrackingModal from "@/components/orders/AddTrackingModal"
 import OrderStepIndicator from "@/components/orders/OrderStepIndicator"
 import OrderSummaryCard from "@/components/orders/OrderSummaryCard"
-import RefundSection from "@/components/orders/RefundSection"
 import ReturnActions from "@/components/orders/ReturnActions"
-import SellerReturnDisputeCard from "@/components/orders/SellerReturnDisputeCard"
+import ReturnStepIndicator from "@/components/orders/ReturnStepIndicator"
 import SellerShippingActions from "@/components/orders/SellerShippingActions"
+import ShippingRatesModal from "@/components/orders/ShippingRatesModal"
 import TrackPackageButton from "@/components/orders/TrackPackageButton"
+import VoidLabelModal from "@/components/orders/VoidLabelModal"
 
 import { useAuth } from "@/context/AuthContext"
 import { handleAppError } from "@/lib/errors/appError"
 import { supabase } from "@/lib/supabase"
 
-import { useLocalSearchParams } from "expo-router"
+import { useLocalSearchParams, useRouter } from "expo-router"
 import { useEffect, useState } from "react"
 import {
-    ActivityIndicator,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from "react-native"
+
 
 export default function OrderDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const { session } = useAuth()
+  const router = useRouter()
 
   /* ------------------------------------------------ */
   /* -------------------- STATE ---------------------- */
@@ -48,6 +45,13 @@ export default function OrderDetailScreen() {
 
   const [showTrackingForm, setShowTrackingForm] =
     useState(false)
+    const [rates, setRates] = useState<any[]>([])
+const [shipmentId, setShipmentId] = useState<string | null>(null)
+const [showRateModal, setShowRateModal] = useState(false)
+const [buyingLabel, setBuyingLabel] = useState(false)
+const [loadingRates, setLoadingRates] = useState(false)
+const [showVoidModal, setShowVoidModal] = useState(false)
+const [voidingLabel, setVoidingLabel] = useState(false)
 
   const [confirmVisible, setConfirmVisible] =
     useState(false)
@@ -110,48 +114,80 @@ const [showReturnForm, setShowReturnForm] =
   }
 
   /* ------------------------------------------------ */
-  /* ------------ SELLER SHIPPING ACTIONS ----------- */
-  /* ------------------------------------------------ */
+/* ------------ SELLER SHIPPING ACTIONS ----------- */
+/* ------------------------------------------------ */
 
-  const submitTracking = async () => {
-    if (!order) return
+const submitTracking = async () => {
+  if (!order) return
 
-    if (!carrier || !tracking) {
-      alert(
-        "Please select a carrier and enter tracking."
+  if (!carrier || !tracking.trim()) {
+  alert("Please enter tracking info")
+  return
+}
+
+
+  try {
+    setSaving(true)
+
+    const { error } =
+      await supabase.functions.invoke(
+        "create-easypost-tracker",
+        {
+          body: {
+            orderId: order.id,
+            carrier,
+            trackingNumber: tracking.trim(),
+          },
+        }
       )
-      return
-    }
 
-    try {
-      setSaving(true)
+    if (error) throw error
 
-      const { error } =
-        await supabase.functions.invoke(
-          "create-easypost-tracker",
-          {
-            body: {
-              orderId: order.id,
-              carrier,
-              trackingNumber: tracking.trim(),
-            },
-          }
-        )
+    setShowTrackingForm(false)
 
-      if (error) throw error
-
-      setShowTrackingForm(false)
-
-      await loadOrder()
-    } catch (err) {
-      handleAppError(err, {
-        fallbackMessage:
-          "Failed to submit tracking.",
-      })
-    } finally {
-      setSaving(false)
-    }
+    await loadOrder()
+  } catch (err) {
+    handleAppError(err, {
+      fallbackMessage:
+        "Failed to submit tracking.",
+    })
+  } finally {
+    setSaving(false)
   }
+}
+
+/* ------------------------------------------------ */
+/* ------------ BUY SHIPPING LABEL ---------------- */
+/* ------------------------------------------------ */
+
+const buyShippingLabel = async () => {
+  if (!order) return
+
+  try {
+    setSaving(true)
+
+    const { error } =
+      await supabase.functions.invoke(
+        "create-shipping-label",
+        {
+          body: {
+            order_id: order.id,
+          },
+        }
+      )
+
+    if (error) throw error
+
+    await loadOrder()
+  } catch (err) {
+    handleAppError(err, {
+      fallbackMessage:
+        "Failed to purchase shipping label.",
+    })
+  } finally {
+    setSaving(false)
+  }
+}
 
   /* ------------------------------------------------ */
   /* ------------ BUYER COMPLETE ORDER -------------- */
@@ -554,12 +590,17 @@ const submitBuyerDisputeResponse = async ({
   const isBuyer =
     order.buyer_id === userId
 
+    const needsPayment =
+  isBuyer && order.status === "pending_payment"
+
   const isSeller =
     order.seller_id === userId
 
   const isReturnFlow =
-    order.status === "return_started" ||
-    order.status === "return_processing"
+  order.status === "return_started" ||
+  order.status === "return_label_purchased" ||
+  order.status === "return_shipped" ||
+  order.status === "return_processing"
 
   const isCompleted =
     order.status === "completed"
@@ -567,274 +608,300 @@ const submitBuyerDisputeResponse = async ({
   const isDelivered =
     order.tracking_status === "delivered"
 
-  const canConfirmDelivery =
-    isBuyer &&
-    isDelivered &&
-    !isReturnFlow &&
-    !isCompleted &&
-    !order.is_disputed
+ const canConfirmDelivery =
+  isBuyer &&
+  isDelivered &&
+  !isReturnFlow &&
+  !isCompleted &&
+  !order.is_disputed
 
-  /* ------------------------------------------------ */
-  /* ------------------- RENDER ---------------------- */
-  /* ------------------------------------------------ */
+/* ------------------------------------------------ */
+/* ------------------- RENDER ---------------------- */
+/* ------------------------------------------------ */
 
-  return (
-    <View style={styles.screen}>
-      <GlobalHeader />
+return (
+  <View style={styles.screen}>
+    <GlobalHeader />
 
-      <ScrollView
-        contentContainerStyle={styles.content}
-      >
-        <OrderSummaryCard order={order} />
+    <ScrollView contentContainerStyle={styles.content}>
+      <OrderSummaryCard order={order} />
 
-        <OrderStepIndicator
-          order={order}
-          role={isSeller ? "seller" : "buyer"}
-        />
+      {needsPayment && (
+        <View style={styles.payNowCard}>
+          <Text style={styles.payNowTitle}>
+            Awaiting Payment
+          </Text>
 
-        <TrackPackageButton
-          trackingUrl={order.tracking_url}
-        />
+          <Text style={styles.payNowSub}>
+            Your order has been placed but payment is required to proceed.
+          </Text>
 
-        {isSeller && (
-          <>
-            <SellerShippingActions
-  order={order}
-  onAddTracking={() =>
-    setShowTrackingForm(true)
-  }
-  onCancelOrder={() =>
-    setCancelOrderVisible(true)
-  }
-/>
+          <TouchableOpacity
+            style={styles.payNowBtn}
+            onPress={() =>
+              router.push({
+                pathname: "/cart/[offerId]",
+                params: {
+                  offerId: order.offer_id,
+                  orderId: order.id,
+                },
+              })
+            }
+          >
+            <Text style={styles.payNowText}>
+              Pay Now
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
-            {showTrackingForm && (
-              <View style={styles.trackingCard}>
-                <Text style={styles.label}>
-                  Select Carrier
-                </Text>
-
-                <View style={styles.carrierRow}>
-                  {[
-                    "USPS",
-                    "UPS",
-                    "FedEx",
-                    "DHL",
-                  ].map((c) => (
-                    <TouchableOpacity
-                      key={c}
-                      style={[
-                        styles.carrierPill,
-                        carrier === c &&
-                          styles.carrierPillActive,
-                      ]}
-                      onPress={() =>
-                        setCarrier(c)
-                      }
-                    >
-                      <Text
-                        style={[
-                          styles.carrierText,
-                          carrier === c &&
-                            styles
-                              .carrierTextActive,
-                        ]}
-                      >
-                        {c}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-
-                <Text style={styles.label}>
-                  Tracking Number
-                </Text>
-
-                <TextInput
-                  style={styles.input}
-                  placeholder="Enter tracking number"
-                  value={tracking}
-                  onChangeText={setTracking}
-                />
-
-                <TouchableOpacity
-                  style={styles.submitBtn}
-                  onPress={submitTracking}
-                  disabled={saving}
-                >
-                  <Text style={styles.submitText}>
-                    {saving
-                      ? "Saving..."
-                      : "Mark Shipped"}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </>
-        )}
-
-        {isBuyer && (
-          <BuyerActions
-  order={order}
-  refreshOrder={loadOrder}
-  onConfirmDelivery={
-    canConfirmDelivery
-      ? () => setConfirmVisible(true)
-      : undefined
-  }
-  onStartReturn={() =>
-    setShowReturnForm(true)
-  }
-/>
-        )}
-
-        {isBuyer && showReturnForm && (
-  <View style={styles.trackingCard}>
-    <Text style={styles.label}>
-      Return Reason
-    </Text>
-
-    <TextInput
-      style={styles.input}
-      value={returnReason}
-      onChangeText={setReturnReason}
-      placeholder="Reason for return"
+      {!needsPayment && (
+  isReturnFlow ? (
+    <ReturnStepIndicator
+      order={order}
+      role={isSeller ? "seller" : "buyer"}
     />
-
-    <Text style={styles.label}>
-      Additional Notes
-    </Text>
-
-    <TextInput
-      style={[
-        styles.input,
-        { height: 100 },
-      ]}
-      multiline
-      value={returnNotes}
-      onChangeText={setReturnNotes}
-      placeholder="Optional notes"
+  ) : (
+    <OrderStepIndicator
+      order={order}
+      role={isSeller ? "seller" : "buyer"}
     />
+  )
+)}
 
-    <TouchableOpacity
-      style={styles.submitBtn}
-      onPress={startReturn}
-      disabled={processing}
-    >
-      <Text style={styles.submitText}>
-        {processing
-          ? "Starting Return..."
-          : "Submit Return Request"}
-      </Text>
-    </TouchableOpacity>
+      <TrackPackageButton trackingUrl={order.tracking_url} />
 
-    <TouchableOpacity
-  style={styles.cancelReturnBtn}
-  onPress={() => {
-    setShowReturnForm(false)
-    setReturnNotes("")
-    setReturnReason("Item not as described")
+      {isSeller && (
+        <>
+          <SellerShippingActions
+  order={order}
+  onAddTracking={() => setShowTrackingForm(true)}
+  onCancelOrder={() => setCancelOrderVisible(true)}
+  loadingRates={loadingRates}
+  onBuyLabel={async () => {
+    try {
+      setLoadingRates(true)
+
+      const { data, error } =
+        await supabase.functions.invoke(
+          "get-shipping-rates",
+          {
+            body: { order_id: order.id },
+          }
+        )
+
+      if (error) throw error
+
+      setRates(data.rates)
+      setShipmentId(data.shipment_id)
+
+      setShowRateModal(true)
+    } catch (err) {
+      console.log(err)
+      alert("Failed to load shipping rates")
+    } finally {
+      setLoadingRates(false)
+    }
   }}
->
-  <Text style={styles.cancelReturnText}>
-    Cancel
-  </Text>
-</TouchableOpacity>
+  onVoidLabel={() => setShowVoidModal(true)} // 🔥 ADD THIS LINE
+/>
 
+{isReturnFlow && isBuyer && (
+  <ReturnActions
+    order={order}
+    refreshOrder={loadOrder}
+    onCancelReturn={cancelBuyerReturn}
+    onBuyReturnLabel={async () => {
+      try {
+        setLoadingRates(true)
+
+        const { data, error } =
+          await supabase.functions.invoke(
+            "get-return-rates",
+            {
+              body: { order_id: order.id },
+            }
+          )
+
+        if (error) throw error
+
+        setRates(data.rates)
+        setShipmentId(data.shipment_id)
+
+        setShowRateModal(true)
+      } catch (err) {
+        console.log(err)
+        alert("Failed to load return rates")
+      } finally {
+        setLoadingRates(false)
+      }
+    }}
+  />
+)}
+
+        </>
+      )}
+    </ScrollView>
+
+    <AddTrackingModal
+  visible={showTrackingForm}
+  carrier={carrier}
+  setCarrier={setCarrier}
+  tracking={tracking}
+  setTracking={setTracking}
+  loading={saving}
+  onClose={() => setShowTrackingForm(false)}
+  onSubmit={submitTracking}
+/>
+
+    <ShippingRatesModal
+  visible={showRateModal}
+  rates={rates}
+  loading={buyingLabel}
+  onClose={() => setShowRateModal(false)}
+  onPurchase={async (rate) => {
+    try {
+      setBuyingLabel(true)
+
+      const { error } =
+        await supabase.functions.invoke(
+          "create-shipping-label",
+          {
+            body: {
+              order_id: order.id,
+              rate_id: rate.rate_id,
+              shipment_id: shipmentId,
+            },
+          }
+        )
+
+      if (error) throw error
+
+      setShowRateModal(false)
+
+      await loadOrder()
+    } catch (err) {
+      console.log(err)
+      alert("Failed to purchase label")
+    } finally {
+      setBuyingLabel(false)
+    }
+  }}
+/>
+
+<VoidLabelModal
+  visible={showVoidModal}
+  loading={voidingLabel}
+  onClose={() => setShowVoidModal(false)}
+  onConfirm={async () => {
+  try {
+    if (order.tracking_status === "in_transit") {
+      alert("Label already in transit and cannot be voided")
+      return
+    }
+
+    setVoidingLabel(true)
+
+    const { error } =
+      await supabase.functions.invoke(
+        "void-shipping-label",
+        {
+          body: { order_id: order.id },
+        }
+      )
+
+    if (error) throw error
+
+    setShowVoidModal(false)
+
+    await loadOrder()
+  } catch (err) {
+    console.log(err)
+    alert("Failed to void label")
+  } finally {
+    setVoidingLabel(false)
+  }
+}}
+/>
+
+{cancelOrderVisible && (
+  <View style={{
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 16,
+  }}>
+    <View style={{
+      width: "100%",
+      backgroundColor: "#fff",
+      borderRadius: 24,
+      padding: 20,
+    }}>
+      <Text style={{
+        fontSize: 18,
+        fontWeight: "800",
+        marginBottom: 8,
+      }}>
+        Cancel Order
+      </Text>
+
+      <Text style={{
+        fontSize: 13,
+        color: "#6B7280",
+        marginBottom: 10,
+      }}>
+        This will cancel the order and refund the buyer.
+      </Text>
+
+      <Text style={{
+        fontSize: 12,
+        color: "#DC2626",
+        marginBottom: 16,
+      }}>
+        This action cannot be undone.
+      </Text>
+
+      {/* CONFIRM */}
+      <TouchableOpacity
+        style={{
+          backgroundColor: "#DC2626",
+          paddingVertical: 14,
+          borderRadius: 16,
+          alignItems: "center",
+        }}
+        onPress={cancelSellerOrder}
+        disabled={saving}
+      >
+        {saving ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={{ color: "#fff", fontWeight: "800" }}>
+            Yes, Cancel Order
+          </Text>
+        )}
+      </TouchableOpacity>
+
+      {/* CANCEL */}
+      <TouchableOpacity
+        style={{ marginTop: 10, alignItems: "center" }}
+        onPress={() => setCancelOrderVisible(false)}
+      >
+        <Text style={{ color: "#6B7280" }}>
+          Go Back
+        </Text>
+      </TouchableOpacity>
+    </View>
   </View>
 )}
 
-        {isReturnFlow && (
-          <ReturnActions
-  order={order}
-  refreshOrder={loadOrder}
-  onCancelReturn={cancelBuyerReturn}
-/>
-)}
-
-        {isSeller &&
-  order.return_received &&
-  !order.is_disputed && (
-    <RefundSection
-      order={order}
-      refreshOrder={loadOrder}
-      onRefund={() =>
-        setConfirmReturnVisible(true)
-      }
-    />
-)}
-
-{isSeller &&
-  order.return_received &&
-  !order.is_disputed && (
-    <SellerReturnDisputeCard
-      onOpenDispute={() =>
-        setDisputeVisible(true)
-      }
-    />
-)}
-
-{isBuyer &&
-  order.is_disputed &&
-  order.status === "return_started" && (
-    <BuyerDisputeResponseCard
-      onRespond={() =>
-        setBuyerDisputeVisible(true)
-      }
-    />
-)}
-      </ScrollView>
-
-      <ConfirmDeliveryModal
-        visible={confirmVisible}
-        processing={processing}
-        onConfirm={confirmDelivery}
-        onClose={() =>
-          setConfirmVisible(false)
-        }
-      />
-
-      <ConfirmDeliveryModal
-  visible={confirmReturnVisible}
-  processing={saving}
-  onConfirm={confirmReturnAndRefund}
-  onClose={() =>
-    setConfirmReturnVisible(false)
-  }
-/>
-
-<ActionConfirmModal
-  visible={cancelOrderVisible}
-  processing={saving}
-  title="Cancel Order?"
-  message="This will refund the buyer and cancel the order."
-  confirmText="Cancel Order"
-  destructive
-  onConfirm={cancelSellerOrder}
-  onClose={() =>
-    setCancelOrderVisible(false)
-  }
-/>
-
-<OpenDisputeModal
-  visible={disputeVisible}
-  onClose={() =>
-    setDisputeVisible(false)
-  }
-  onSubmit={submitSellerDispute}
-/>
-
-<BuyerRespondDisputeModal
-  visible={buyerDisputeVisible}
-  onClose={() =>
-    setBuyerDisputeVisible(false)
-  }
-  onSubmit={submitBuyerDisputeResponse}
-/>
-
-      <GlobalFooter />
-    </View>
-  )
+    <GlobalFooter />
+  </View>
+)
 }
 
 const styles = StyleSheet.create({
@@ -933,6 +1000,41 @@ const styles = StyleSheet.create({
 
 cancelReturnText: {
   color: "#D97732",
+  fontWeight: "800",
+  fontSize: 14,
+},
+
+payNowCard: {
+  backgroundColor: "#FFF7ED",
+  borderRadius: 18,
+  borderWidth: 1,
+  borderColor: "#FED7AA",
+  padding: 16,
+  marginBottom: 16,
+},
+
+payNowTitle: {
+  fontSize: 16,
+  fontWeight: "800",
+  color: "#C2410C",
+  marginBottom: 6,
+},
+
+payNowSub: {
+  fontSize: 13,
+  color: "#9A3412",
+  marginBottom: 12,
+},
+
+payNowBtn: {
+  backgroundColor: "#D97732",
+  paddingVertical: 14,
+  borderRadius: 14,
+  alignItems: "center",
+},
+
+payNowText: {
+  color: "#fff",
   fontWeight: "800",
   fontSize: 14,
 },

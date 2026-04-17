@@ -57,9 +57,6 @@ serve(async (req) => {
     const trackerId = tracker.id
     const newStatus = mapStatus(tracker.status)
 
-    // ----------------------------------
-    // Match forward shipment(s) first
-    // ----------------------------------
     const { data: matchedOrders } = await supabase
       .from("orders")
       .select("*")
@@ -70,9 +67,6 @@ serve(async (req) => {
     let isReturn = false
     let orders = matchedOrders || []
 
-    // ----------------------------------
-    // Fallback to return shipment(s)
-    // ----------------------------------
     if (!orders.length) {
       const { data: returnOrders } = await supabase
         .from("orders")
@@ -115,6 +109,38 @@ serve(async (req) => {
           updateData.return_refund_at = new Date(
             now.getTime() + 2 * 24 * 60 * 60 * 1000
           ).toISOString()
+
+          // 🔔 SELLER: return delivered
+          await supabase.functions.invoke("send-notification", {
+            body: {
+              userId: order.seller_id,
+              type: "order",
+              title: "Return Delivered 📦",
+              body: "The returned item has been delivered to you.",
+              data: {
+                route: "/seller-hub/orders/[id]",
+                params: { id: order.id },
+              },
+              dedupeKey: `return-delivered-${order.id}`,
+            },
+          })
+        }
+
+        if (newStatus === "in_transit") {
+          // 🔔 SELLER: return in transit
+          await supabase.functions.invoke("send-notification", {
+            body: {
+              userId: order.seller_id,
+              type: "order",
+              title: "Return In Transit 🔁",
+              body: "The buyer has shipped the return.",
+              data: {
+                route: "/seller-hub/orders/[id]",
+                params: { id: order.id },
+              },
+              dedupeKey: `return-transit-${order.id}`,
+            },
+          })
         }
 
         await supabase
@@ -151,6 +177,38 @@ serve(async (req) => {
             now.getTime() +
               2 * 24 * 60 * 60 * 1000
           ).toISOString()
+
+        // 🔔 BUYER: delivered
+        await supabase.functions.invoke("send-notification", {
+          body: {
+            userId: order.buyer_id,
+            type: "order",
+            title: "Package Delivered 📦",
+            body: "Your order has been delivered.",
+            data: {
+              route: "/orders/[id]",
+              params: { id: order.id },
+            },
+            dedupeKey: `delivered-${order.id}`,
+          },
+        })
+      }
+
+      if (newStatus === "in_transit") {
+        // 🔔 BUYER: in transit
+        await supabase.functions.invoke("send-notification", {
+          body: {
+            userId: order.buyer_id,
+            type: "order",
+            title: "Package On The Way 🚚",
+            body: "Your order is on the way.",
+            data: {
+              route: "/orders/[id]",
+              params: { id: order.id },
+            },
+            dedupeKey: `in-transit-${order.id}`,
+          },
+        })
       }
 
       await supabase

@@ -2,12 +2,12 @@ import { Ionicons } from "@expo/vector-icons"
 import { useRouter } from "expo-router"
 import { useEffect, useMemo, useState } from "react"
 import {
-    ActivityIndicator,
-    Image,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Image,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native"
 
 import { useAuth } from "@/context/AuthContext"
@@ -51,7 +51,11 @@ function isExpired(createdAt: string) {
 }
 
 function getDerivedStatus(offer: Offer) {
-  if (offer.listings?.is_sold) {
+  // 🔥 FIX: don't override accepted offers
+  if (
+    offer.listings?.is_sold &&
+    offer.status !== "accepted"
+  ) {
     return "sold"
   }
 
@@ -92,6 +96,21 @@ function getStatusText(offer: Offer) {
     default:
       return ""
   }
+}
+
+// 🔥 NEW: ACTION REQUIRED LOGIC
+function getActionRequired(offer: Offer) {
+  const derivedStatus = getDerivedStatus(offer)
+
+  if (derivedStatus === "accepted") {
+    return "PAY NOW"
+  }
+
+  if (derivedStatus === "countered") {
+    return "RESPOND"
+  }
+
+  return null
 }
 
 export default function ProfileSentOffersTab() {
@@ -175,7 +194,9 @@ export default function ProfileSentOffersTab() {
           color="#9CA3AF"
           style={{ marginBottom: 10 }}
         />
-        <Text style={styles.emptyTitle}>No offers sent yet</Text>
+        <Text style={styles.emptyTitle}>
+          No offers sent yet
+        </Text>
       </View>
     )
   }
@@ -183,7 +204,11 @@ export default function ProfileSentOffersTab() {
   return (
     <View style={styles.listWrap}>
       {visibleOffers.map((offer) => {
-        const derivedStatus = getDerivedStatus(offer)
+        const derivedStatus =
+          getDerivedStatus(offer)
+        const actionRequired =
+          getActionRequired(offer)
+
         const image =
           offer.listings?.image_urls?.[0] ??
           "https://via.placeholder.com/150"
@@ -207,34 +232,55 @@ export default function ProfileSentOffersTab() {
                 style={styles.title}
                 numberOfLines={2}
               >
-                {offer.listings?.title || "Offer"}
+                {offer.listings?.title ||
+                  "Offer"}
               </Text>
 
               <Text style={styles.amount}>
-                Offer: ${offer.current_amount.toFixed(2)}
+                Offer: $
+                {offer.current_amount.toFixed(2)}
               </Text>
 
               <Text style={styles.meta}>
                 {getStatusText(offer)}
                 {offer.counter_count > 0 &&
                   ` • ${offer.counter_count} counter${
-                    offer.counter_count === 1 ? "" : "s"
+                    offer.counter_count === 1
+                      ? ""
+                      : "s"
                   }`}
               </Text>
             </View>
 
+            {/* SOLD */}
             {derivedStatus === "sold" && (
               <View style={styles.soldBadge}>
-                <Text style={styles.soldBadgeText}>
+                <Text
+                  style={styles.soldBadgeText}
+                >
                   ITEM SOLD
                 </Text>
               </View>
             )}
 
+            {/* EXPIRED */}
             {derivedStatus === "expired" && (
               <View style={styles.expiredBadge}>
-                <Text style={styles.expiredBadgeText}>
+                <Text
+                  style={styles.expiredBadgeText}
+                >
                   OFFER EXPIRED
+                </Text>
+              </View>
+            )}
+
+            {/* 🔥 ACTION REQUIRED */}
+            {actionRequired && (
+              <View style={styles.actionBadge}>
+                <Text
+                  style={styles.actionBadgeText}
+                >
+                  {actionRequired}
                 </Text>
               </View>
             )}
@@ -324,7 +370,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "900",
     color: "#FFFFFF",
-    letterSpacing: 0.5,
   },
 
   soldBadge: {
@@ -338,6 +383,18 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "900",
     color: "#FFFFFF",
-    letterSpacing: 0.5,
+  },
+
+  actionBadge: {
+    backgroundColor: "#16A34A",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+
+  actionBadgeText: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: "#FFFFFF",
   },
 })

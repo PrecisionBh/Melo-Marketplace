@@ -124,6 +124,10 @@ const [height, setHeight] = useState("")
 
 const handleCreateListing = async () => {
   if (!session?.user) return
+  if (!hasReturnAddress) {
+  setShowAddressModal(true)
+  return
+}
   if (submitting) return
 
   try {

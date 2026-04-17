@@ -1,6 +1,7 @@
 import * as Linking from "expo-linking"
 
 import BuyerProtectionNotice from "@/components/checkout/BuyerProtectionNotice"
+import CartPreviewCarousel from "@/components/checkout/CartPreviewCarousel"
 import CheckoutShippingCard from "@/components/checkout/CheckoutShippingCard"
 import CheckoutSummaryCard from "@/components/checkout/CheckoutSummaryCard"
 import GlobalFooter from "@/components/global/globalfooter"
@@ -13,15 +14,14 @@ import { supabase } from "@/lib/supabase"
 import { useLocalSearchParams } from "expo-router"
 import { useEffect, useMemo, useState } from "react"
 import {
-    ActivityIndicator,
-    Alert,
-    Image,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    View,
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from "react-native"
 
 type OfferCheckoutData = {
@@ -49,9 +49,10 @@ type OfferCheckoutData = {
 }
 
 export default function OfferCheckoutScreen() {
-  const { offerId } = useLocalSearchParams<{
-    offerId: string
-  }>()
+  const { offerId, orderId } = useLocalSearchParams<{
+  offerId: string
+  orderId?: string
+}>()
   const { session } = useAuth()
 
   const [loading, setLoading] = useState(true)
@@ -215,16 +216,32 @@ export default function OfferCheckoutScreen() {
   }
 
   const image =
-    offer?.accepted_image_url ??
-    offer?.listings?.image_urls?.[0] ??
-    null
+  offer?.accepted_image_url ??
+  offer?.listings?.image_urls?.[0] ??
+  null
 
-  const title =
-    offer?.accepted_title ??
-    offer?.listings?.title ??
-    "Accepted Offer"
+const title =
+  offer?.accepted_title ??
+  offer?.listings?.title ??
+  "Order"
 
-  const quantity = offer?.quantity ?? 1
+const quantity = offer?.quantity ?? 1
+
+const previewItems = offer
+  ? [
+      {
+        id: offer.offer_id,
+        seller_id: offer.seller_id,
+        listing_id: offer.listing_id,
+        title,
+        price: offer.accepted_price,
+        image_url: image,
+        quantity,
+        shipping_price: offer.accepted_shipping_price || 0,
+        shipping_type: offer.accepted_shipping_type,
+      },
+    ]
+  : []
 
   const subtotalCents = useMemo(() => {
     if (!offer) return 0
@@ -311,18 +328,22 @@ export default function OfferCheckoutScreen() {
           .eq("id", session.user.id)
       }
 
-      const { data: existingPendingOrder } =
-        await supabase
-          .from("orders")
-          .select("id")
-          .eq("buyer_id", session.user.id)
-          .eq("offer_id", offer.offer_id)
-          .eq("status", "pending_payment")
-          .maybeSingle()
+      let orderIdToUse = orderId
 
-      let orderId = existingPendingOrder?.id
+if (!orderIdToUse) {
+  const { data: existingPendingOrder } =
+    await supabase
+      .from("orders")
+      .select("id")
+      .eq("buyer_id", session.user.id)
+      .eq("offer_id", offer.offer_id)
+      .eq("status", "pending_payment")
+      .maybeSingle()
 
-      if (!orderId) {
+  orderIdToUse = existingPendingOrder?.id
+}
+
+      if (!orderIdToUse) {
         const listingSnapshot = {
           ...(offer.listings ?? {}),
           accepted_offer: true,
@@ -397,7 +418,7 @@ export default function OfferCheckoutScreen() {
           )
         }
 
-        orderId = order.id
+        orderIdToUse = order.id
       }
 
       const { data, error } =
@@ -405,10 +426,10 @@ export default function OfferCheckoutScreen() {
           "create-cart-checkout-session",
           {
             body: {
-              order_ids: [orderId],
-              amount: totalCents,
-              email: session.user.email,
-            },
+  order_ids: [orderIdToUse],
+  amount: totalCents,
+  email: session.user.email,
+},
           }
         )
 
@@ -469,39 +490,10 @@ export default function OfferCheckoutScreen() {
           }
         >
           <Text style={styles.title}>
-            Accepted Offer Checkout
+            Review Order
           </Text>
 
-          <View style={styles.previewCard}>
-            {image ? (
-              <Image
-                source={{ uri: image }}
-                style={styles.previewImage}
-              />
-            ) : (
-              <View
-                style={styles.previewPlaceholder}
-              />
-            )}
-
-            <View style={styles.previewInfo}>
-              <Text
-                style={styles.previewTitle}
-                numberOfLines={2}
-              >
-                {title}
-              </Text>
-
-              <Text style={styles.previewMeta}>
-                Accepted Price: $
-                {offer.accepted_price.toFixed(2)}
-              </Text>
-
-              <Text style={styles.previewMeta}>
-                Quantity: {quantity}
-              </Text>
-            </View>
-          </View>
+          <CartPreviewCarousel items={previewItems} />
 
           <CheckoutShippingCard
             expanded={
@@ -593,48 +585,5 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#111",
     marginBottom: 20,
-  },
-
-  previewCard: {
-    flexDirection: "row",
-    backgroundColor: "#fff",
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: "#E8E8E8",
-    padding: 14,
-    marginBottom: 16,
-  },
-
-  previewImage: {
-    width: 74,
-    height: 74,
-    borderRadius: 16,
-    marginRight: 12,
-  },
-
-  previewPlaceholder: {
-    width: 74,
-    height: 74,
-    borderRadius: 16,
-    backgroundColor: "#EEE",
-    marginRight: 12,
-  },
-
-  previewInfo: {
-    flex: 1,
-    justifyContent: "center",
-  },
-
-  previewTitle: {
-    fontSize: 15,
-    fontWeight: "800",
-    color: "#111",
-    marginBottom: 6,
-  },
-
-  previewMeta: {
-    fontSize: 13,
-    color: "#666",
-    marginBottom: 4,
   },
 })

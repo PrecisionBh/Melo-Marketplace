@@ -1,8 +1,9 @@
 import {
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native"
 
 export default function SellerShippingActions({
@@ -10,22 +11,38 @@ export default function SellerShippingActions({
   refreshOrder,
   onAddTracking,
   onCancelOrder,
+  onBuyLabel,
+  onVoidLabel,
+  loadingRates,
 }: {
   order: any
   refreshOrder?: () => void
   onAddTracking?: () => void
   onCancelOrder?: () => void
+  onBuyLabel?: () => void
+  onVoidLabel?: () => void
+  loadingRates?: boolean
 }) {
   const status = order.status
   const trackingStatus =
     order.tracking_status?.toLowerCase()
 
+  const hasLabel = !!order.label_url
+  const hasPurchasedLabel =
+    order.shipping_label_purchased === true
+
+  const canVoid =
+    hasPurchasedLabel &&
+    trackingStatus !== "in_transit"
+
   const canShip =
     status === "paid" ||
     status === "label_purchased"
 
-  const completed =
-    status === "completed"
+  const canBuyLabel =
+    status === "paid" && !hasLabel
+
+  const completed = status === "completed"
 
   const delivered =
     !completed &&
@@ -44,22 +61,156 @@ export default function SellerShippingActions({
     (status === "shipped" ||
       trackingStatus === "in_transit")
 
+  // 🔥 NEW: Seller guidance system
+  const getSellerMessage = () => {
+    if (status === "cancelled") {
+      return {
+        title: "Order Cancelled",
+        sub: "This order has been refunded. No further action is required.",
+        type: "error",
+      }
+    }
+
+    if (status === "completed") {
+      return {
+        title: "Order Complete",
+        sub: "Funds have been released. No further action is required.",
+        type: "success",
+      }
+    }
+
+    if (canShip) {
+      return {
+        title: "Ready to Ship",
+        sub: "Purchase a label or add tracking to ship this order.",
+        type: "notice",
+      }
+    }
+
+    if (inTransit) {
+      return {
+        title: "In Transit",
+        sub: "The package is on the way to the buyer.",
+        type: "notice",
+      }
+    }
+
+    if (outForDelivery) {
+      return {
+        title: "Out For Delivery",
+        sub: "Package is arriving to the buyer today.",
+        type: "notice",
+      }
+    }
+
+    if (delivered) {
+      return {
+        title: "Delivered",
+        sub: "Waiting for buyer to complete the order or initiate a return.",
+        type: "notice",
+      }
+    }
+
+    return null
+  }
+
+  const message = getSellerMessage()
+
   return (
     <View style={styles.card}>
       <Text style={styles.title}>
         Seller Actions
       </Text>
 
-      {canShip ? (
-        <>
-          <TouchableOpacity
-            style={styles.primaryBtn}
-            onPress={onAddTracking}
+      {/* 🔥 GUIDANCE BOX */}
+      {message && (
+        <View
+          style={[
+            styles.noticeBox,
+            message.type === "success" &&
+              styles.successBox,
+            message.type === "error" &&
+              styles.errorBox,
+          ]}
+        >
+          <Text
+            style={[
+              styles.noticeTitle,
+              message.type === "success" &&
+                styles.successTitle,
+              message.type === "error" &&
+                styles.errorTitle,
+            ]}
           >
-            <Text style={styles.primaryText}>
-              Add Tracking / Mark Shipped
-            </Text>
-          </TouchableOpacity>
+            {message.title}
+          </Text>
+
+          <Text
+            style={[
+              styles.noticeSub,
+              message.type === "success" &&
+                styles.successSub,
+              message.type === "error" &&
+                styles.errorSub,
+            ]}
+          >
+            {message.sub}
+          </Text>
+        </View>
+      )}
+
+      {/* 🔥 ACTION BUTTONS */}
+      {canShip && (
+        <>
+          {canBuyLabel && (
+            <TouchableOpacity
+              style={styles.primaryBtn}
+              onPress={onBuyLabel}
+              disabled={loadingRates}
+            >
+              {loadingRates ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.primaryText}>
+                  Buy Shipping Label
+                </Text>
+              )}
+            </TouchableOpacity>
+          )}
+
+          {!hasLabel &&
+            !order.tracking_number && (
+              <TouchableOpacity
+                style={styles.primaryBtn}
+                onPress={onAddTracking}
+              >
+                <Text style={styles.primaryText}>
+                  Add Tracking / Mark Shipped
+                </Text>
+              </TouchableOpacity>
+            )}
+
+          {hasPurchasedLabel && (
+            <TouchableOpacity
+              style={styles.primaryBtn}
+              onPress={onAddTracking}
+            >
+              <Text style={styles.primaryText}>
+                View Label / Reprint
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {hasPurchasedLabel && canVoid && (
+            <TouchableOpacity
+              style={styles.secondaryBtn}
+              onPress={onVoidLabel}
+            >
+              <Text style={styles.secondaryText}>
+                Void Label
+              </Text>
+            </TouchableOpacity>
+          )}
 
           <TouchableOpacity
             style={styles.secondaryBtn}
@@ -70,50 +221,7 @@ export default function SellerShippingActions({
             </Text>
           </TouchableOpacity>
         </>
-      ) : completed ? (
-        <View style={styles.successBox}>
-          <Text style={styles.successTitle}>
-            Order Complete
-          </Text>
-
-          <Text style={styles.successSub}>
-            Escrow has been released.
-          </Text>
-        </View>
-      ) : delivered ? (
-        <View style={styles.noticeBox}>
-          <Text style={styles.noticeTitle}>
-            Delivered
-          </Text>
-
-          <Text style={styles.noticeSub}>
-            Waiting for buyer to complete
-            order or initiate return.
-          </Text>
-        </View>
-      ) : outForDelivery ? (
-        <View style={styles.noticeBox}>
-          <Text style={styles.noticeTitle}>
-            Out For Delivery
-          </Text>
-
-          <Text style={styles.noticeSub}>
-            Package is out for final
-            delivery to buyer.
-          </Text>
-        </View>
-      ) : inTransit ? (
-        <View style={styles.noticeBox}>
-          <Text style={styles.noticeTitle}>
-            In Transit
-          </Text>
-
-          <Text style={styles.noticeSub}>
-            Buyer has been notified and
-            shipment is in transit.
-          </Text>
-        </View>
-      ) : null}
+      )}
     </View>
   )
 }
@@ -139,6 +247,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#EFF6FF",
     borderRadius: 16,
     padding: 14,
+    marginBottom: 14,
   },
 
   noticeTitle: {
@@ -156,20 +265,26 @@ const styles = StyleSheet.create({
 
   successBox: {
     backgroundColor: "#ECFDF5",
-    borderRadius: 16,
-    padding: 14,
   },
 
   successTitle: {
-    fontSize: 14,
-    fontWeight: "800",
     color: "#16A34A",
-    marginBottom: 4,
   },
 
   successSub: {
-    fontSize: 13,
     color: "#15803D",
+  },
+
+  errorBox: {
+    backgroundColor: "#FEE2E2",
+  },
+
+  errorTitle: {
+    color: "#DC2626",
+  },
+
+  errorSub: {
+    color: "#991B1B",
   },
 
   primaryBtn: {
@@ -193,6 +308,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderWidth: 1,
     borderColor: "#DC2626",
+    marginBottom: 10,
   },
 
   secondaryText: {

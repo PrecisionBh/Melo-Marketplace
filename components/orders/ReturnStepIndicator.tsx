@@ -1,55 +1,15 @@
 import {
-  StyleSheet,
-  Text,
-  View,
+    StyleSheet,
+    Text,
+    View,
 } from "react-native"
 
-const MAIN_STEPS = [
-  {
-    key: "pending_payment",
-    label: "Awaiting Payment",
-    subBuyer: "Complete payment to proceed",
-    subSeller: "Waiting for buyer payment",
-  },
-  {
-    key: "paid",
-    label: "Order Placed",
-    subBuyer: "Payment received",
-    subSeller: "Prepare shipment",
-  },
-  {
-    key: "in_transit",
-    label: "Shipped",
-    subBuyer: "Your item is on the way",
-    subSeller: "In transit to buyer",
-  },
-  {
-    key: "out_for_delivery",
-    label: "Out For Delivery",
-    subBuyer: "Arriving today",
-    subSeller: "Out for final delivery",
-  },
-  {
-    key: "delivered",
-    label: "Delivered",
-    subBuyer: "Delivered to you",
-    subSeller: "Awaiting buyer action",
-  },
-  {
-    key: "completed",
-    label: "Completed",
-    subBuyer: "Order complete",
-    subSeller: "Funds released",
-  },
-]
+type Props = {
+  order: any
+  role?: "buyer" | "seller"
+}
 
 const RETURN_STEPS = [
-  {
-    key: "delivered",
-    label: "Delivered",
-    subBuyer: "Delivered to you",
-    subSeller: "Delivered to buyer",
-  },
   {
     key: "return_started",
     label: "Return Started",
@@ -57,82 +17,39 @@ const RETURN_STEPS = [
     subSeller: "Buyer started return",
   },
   {
-    key: "return_processing",
-    label: "Return Processing",
-    subBuyer: "Return in progress",
-    subSeller: "Awaiting return completion",
+    key: "return_shipped",
+    label: "Shipped Back",
+    subBuyer: "Return is on the way",
+    subSeller: "Buyer shipped return",
   },
   {
-    key: "completed",
-    label: "Resolved",
-    subBuyer: "Order resolved",
-    subSeller: "Order resolved",
+    key: "return_processing",
+    label: "Seller Received",
+    subBuyer: "Seller reviewing return",
+    subSeller: "Inspecting returned item",
+  },
+  {
+    key: "refunded",
+    label: "Refund Completed",
+    subBuyer: "Refund issued",
+    subSeller: "Return resolved",
   },
 ]
 
-function getStepSet(status: string) {
-  if (
-    status === "return_started" ||
-    status === "return_processing"
-  ) {
-    return RETURN_STEPS
-  }
-
-  // 🔥 NEW: cancelled uses its own flow
-  if (status === "cancelled") {
-    return [
-      {
-        key: "paid",
-        label: "Order Placed",
-        subBuyer: "Payment received",
-        subSeller: "Order was placed",
-      },
-      {
-        key: "cancelled",
-        label: "Cancelled",
-        subBuyer: "You were refunded",
-        subSeller: "Order refunded to buyer",
-      },
-    ]
-  }
-
-  return MAIN_STEPS
-}
-
-function getCurrentStepIndex(
-  order: any,
-  isDisputed?: boolean
-) {
-  // 🔥 PRIORITY: cancelled overrides EVERYTHING
-  if (order.status === "cancelled") return 5
-
-  if (isDisputed) return 3
-
-  const trackingStatus =
-    order.tracking_status?.toLowerCase()
-
-  // 🔥 NEW: pending payment state
-  if (order.status === "pending_payment") return 0
-
-  if (order.status === "completed") return 5
-  if (order.status === "delivered") return 4
-
-  if (trackingStatus === "out_for_delivery") return 3
-  if (trackingStatus === "in_transit") return 2
-  if (trackingStatus === "delivered") return 4
-
+function getCurrentStepIndex(order: any) {
   switch (order.status) {
-    case "paid":
-    case "label_purchased":
+    case "return_started":
+    case "return_label_purchased":
+      return 0
+
+    case "return_shipped":
       return 1
 
-    case "shipped":
-      return 2
-
-    case "return_started":
-      return 2
-
     case "return_processing":
+      return 2
+
+    case "refunded":
+    case "completed":
       return 3
 
     default:
@@ -140,26 +57,18 @@ function getCurrentStepIndex(
   }
 }
 
-export default function OrderStepIndicator({
+export default function ReturnStepIndicator({
   order,
   role = "buyer",
-}: {
-  order: any
-  role?: "buyer" | "seller"
-}) {
-  const steps = getStepSet(order.status)
-
-  const currentIndex = getCurrentStepIndex(
-    order,
-    order.is_disputed
-  )
+}: Props) {
+  const currentIndex = getCurrentStepIndex(order)
 
   return (
     <View style={styles.card}>
-      <Text style={styles.title}>Order Progress</Text>
+      <Text style={styles.title}>Return Progress</Text>
 
       <View style={styles.stepsWrap}>
-        {steps.map((step, index) => {
+        {RETURN_STEPS.map((step, index) => {
           const isDone = index < currentIndex
           const isActive = index === currentIndex
 
@@ -178,7 +87,7 @@ export default function OrderStepIndicator({
                   )}
                 </View>
 
-                {index !== steps.length - 1 && (
+                {index !== RETURN_STEPS.length - 1 && (
                   <View
                     style={[
                       styles.line,

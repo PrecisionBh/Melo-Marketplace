@@ -4,22 +4,24 @@ import { supabase } from "@/lib/supabase"
 
 import { useState } from "react"
 import {
-    Linking,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Linking,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native"
 
 export default function ReturnActions({
   order,
   refreshOrder,
   onCancelReturn,
+  onBuyReturnLabel, // 🔥 NEW
 }: {
   order: any
   refreshOrder?: () => void
   onCancelReturn?: () => void
+  onBuyReturnLabel?: () => void // 🔥 NEW
 }) {
   const { session } = useAuth()
 
@@ -79,7 +81,6 @@ export default function ReturnActions({
 
   const trackReturnPackage = async () => {
     if (!order.return_tracking_url) return
-
     await Linking.openURL(
       order.return_tracking_url
     )
@@ -91,6 +92,7 @@ export default function ReturnActions({
         Return Status
       </Text>
 
+      {/* STATUS */}
       <View style={styles.noticeBox}>
         <Text style={styles.noticeTitle}>
           Return In Progress
@@ -99,10 +101,29 @@ export default function ReturnActions({
         <Text style={styles.noticeSub}>
           {hasReturnTracking
             ? "Return tracking has been uploaded and is currently in transit."
-            : "Awaiting buyer to upload return tracking information."}
+            : "You must ship your return within 72 hours or the return will be cancelled and escrow will be released to the seller."}
         </Text>
       </View>
 
+      {/* 🔥 WARNING BOX */}
+      {!hasReturnTracking && (
+        <View style={styles.warningBox}>
+          <Text style={styles.warningText}>
+            ⚠️ Returns must be shipped within{" "}
+            <Text style={styles.bold}>
+              72 hours
+            </Text>
+            .
+          </Text>
+
+          <Text style={styles.warningText}>
+            We highly recommend using a Melo return label
+            for automatic tracking and protection.
+          </Text>
+        </View>
+      )}
+
+      {/* TRACK BUTTON */}
       {hasReturnTracking && (
         <TouchableOpacity
           style={styles.primaryBtn}
@@ -114,19 +135,34 @@ export default function ReturnActions({
         </TouchableOpacity>
       )}
 
+      {/* 🔥 ACTIONS */}
       {!hasReturnTracking &&
         !showTrackingForm && (
           <>
+            {/* 🔥 PRIMARY CTA */}
+            <TouchableOpacity
+              style={styles.primaryBtn}
+              onPress={onBuyReturnLabel}
+            >
+              <Text style={styles.primaryText}>
+                Buy Return Label (Recommended)
+              </Text>
+            </TouchableOpacity>
+
+            <Text style={styles.helperText}>
+              Faster processing, automatic tracking,
+              and protected returns.
+            </Text>
+
+            {/* SECONDARY */}
             <TouchableOpacity
               style={styles.secondaryBtn}
               onPress={() =>
                 setShowTrackingForm(true)
               }
             >
-              <Text
-                style={styles.secondaryText}
-              >
-                Upload Return Tracking
+              <Text style={styles.secondaryText}>
+                Use My Own Shipping
               </Text>
             </TouchableOpacity>
 
@@ -141,6 +177,7 @@ export default function ReturnActions({
           </>
         )}
 
+      {/* FORM */}
       {showTrackingForm && (
         <>
           <Text style={styles.label}>
@@ -148,35 +185,29 @@ export default function ReturnActions({
           </Text>
 
           <View style={styles.carrierRow}>
-            {[
-              "UPS",
-              "USPS",
-              "FedEx",
-              "DHL",
-            ].map((c) => (
-              <TouchableOpacity
-                key={c}
-                style={[
-                  styles.carrierPill,
-                  carrier === c &&
-                    styles.carrierPillActive,
-                ]}
-                onPress={() =>
-                  setCarrier(c)
-                }
-              >
-                <Text
+            {["UPS", "USPS", "FedEx", "DHL"].map(
+              (c) => (
+                <TouchableOpacity
+                  key={c}
                   style={[
-                    styles.carrierText,
+                    styles.carrierPill,
                     carrier === c &&
-                      styles
-                        .carrierTextActive,
+                      styles.carrierPillActive,
                   ]}
+                  onPress={() => setCarrier(c)}
                 >
-                  {c}
-                </Text>
-              </TouchableOpacity>
-            ))}
+                  <Text
+                    style={[
+                      styles.carrierText,
+                      carrier === c &&
+                        styles.carrierTextActive,
+                    ]}
+                  >
+                    {c}
+                  </Text>
+                </TouchableOpacity>
+              )
+            )}
           </View>
 
           <TextInput
@@ -200,6 +231,7 @@ export default function ReturnActions({
         </>
       )}
 
+      {/* PROCESSING */}
       {isProcessing && (
         <View style={styles.processingBox}>
           <Text
@@ -211,8 +243,7 @@ export default function ReturnActions({
           <Text
             style={styles.processingSub}
           >
-            Seller is reviewing the
-            returned item.
+            Seller is reviewing the returned item.
           </Text>
         </View>
       )}
@@ -255,6 +286,30 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#8A5A32",
     lineHeight: 18,
+  },
+
+  warningBox: {
+    backgroundColor: "#FEF3C7",
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 14,
+  },
+
+  warningText: {
+    fontSize: 12,
+    color: "#92400E",
+    marginBottom: 4,
+  },
+
+  bold: {
+    fontWeight: "800",
+  },
+
+  helperText: {
+    fontSize: 12,
+    color: "#6B7280",
+    textAlign: "center",
+    marginBottom: 10,
   },
 
   primaryBtn: {

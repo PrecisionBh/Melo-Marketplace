@@ -2,12 +2,12 @@ import { Ionicons } from "@expo/vector-icons"
 import { useRouter } from "expo-router"
 import { useEffect, useMemo, useState } from "react"
 import {
-    ActivityIndicator,
-    Image,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Image,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native"
 
 import { useAuth } from "@/context/AuthContext"
@@ -53,7 +53,11 @@ function isExpired(createdAt: string) {
 }
 
 function getDerivedStatus(offer: Offer) {
-  if (offer.listings?.is_sold) {
+  // 🔥 FIX: don't override accepted offers
+  if (
+    offer.listings?.is_sold &&
+    offer.status !== "accepted"
+  ) {
     return "sold"
   }
 
@@ -83,22 +87,32 @@ function getStatusText(offer: Offer) {
   switch (derivedStatus) {
     case "pending":
       return "Awaiting your response"
-
     case "countered":
       return "Negotiation ongoing"
-
     case "accepted":
       return "Accepted • Awaiting payment"
-
     case "declined":
       return "Declined"
-
     case "cancelled":
       return "Cancelled"
-
     default:
       return ""
   }
+}
+
+// 🔥 SELLER ACTION REQUIRED
+function getActionRequired(offer: Offer) {
+  const derivedStatus = getDerivedStatus(offer)
+
+  // Seller needs to respond
+  if (
+    derivedStatus === "pending" ||
+    derivedStatus === "countered"
+  ) {
+    return "RESPOND"
+  }
+
+  return null
 }
 
 export default function ProfileReceivedOffersTab() {
@@ -217,6 +231,9 @@ export default function ProfileReceivedOffersTab() {
         const derivedStatus =
           getDerivedStatus(offer)
 
+        const actionRequired =
+          getActionRequired(offer)
+
         const image =
           offer.listings?.image_urls?.[0] ??
           "https://via.placeholder.com/150"
@@ -228,12 +245,9 @@ export default function ProfileReceivedOffersTab() {
             style={styles.card}
             onPress={() =>
               router.push({
-                pathname:
-                  "/offers/[id]",
+                pathname: "/offers/[id]",
                 params: {
-                  id: String(
-                    offer.id
-                  ),
+                  id: String(offer.id),
                 },
               })
             }
@@ -272,36 +286,35 @@ export default function ProfileReceivedOffersTab() {
               </Text>
             </View>
 
-            {derivedStatus ===
-              "sold" && (
-              <View
-                style={
-                  styles.soldBadge
-                }
-              >
+            {/* SOLD */}
+            {derivedStatus === "sold" && (
+              <View style={styles.soldBadge}>
                 <Text
-                  style={
-                    styles.soldBadgeText
-                  }
+                  style={styles.soldBadgeText}
                 >
                   ITEM SOLD
                 </Text>
               </View>
             )}
 
-            {derivedStatus ===
-              "expired" && (
-              <View
-                style={
-                  styles.expiredBadge
-                }
-              >
+            {/* EXPIRED */}
+            {derivedStatus === "expired" && (
+              <View style={styles.expiredBadge}>
                 <Text
-                  style={
-                    styles.expiredBadgeText
-                  }
+                  style={styles.expiredBadgeText}
                 >
                   OFFER EXPIRED
+                </Text>
+              </View>
+            )}
+
+            {/* 🔥 ACTION REQUIRED */}
+            {actionRequired && (
+              <View style={styles.actionBadge}>
+                <Text
+                  style={styles.actionBadgeText}
+                >
+                  {actionRequired}
                 </Text>
               </View>
             )}
@@ -391,7 +404,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "900",
     color: "#FFFFFF",
-    letterSpacing: 0.5,
   },
 
   soldBadge: {
@@ -405,6 +417,18 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "900",
     color: "#FFFFFF",
-    letterSpacing: 0.5,
+  },
+
+  actionBadge: {
+    backgroundColor: "#D97732",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+
+  actionBadgeText: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: "#FFFFFF",
   },
 })

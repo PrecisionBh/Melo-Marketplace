@@ -62,7 +62,6 @@ Deno.serve(async (req) => {
     return new Response("Escrow not funded", { status: 409 })
   }
 
-  // ✅ FIXED HERE
   if (!order.stripe_payment_intent) {
     return new Response("Missing stripe_payment_intent", { status: 400 })
   }
@@ -83,42 +82,38 @@ Deno.serve(async (req) => {
     return new Response("Wallet is locked", { status: 409 })
   }
 
-  // 🔍 Seller stripe account
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("stripe_account_id")
-    .eq("id", seller_id)
-    .single()
-
-  if (!profile?.stripe_account_id) {
-    return new Response("Seller Stripe account missing", { status: 400 })
-  }
-
-  console.log("👤 Seller Stripe:", profile.stripe_account_id)
-
-  // 🔥 FIXED HERE
-  const pi = await stripe.paymentIntents.retrieve(order.stripe_payment_intent)
-
-  console.log("🔍 PI:", {
-    id: pi.id,
-    latest_charge: pi.latest_charge,
-  })
-
-  if (!pi.latest_charge) {
-    return new Response("No charge found", { status: 400 })
-  }
-
-  const chargeId = pi.latest_charge as string
-
   try {
+    // 🔍 Seller stripe account
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("stripe_account_id")
+      .eq("id", seller_id)
+      .single()
+
+    if (!profile?.stripe_account_id) {
+      throw new Error("Seller Stripe account missing")
+    }
+
+    console.log("👤 Seller Stripe:", profile.stripe_account_id)
+
+    const pi = await stripe.paymentIntents.retrieve(order.stripe_payment_intent)
+
+    console.log("🔍 PI:", {
+      id: pi.id,
+      latest_charge: pi.latest_charge,
+    })
+
+    if (!pi.latest_charge) {
+      throw new Error("No charge found")
+    }
+
+    const chargeId = pi.latest_charge as string
+
     const transfer = await stripe.transfers.create({
       amount: payout_cents,
       currency: "usd",
       destination: profile.stripe_account_id,
-
-      // 🔥 CRITICAL
       source_transaction: chargeId,
-
       metadata: { order_id },
     })
 
@@ -129,10 +124,31 @@ Deno.serve(async (req) => {
       p_stripe_transfer_id: transfer.id,
     })
 
+    // 🔓 UNLOCK WALLET FIRST (important)
     await supabase
       .from("wallets")
       .update({ payout_locked: false })
       .eq("user_id", seller_id)
+
+    // 🔔 Notify seller
+    try {
+      await supabase.functions.invoke("send-notification", {
+        body: {
+          userId: seller_id,
+          type: "wallet",
+          title: "Funds Available 💰",
+          body: `+$${(payout_cents / 100).toFixed(2)} is now available in your wallet.`,
+          data: {
+            route: "/wallet",
+          },
+          dedupeKey: `wallet-available-${order_id}`,
+        },
+      })
+
+      console.log("🔔 Funds available notification sent")
+    } catch (err) {
+      console.error("⚠️ wallet notif failed", err)
+    }
 
     return Response.json({
       success: true,
@@ -141,11 +157,6 @@ Deno.serve(async (req) => {
   } catch (err: any) {
     console.error("💥 TRANSFER ERROR:", err)
 
-    await supabase
-      .from("wallets")
-      .update({ payout_locked: false })
-      .eq("user_id", seller_id)
-
     return new Response(
       JSON.stringify({
         error: err.message,
@@ -153,5 +164,11 @@ Deno.serve(async (req) => {
       }),
       { status: 500 }
     )
+  } finally {
+    // 🔓 ALWAYS UNLOCK WALLET (guaranteed safety)
+    await supabase
+      .from("wallets")
+      .update({ payout_locked: false })
+      .eq("user_id", seller_id)
   }
 })
