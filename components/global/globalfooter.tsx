@@ -5,6 +5,7 @@ import {
 } from "expo-router"
 import React from "react"
 import {
+  Alert,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -13,6 +14,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
 import { useCart } from "@/context/CartContext"
+import { supabase } from "@/lib/supabase"
 
 type IoniconName =
   React.ComponentProps<
@@ -71,6 +73,44 @@ export default function GlobalFooter() {
     )
   }
 
+  // 🔥 AUTH GUARD
+  const requireAuth = async (path: string) => {
+    const { data } =
+      await supabase.auth.getSession()
+
+    const isAuthed =
+      !!data.session?.user
+
+    // 🔓 allow home browsing
+    if (path === "/home") {
+      router.push(path as any)
+      return
+    }
+
+    if (!isAuthed) {
+      Alert.alert(
+        "Sign in required",
+        "Please sign in to access this feature.",
+        [
+          {
+            text: "Cancel",
+            style: "cancel",
+          },
+          {
+            text: "Sign In",
+            onPress: () =>
+              router.push(
+                "/signinscreen"
+              ),
+          },
+        ]
+      )
+      return
+    }
+
+    router.push(path as any)
+  }
+
   return (
     <View
       style={[
@@ -92,9 +132,7 @@ export default function GlobalFooter() {
             <TouchableOpacity
               key={item.path}
               onPress={() =>
-                router.push(
-                  item.path as any
-                )
+                requireAuth(item.path)
               }
               activeOpacity={0.8}
               style={styles.navItem}

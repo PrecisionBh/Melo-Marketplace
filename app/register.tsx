@@ -30,6 +30,11 @@ export default function RegisterScreen() {
 
   const normalizedEmail = email.trim().toLowerCase()
 
+  // 🔥 EMAIL VALIDATION
+  const isValidEmail = useMemo(() => {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)
+  }, [normalizedEmail])
+
   const passwordsMatch = useMemo(
     () => password.length > 0 && password === confirmPassword,
     [password, confirmPassword]
@@ -38,7 +43,7 @@ export default function RegisterScreen() {
   const passwordLongEnough = password.length > 6
 
   const isFormValid =
-    normalizedEmail.length > 0 &&
+    isValidEmail &&
     passwordLongEnough &&
     passwordsMatch
 
@@ -81,6 +86,12 @@ export default function RegisterScreen() {
   const handleCreateAccount = async () => {
     if (!isFormValid || loading) return
 
+    // 🔥 HARD GUARD
+    if (!isValidEmail) {
+      setErrorMessage("Please enter a valid email address.")
+      return
+    }
+
     try {
       setLoading(true)
       setErrorMessage(null)
@@ -116,6 +127,7 @@ export default function RegisterScreen() {
         "Account Created",
         "Your account has been created successfully."
       )
+
       router.replace("/home")
     } catch (err) {
       handleAppError(err, {
@@ -153,7 +165,7 @@ export default function RegisterScreen() {
 
         <TextInput
           placeholder="Email"
-          placeholderTextColor="#999"
+          placeholderTextColor="#9CA3AF"
           value={email}
           onChangeText={setEmail}
           style={styles.input}
@@ -162,10 +174,17 @@ export default function RegisterScreen() {
           keyboardType="email-address"
         />
 
+        {/* 🔥 LIVE EMAIL FEEDBACK */}
+        {email.length > 0 && !isValidEmail && (
+          <Text style={styles.inlineError}>
+            Enter a valid email address
+          </Text>
+        )}
+
         <View style={styles.passwordWrapper}>
           <TextInput
             placeholder="Password (min 7 characters)"
-            placeholderTextColor="#999"
+            placeholderTextColor="#9CA3AF"
             value={password}
             onChangeText={setPassword}
             secureTextEntry={!showPassword}
@@ -187,7 +206,7 @@ export default function RegisterScreen() {
         <View style={styles.passwordWrapper}>
           <TextInput
             placeholder="Confirm Password"
-            placeholderTextColor="#999"
+            placeholderTextColor="#9CA3AF"
             value={confirmPassword}
             onChangeText={setConfirmPassword}
             secureTextEntry={!showConfirmPassword}
@@ -225,7 +244,7 @@ export default function RegisterScreen() {
           style={[
             styles.glowWrapper,
             isFormValid && {
-              shadowColor: "#7FAF9B",
+              shadowColor: "#D97732",
               shadowOpacity: glowOpacity,
               shadowRadius: glowShadowRadius,
               shadowOffset: { width: 0, height: 0 },
@@ -270,7 +289,7 @@ export default function RegisterScreen() {
   )
 }
 
-const MELO_GREEN = "#7FAF9B"
+const MELO_ORANGE = "#D97732"
 
 const styles = StyleSheet.create({
   container: {
@@ -294,7 +313,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: "700",
-    color: "#222",
+    color: "#111",
     marginBottom: 20,
     textAlign: "center",
   },
@@ -315,6 +334,13 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 
+  inlineError: {
+    color: "#D64545",
+    fontSize: 12,
+    marginBottom: 10,
+    marginLeft: 4,
+  },
+
   matchText: {
     fontSize: 13,
     fontWeight: "600",
@@ -332,11 +358,11 @@ const styles = StyleSheet.create({
 
   input: {
     borderWidth: 1,
-    borderColor: "#ddd",
+    borderColor: "#E5E7EB",
     borderRadius: 10,
     padding: 14,
     fontSize: 16,
-    marginBottom: 14,
+    marginBottom: 6,
   },
 
   passwordWrapper: {
@@ -346,7 +372,7 @@ const styles = StyleSheet.create({
 
   passwordInput: {
     borderWidth: 1,
-    borderColor: "#ddd",
+    borderColor: "#E5E7EB",
     borderRadius: 10,
     padding: 14,
     paddingRight: 44,
@@ -374,7 +400,7 @@ const styles = StyleSheet.create({
   },
 
   createButtonActive: {
-    backgroundColor: "#71d5ac",
+    backgroundColor: MELO_ORANGE,
   },
 
   buttonDisabled: {
@@ -395,7 +421,7 @@ const styles = StyleSheet.create({
   },
 
   link: {
-    color: MELO_GREEN,
+    color: MELO_ORANGE,
     fontWeight: "600",
   },
 })

@@ -166,7 +166,7 @@ export default function SignInScreen() {
         >
           <Text
             style={{
-              color: "#7FAF9B",
+              color: "#D97732",
               fontWeight: "700",
               fontSize: 13,
             }}
@@ -212,6 +212,9 @@ export default function SignInScreen() {
   )
 }
 
+const MELO_ORANGE = "#D97732"
+const MELO_ORANGE_DARK = "#C46528"
+
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
@@ -228,7 +231,7 @@ const styles = StyleSheet.create({
   brandTitle: {
     fontSize: 36,
     fontWeight: "900",
-    color: "#2E5F4F",
+    color: "#111", // 🔥 cleaner neutral
     letterSpacing: 2,
   },
 
@@ -236,7 +239,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
     fontSize: 14,
     fontWeight: "600",
-    color: "#6B8F82",
+    color: "#6B7280",
     textAlign: "center",
   },
 
@@ -256,7 +259,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     marginBottom: 12,
     textAlign: "center",
-    color: "#2E5F4F",
+    color: "#111", // 🔥 neutral title
   },
 
   bannedBox: {
@@ -277,7 +280,7 @@ const styles = StyleSheet.create({
 
   input: {
     borderWidth: 1,
-    borderColor: "#D3DED8",
+    borderColor: "#E5E7EB",
     borderRadius: 14,
     paddingVertical: 14,
     paddingHorizontal: 16,
@@ -289,7 +292,7 @@ const styles = StyleSheet.create({
   passwordWrapper: {
     flexDirection: "row",
     borderWidth: 1,
-    borderColor: "#D3DED8",
+    borderColor: "#E5E7EB",
     borderRadius: 14,
     alignItems: "center",
     marginBottom: 18,
@@ -308,8 +311,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
 
+  // 🔥 MAIN CTA BUTTON
   button: {
-    backgroundColor: "#7FAF9B",
+    backgroundColor: MELO_ORANGE,
     paddingVertical: 15,
     borderRadius: 14,
     alignItems: "center",
@@ -317,7 +321,7 @@ const styles = StyleSheet.create({
   },
 
   buttonDisabled: {
-    backgroundColor: "#D3DED8",
+    backgroundColor: "#E5E7EB",
   },
 
   buttonText: {
@@ -326,14 +330,15 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
 
+  // 🔥 LINKS UPDATED TO ORANGE
   link: {
     textAlign: "center",
-    color: "#6B8F82",
+    color: "#6B7280",
   },
 
   linkBold: {
     fontWeight: "800",
-    color: "#2E5F4F",
+    color: MELO_ORANGE,
   },
 
   footerContainer: {
@@ -345,7 +350,7 @@ const styles = StyleSheet.create({
   },
 
   footerText: {
-    color: "#9DB6AC",
+    color: "#9CA3AF",
     fontSize: 12,
     fontWeight: "600",
   },

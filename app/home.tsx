@@ -14,6 +14,7 @@ import FilterBar from "../components/home/FilterBar"
 import ListingsGrid from "../components/home/ListingsGrid"
 import SearchBar from "../components/home/SearchBar"
 
+import { Ionicons } from "@expo/vector-icons"
 import { Listing } from "../components/home/ListingCard"
 import { useAuth } from "../context/AuthContext"
 import { handleAppError } from "../lib/errors/appError"
@@ -427,11 +428,23 @@ const checkUnreadMessages = async () => {
   }
 }
 
-  /* ---------------- FILTERING (FIXED & STABLE) ---------------- */
-
   const filteredListings = useMemo(() => {
-  let result = [...listings]
+  // 🔥 normalize both sources into same shape
+  let result: any[] =
+    activeCategory === "all"
+      ? [...listings]
+      : allListings.map((l) => ({
+          id: l.id,
+          title: l.title,
+          price: Number(l.price),
+          category: l.category ?? "",
+          image_url: l.image_urls?.[0] ?? null,
+          allow_offers: false,
+          shipping_type: l.shipping_type ?? null,
+          is_mega_boost: l.is_mega_boost ?? false,
+        }))
 
+  // 🔥 SEARCH
   if (search.trim()) {
     const q = search.toLowerCase().trim()
 
@@ -443,6 +456,7 @@ const checkUnreadMessages = async () => {
     })
   }
 
+  // 🔥 PRICE FILTERS
   if (minPrice.trim()) {
     const min = parseFloat(minPrice)
 
@@ -463,6 +477,7 @@ const checkUnreadMessages = async () => {
     }
   }
 
+  // 🔥 CATEGORY FILTER
   if (activeCategory !== "all") {
     const active = (activeCategory ?? "").toLowerCase()
 
@@ -472,9 +487,19 @@ const checkUnreadMessages = async () => {
     })
   }
 
+  // 🔥 SORT BOOSTS (AFTER filtering)
+  if (activeCategory !== "all") {
+    result.sort((a, b) => {
+      if (b.is_mega_boost && !a.is_mega_boost) return 1
+      if (!b.is_mega_boost && a.is_mega_boost) return -1
+      return 0
+    })
+  }
+
   return result
 }, [
   listings,
+  allListings,
   activeCategory,
   search,
   minPrice,
@@ -539,35 +564,55 @@ const hasResults = filteredListings.length > 0
 ) : (
   <>
     {hasActiveFilters && filteredListings.length === 0 && (
-      <View style={styles.noResultsWrap}>
-        <Text style={styles.noResultsTitle}>
-          {activeCategory !== "all" &&
-          !search.trim() &&
-          !minPrice.trim() &&
-          !maxPrice.trim()
-            ? "No items yet in this category"
-            : "No items match your filters"}
-        </Text>
+      <View style={styles.emptyState}>
+  <View style={styles.emptyIconWrap}>
+    <Ionicons name="cube-outline" size={28} color="#9CA3AF" />
+  </View>
 
-        <Text style={styles.noResultsSub}>
-          {activeCategory !== "all" &&
-          !search.trim() &&
-          !minPrice.trim() &&
-          !maxPrice.trim()
-            ? "Be the first to post!"
-            : "Showing sponsored listings instead"}
-        </Text>
-      </View>
+  <Text style={styles.emptyTitle}>
+    {activeCategory !== "all" &&
+    !search.trim() &&
+    !minPrice.trim() &&
+    !maxPrice.trim()
+      ? "No listings yet"
+      : "No results found"}
+  </Text>
+
+  <Text style={styles.emptySub}>
+    {activeCategory !== "all" &&
+    !search.trim() &&
+    !minPrice.trim() &&
+    !maxPrice.trim()
+      ? "Be the first to list in this category."
+      : "Try adjusting your filters or search."}
+  </Text>
+
+  {/* 🔥 CTA BUTTON */}
+  <TouchableOpacity
+    style={styles.emptyBtn}
+    onPress={() => router.push("/create-listing")}
+  >
+    <Text style={styles.emptyBtnText}>
+      Create Listing
+    </Text>
+  </TouchableOpacity>
+</View>
     )}
 
     <ListingsGrid
-      listings={filteredListings}
-      refreshing={refreshing}
-      onRefresh={refreshListings}
-      showUpgradeRow={!isPro}
-      megaBoostListings={megaBoostListings}
-      onScrollOffsetChange={setScrollOffset}
-    />
+     key={activeCategory}
+  listings={filteredListings}
+  refreshing={refreshing}
+  onRefresh={refreshListings}
+  showUpgradeRow={!isPro}
+  megaBoostListings={
+    activeCategory === "all"
+      ? megaBoostListings
+      : [] // 🚨 THIS IS THE FIX
+  }
+  onScrollOffsetChange={setScrollOffset}
+/>
+
     {loadingMore && (
   <ActivityIndicator style={{ marginVertical: 20 }} />
 )}
@@ -702,6 +747,50 @@ noResultsSub: {
   fontSize: 13,
   color: "#6B7280",
   marginTop: 4,
+},
+
+emptyState: {
+  alignItems: "center",
+  justifyContent: "center",
+  paddingTop: 40,
+  paddingHorizontal: 20,
+},
+
+emptyIconWrap: {
+  width: 56,
+  height: 56,
+  borderRadius: 16,
+  backgroundColor: "#F3F4F6",
+  alignItems: "center",
+  justifyContent: "center",
+  marginBottom: 14,
+},
+
+emptyTitle: {
+  fontSize: 18,
+  fontWeight: "800",
+  color: "#0F1E17",
+  marginBottom: 6,
+  textAlign: "center",
+},
+
+emptySub: {
+  fontSize: 14,
+  color: "#6B7280",
+  textAlign: "center",
+  marginBottom: 18,
+},
+
+emptyBtn: {
+  backgroundColor: "#D97732",
+  paddingHorizontal: 20,
+  paddingVertical: 12,
+  borderRadius: 12,
+},
+
+emptyBtnText: {
+  color: "#ffffff",
+  fontWeight: "800",
 },
 
 })
