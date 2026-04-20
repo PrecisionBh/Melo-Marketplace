@@ -276,7 +276,7 @@ if (data?.id) {
 }
 
 Alert.alert("Success", "Your listing has been created!")
-router.replace("/seller-hub")
+router.replace("/profile")
 } catch (err) {
 handleAppError(err, {
   context: "create_listing_insert",
@@ -300,24 +300,38 @@ useCallback(() => {
       setCheckingAddress(true)
       setCheckingPro(true)
 
-      const { data: addressData } = await supabase
-        .from("seller_return_addresses")
-        .select("id")
-        .eq("user_id", session.user.id)
-        .maybeSingle()
+      const { data: profileAddress, error: addressError } = await supabase
+  .from("profiles")
+  .select("address_line1, city, state, postal_code")
+  .eq("id", session.user.id)
+  .maybeSingle()
 
-      setHasReturnAddress(!!addressData)
-      setShowAddressModal(!addressData)
+if (addressError) {
+  console.error("❌ Failed fetching return address", addressError)
+}
 
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("is_pro, boosts_remaining, mega_boosts_remaining")
-        .eq("id", session.user.id)
-        .single<ProfileRow>()
+const hasAddress =
+  !!profileAddress?.address_line1 &&
+  !!profileAddress?.city &&
+  !!profileAddress?.state &&
+  !!profileAddress?.postal_code
 
-      setIsPro(Boolean(profile?.is_pro))
-      setBoostsRemaining(profile?.boosts_remaining ?? 0)
-      setMegaBoostsRemaining(profile?.mega_boosts_remaining ?? 0)
+setHasReturnAddress(hasAddress)
+setShowAddressModal(!hasAddress)
+
+const { data: profile, error: profileError } = await supabase
+  .from("profiles")
+  .select("is_pro, boosts_remaining, mega_boosts_remaining")
+  .eq("id", session.user.id)
+  .single<ProfileRow>()
+
+if (profileError) {
+  console.error("❌ Failed fetching profile", profileError)
+}
+
+setIsPro(Boolean(profile?.is_pro))
+setBoostsRemaining(profile?.boosts_remaining ?? 0)
+setMegaBoostsRemaining(profile?.mega_boosts_remaining ?? 0)
     } finally {
       setCheckingAddress(false)
       setCheckingPro(false)

@@ -9,13 +9,13 @@ import { Image } from "expo-image"
 import { useRouter } from "expo-router"
 import { useEffect, useMemo, useState } from "react"
 import {
-    ActivityIndicator,
-    Alert,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native"
 
 type CartItem = {
@@ -46,9 +46,14 @@ export default function CartScreen() {
   if (!session?.user?.id) return
 
   const { data, error } = await supabase
-    .from("cart_items")
-    .select("*")
-    .eq("user_id", session.user.id)
+  .from("cart_items")
+  .select(`
+  *,
+  listings (
+    user_id
+  )
+`)
+  .eq("user_id", session.user.id)
 
   if (error) {
   handleAppError(error)
@@ -56,7 +61,10 @@ export default function CartScreen() {
   return
 }
 
-  const cartItems = data ?? []
+  const cartItems = (data ?? []).map((item) => ({
+  ...item,
+  seller_id: item.listings?.user_id,
+}))
 
   if (cartItems.length === 0) {
   setCart([])

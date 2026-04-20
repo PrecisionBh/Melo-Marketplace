@@ -1,4 +1,3 @@
-import * as Linking from "expo-linking"
 
 import BuyerProtectionNotice from "@/components/checkout/BuyerProtectionNotice"
 import CartPreviewCarousel from "@/components/checkout/CartPreviewCarousel"
@@ -14,13 +13,13 @@ import { supabase } from "@/lib/supabase"
 import { useFocusEffect } from "expo-router"
 import { useCallback, useMemo, useState } from "react"
 import {
-    Alert,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    View,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from "react-native"
 
 type CartItem = {
@@ -32,6 +31,7 @@ type CartItem = {
   image_url: string | null
   quantity: number
   shipping_price: number
+  shipping_cents?: number
   shipping_type: "buyer_pays" | "seller_pays"
 }
 
@@ -40,6 +40,8 @@ export default function CartCheckoutScreen() {
 
   const [cart, setCart] = useState<CartItem[]>([])
   const [paying, setPaying] = useState(false)
+  const [shippingLoading, setShippingLoading] = useState(false)
+  const [shippingVerified, setShippingVerified] = useState(false)
 
   const [shippingExpanded, setShippingExpanded] =
     useState(true)
@@ -67,17 +69,25 @@ export default function CartCheckoutScreen() {
  const loadCart = async () => {
   if (!session?.user?.id) return
 
-  const { data, error } = await supabase
-    .from("cart_items")
-    .select("*")
-    .eq("user_id", session.user.id)
+ const { data, error } = await supabase
+  .from("cart_items")
+  .select(`
+    *,
+    listings (
+      user_id
+    )
+  `)
+  .eq("user_id", session.user.id)
 
   if (error) {
     handleAppError(error)
     return
   }
 
-  const cartItems = data ?? []
+  const cartItems = (data ?? []).map((item) => ({
+  ...item,
+  seller_id: item.listings?.user_id,
+}))
 
   if (cartItems.length === 0) {
     setCart([])
@@ -185,62 +195,239 @@ export default function CartCheckoutScreen() {
     setPhone(data.shipping_phone ?? "")
   }
 
-  /* ---------------- TOTALS ---------------- */
+const getShippingQuote = async (item: CartItem) => {
+  try {
+    console.log("📦 ITEM LISTING ID:", item.listing_id)
 
-  const subtotalCents = useMemo(() => {
-    return cart.reduce(
-      (sum, item) =>
-        sum +
-        Math.round(item.price * 100) *
-          item.quantity,
-      0
-    )
-  }, [cart])
+    const { data: listing, error: listingError } = await supabase
+      .from("listings")
+      .select("id, user_id")
+      .eq("id", item.listing_id)
+      .single()
 
-  const shippingCents = useMemo(() => {
-    return cart.reduce((sum, item) => {
-      if (
-        item.shipping_type === "buyer_pays"
-      ) {
-        return (
-          sum +
-          Math.round(
-            item.shipping_price * 100
-          )
-        )
+    console.log("📦 LISTING FETCH:", listing)
+    console.log("📦 LISTING ERROR:", listingError)
+
+    if (listingError || !listing?.user_id) {
+      console.warn("❌ Listing lookup failed")
+      return 0
+    }
+
+    const { data: seller, error } = await supabase
+      .from("profiles")
+      .select(`
+        address_line1,
+        address_line2,
+        city,
+        state,
+        postal_code,
+        shipping_name
+      `)
+      .eq("id", listing.user_id)
+      .single()
+
+    console.log("🧾 SELLER PROFILE:", seller)
+    console.log("🧾 SELLER ERROR:", error)
+    console.log("🧾 FETCHING PROFILE ID:", listing.user_id)
+
+    if (error || !seller) {
+      console.warn("⚠️ Missing seller address")
+      return 0
+    }
+
+    const toAddress = {
+      name: name || "Customer",
+      street1: line1?.trim(),
+      street2: line2?.trim() || undefined,
+      city: city?.trim(),
+      state: state?.trim(),
+      zip: String(postal).slice(0, 5),
+      country: "US",
+    }
+
+    const fromAddress = {
+      name: seller.shipping_name || "Seller",
+      street1: seller.address_line1?.trim(),
+      street2: seller.address_line2?.trim() || undefined,
+      city: seller.city?.trim(),
+      state: seller.state?.trim(),
+      zip: seller.postal_code
+        ? String(seller.postal_code).slice(0, 5)
+        : "",
+      country: "US",
+    }
+
+    console.log("📬 TO ADDRESS:", toAddress)
+    console.log("📤 FROM ADDRESS:", fromAddress)
+
+    if (
+      !fromAddress.street1 ||
+      !fromAddress.city ||
+      !fromAddress.state ||
+      !fromAddress.zip
+    ) {
+      console.warn("❌ SELLER ADDRESS INVALID:", fromAddress)
+      return 0
+    }
+
+    const res = await fetch(
+      "https://ccrrxdpfepsoghtgtpwx.functions.supabase.co/get-shipping-quote",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          to: toAddress,
+          from: fromAddress,
+          weight: 16,
+        }),
       }
-
-      return sum
-    }, 0)
-  }, [cart])
-
-  const buyerFeeCents = useMemo(() => {
-    const escrow =
-      subtotalCents + shippingCents
-
-    return Math.round(
-      escrow * 0.03
-    ) + 30
-  }, [subtotalCents, shippingCents])
-
-  const taxCents = useMemo(() => {
-    const escrow =
-      subtotalCents + shippingCents
-
-    return Math.round(
-      escrow * 0.075
     )
-  }, [subtotalCents, shippingCents])
 
-  const totalCents =
-    subtotalCents +
-    shippingCents +
-    buyerFeeCents +
-    taxCents
+    const data = await res.json()
 
-  /* ---------------- CHECKOUT ---------------- */
+    console.log("📦 SHIPPING RATE:", data)
 
-  const handleCheckout = async () => {
+    if (!data?.rate) {
+      console.warn("⚠️ No shipping rate returned")
+      throw new Error("Shipping rate unavailable")
+    }
+
+    return Math.round(Number(data.rate) * 100)
+  } catch (err) {
+    console.warn("⚠️ shipping quote failed", err)
+    throw err
+  }
+}
+
+/* ---------------- CALCULATE SHIPPING ---------------- */
+
+const calculateShipping = async () => {
+  if (!cart.length) return
+
+  setShippingLoading(true)
+
+  try {
+    const updatedCart = await Promise.all(
+      cart.map(async (item) => {
+        if (item.shipping_type !== "buyer_pays") {
+          return {
+            ...item,
+            shipping_cents: 0,
+          }
+        }
+
+        let rate = 0
+
+        try {
+          rate = await getShippingQuote(item)
+        } catch (err) {
+          console.warn("⚠️ Shipping error for item:", item.id)
+          Alert.alert(
+            "Shipping Error",
+            "Unable to calculate shipping. Please check your address."
+          )
+        }
+
+        return {
+          ...item,
+          shipping_cents: rate,
+        }
+      })
+    )
+
+    setCart(updatedCart)
+  } catch (err) {
+    console.warn("⚠️ shipping calc failed", err)
+  } finally {
+    setShippingLoading(false)
+  }
+}
+
+/* ---------------- TOTALS ---------------- */
+
+const subtotalCents = useMemo(() => {
+  return cart.reduce(
+    (sum, item) =>
+      sum +
+      Math.round(item.price * 100) *
+        item.quantity,
+    0
+  )
+}, [cart])
+
+const shippingCents = useMemo(() => {
+  return cart.reduce((sum, item) => {
+    if (item.shipping_type === "buyer_pays") {
+      return sum + (item.shipping_cents || 0)
+    }
+    return sum
+  }, 0)
+}, [cart])
+
+const buyerFeeCents = useMemo(() => {
+  const escrow =
+    subtotalCents + shippingCents
+
+  return Math.round(escrow * 0.03) + 30
+}, [subtotalCents, shippingCents])
+
+const taxCents = useMemo(() => {
+  const escrow =
+    subtotalCents + shippingCents
+
+  return Math.round(escrow * 0.075)
+}, [subtotalCents, shippingCents])
+
+const totalCents =
+  subtotalCents +
+  shippingCents +
+  buyerFeeCents +
+  taxCents
+
+/* ---------------- VERIFY ADDRESS ---------------- */
+
+const verifyCheckoutAddress = async () => {
+  try {
+    const res = await fetch(
+      "https://ccrrxdpfepsoghtgtpwx.functions.supabase.co/verify-address",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          address_line1: line1,
+          address_line2: line2,
+          city,
+          state,
+          postal_code: postal,
+        }),
+      }
+    )
+
+    const text = await res.text()
+
+    try {
+      return JSON.parse(text)
+    } catch {
+      return null
+    }
+  } catch (err) {
+    console.warn("⚠️ VERIFY FAILED:", err)
+    return null
+  }
+}
+
+/* ---------------- CHECKOUT ---------------- */
+
+const handleCheckout = async () => {
+  if (shippingLoading) {
+    Alert.alert("Please wait", "Calculating shipping...")
+    return
+  }
+
   if (!session?.user?.id) return
 
   if (!cart.length) {
@@ -258,238 +445,40 @@ export default function CartCheckoutScreen() {
     state.trim() &&
     postal.trim()
 
-    if (!valid) {
+  if (!valid) {
+    Alert.alert(
+      "Missing Shipping Info",
+      "Please complete your shipping address."
+    )
+    return
+  }
+
+  setPaying(true)
+
+  try {
+    const verifyData = await verifyCheckoutAddress()
+
+    if (
+      verifyData &&
+      !verifyData?.fallback &&
+      !verifyData?.verifications?.delivery?.success
+    ) {
       Alert.alert(
-        "Missing Shipping Info",
-        "Please complete your shipping address."
+        "Invalid Address",
+        "Please enter a valid shipping address."
       )
+      setPaying(false)
       return
     }
-
-    setPaying(true)
-
-    try {
-      if (saveAsDefault) {
-        await supabase
-          .from("profiles")
-          .update({
-            shipping_name:
-              name.trim(),
-            address_line1:
-              line1.trim(),
-            address_line2:
-              line2.trim() || null,
-            city: city.trim(),
-            state: state.trim(),
-            postal_code:
-              postal.trim(),
-            shipping_phone:
-              phone.trim() || null,
-          })
-          .eq(
-            "id",
-            session.user.id
-          )
-      }
-
-      const orderIds: string[] = []
-
-      for (const item of cart) {
-        const itemPriceCents =
-          Math.round(item.price * 100) *
-          item.quantity
-
-        const itemShippingCents =
-          item.shipping_type ===
-          "buyer_pays"
-            ? Math.round(
-                item.shipping_price *
-                  100
-              )
-            : 0
-
-        const escrowCents =
-          itemPriceCents +
-          itemShippingCents
-
-        const itemTaxCents =
-          Math.round(
-            escrowCents * 0.075
-          )
-
-        const itemBuyerFeeCents =
-          Math.round(
-            escrowCents * 0.03
-          ) + 30
-
-        const totalItemCents =
-          escrowCents +
-          itemTaxCents +
-          itemBuyerFeeCents
-
-          const { data: listingData, error: listingErr } =
-  await supabase
-    .from("listings")
-    .select("*")
-    .eq("id", item.listing_id)
-    .single()
-
-if (listingErr || !listingData) {
-  throw new Error(
-    "Failed loading listing snapshot."
-  )
-}
-
-        const { data: order, error } =
-          await supabase
-            .from("orders")
-            .insert({
-              buyer_id:
-                session.user.id,
-              seller_id:
-                item.seller_id,
-              listing_id:
-                item.listing_id,
-
-              status:
-                "pending_payment",
-
-              quantity:
-                item.quantity,
-
-              image_url:
-                item.image_url,
-
-              amount_cents:
-                totalItemCents,
-
-              currency: "usd",
-
-              item_price_cents:
-                itemPriceCents,
-
-              shipping_amount_cents:
-                itemShippingCents,
-
-              tax_cents:
-                itemTaxCents,
-
-              buyer_fee_cents:
-                itemBuyerFeeCents,
-
-              escrow_amount_cents:
-                escrowCents,
-
-                listing_snapshot:
-                listingData,
-
-              shipping_name:
-                name.trim(),
-
-              shipping_line1:
-                line1.trim(),
-
-              shipping_line2:
-                line2.trim() ||
-                null,
-
-              shipping_city:
-                city.trim(),
-
-              shipping_state:
-                state.trim(),
-
-              shipping_postal_code:
-                postal.trim(),
-
-              shipping_country:
-                "US",
-
-              shipping_phone:
-                phone.trim() ||
-                null,
-            })
-            .select()
-            .single()
-
-        if (error || !order) {
-  console.error(
-    "❌ ORDER INSERT FAILED"
-  )
-
-  console.error(
-    "❌ Supabase Error Object:",
-    JSON.stringify(error, null, 2)
-  )
-
-  console.error(
-    "❌ Attempted Insert Payload:",
-    {
-      buyer_id: session.user.id,
-      seller_id: item.seller_id,
-      listing_id: item.listing_id,
-      status: "pending_payment",
-      quantity: item.quantity,
-      image_url: item.image_url,
-      amount_cents: totalItemCents,
-      currency: "usd",
-      item_price_cents: itemPriceCents,
-      shipping_amount_cents: itemShippingCents,
-      tax_cents: itemTaxCents,
-      buyer_fee_cents: itemBuyerFeeCents,
-      escrow_amount_cents: escrowCents,
-      shipping_name: name.trim(),
-      shipping_line1: line1.trim(),
-      shipping_line2:
-        line2.trim() || null,
-      shipping_city: city.trim(),
-      shipping_state: state.trim(),
-      shipping_postal_code:
-        postal.trim(),
-      shipping_country: "US",
-      shipping_phone:
-        phone.trim() || null,
-    }
-  )
-
-  throw new Error(
-    error?.message ||
-      "Failed creating order."
-  )
-}
-
-        orderIds.push(order.id)
-      }
-
-      const { data, error } =
-        await supabase.functions.invoke(
-          "create-cart-checkout-session",
-          {
-            body: {
-              order_ids: orderIds,
-              amount: totalCents,
-              email:
-                session.user.email,
-            },
-          }
-        )
-
-      if (error || !data?.url) {
-        throw new Error(
-          "Failed to create checkout session."
-        )
-      }
-
-      await Linking.openURL(data.url)
-    } catch (err) {
-      handleAppError(err, {
-        fallbackMessage:
-          "Checkout failed.",
-      })
-    } finally {
-      setPaying(false)
-    }
+    
+  } catch (err) {
+    handleAppError(err, {
+      fallbackMessage: "Checkout failed.",
+    })
+  } finally {
+    setPaying(false)
   }
+}
 
   return (
     <View style={styles.screen}>
@@ -546,24 +535,24 @@ if (listingErr || !listingData) {
           />
 
           <CheckoutSummaryCard
-            subtotalCents={
-              subtotalCents
-            }
-            shippingCents={
-              shippingCents
-            }
-            buyerFeeCents={
-              buyerFeeCents
-            }
-            taxCents={taxCents}
-            totalCents={
-              totalCents
-            }
-            paying={paying}
-            onPay={
-              handleCheckout
-            }
-          />
+  subtotalCents={subtotalCents}
+  shippingCents={shippingCents}
+  buyerFeeCents={buyerFeeCents}
+  taxCents={taxCents}
+  totalCents={totalCents}
+  paying={paying}
+  onPay={async () => {
+  if (!shippingVerified) {
+    await calculateShipping()
+    setShippingVerified(true)
+    return
+  }
+
+  handleCheckout()
+}}
+  shippingLoading={shippingLoading}
+  shippingVerified={shippingVerified}
+/>
 
           <BuyerProtectionNotice />
         </ScrollView>

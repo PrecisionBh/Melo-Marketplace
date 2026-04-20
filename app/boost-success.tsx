@@ -15,7 +15,7 @@ export default function BoostSuccess() {
 
       <TouchableOpacity
         style={styles.button}
-        onPress={() => router.replace("/seller-hub")}
+        onPress={() => router.replace("/profile")}
       >
         <Text style={styles.buttonText}>Return to Seller Hub</Text>
       </TouchableOpacity>

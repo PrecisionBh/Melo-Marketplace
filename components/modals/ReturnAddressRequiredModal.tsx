@@ -14,7 +14,7 @@ export default function ReturnAddressRequiredModal({
 
   const goToAddress = () => {
     onClose()
-    router.push("../seller-hub/return-address")
+    router.push("/settings/edit-profile")
   }
 
   return (

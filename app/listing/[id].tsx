@@ -415,7 +415,7 @@ setIsSellerPro(!!data?.is_pro)
       if (!listing) return
 
       router.push({
-        pathname: "/checkout",
+        pathname: "/cart/checkout",
         params: {
           listingId: listing.id,
           quantity: String(quantity),

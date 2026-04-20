@@ -192,7 +192,7 @@ serve(async (req) => {
               "Buyer uploaded return tracking.",
             data: {
               route:
-                "/seller-hub/orders/[id]",
+                "/orders/[id]",
               params: {
                 id: orderId,
               },

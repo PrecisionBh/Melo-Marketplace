@@ -13,6 +13,11 @@ const STATUS_CONFIG: Record<
     text: string
   }
 > = {
+  cancelled: {
+    label: "Cancelled",
+    bg: "#E5E7EB",
+    text: "#374151",
+  },
   paid: {
     label: "Awaiting Shipment",
     bg: "#FEF3C7",
@@ -66,6 +71,9 @@ export default function OrderSummaryCard({
   order: any
 }) {
   const derivedStatus = (() => {
+    // 🔥 ALWAYS FIRST
+    if (order.status === "cancelled") return "cancelled"
+
     if (order.is_disputed) return "disputed"
 
     if (
@@ -89,8 +97,11 @@ export default function OrderSummaryCard({
   })()
 
   const cfg =
-    STATUS_CONFIG[derivedStatus] ??
-    STATUS_CONFIG.paid
+    STATUS_CONFIG[derivedStatus] ?? {
+      label: "Unknown",
+      bg: "#E5E7EB",
+      text: "#374151",
+    }
 
   const image =
     order.listing_snapshot?.image ??

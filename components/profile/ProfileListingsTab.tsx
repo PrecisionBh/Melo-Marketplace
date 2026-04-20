@@ -2,13 +2,13 @@ import { Ionicons } from "@expo/vector-icons"
 import { useRouter } from "expo-router"
 import { useEffect, useMemo, useState } from "react"
 import {
-    ActivityIndicator,
-    FlatList,
-    Image,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  FlatList,
+  Image,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native"
 
 import { useAuth } from "@/context/AuthContext"
@@ -98,7 +98,7 @@ export default function ProfileListingsTab() {
         <TouchableOpacity
           style={styles.createBtn}
           onPress={() =>
-            router.push("/seller-hub/create-listing")
+            router.push("/create-listing")
           }
         >
           <Ionicons

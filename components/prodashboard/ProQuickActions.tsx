@@ -14,7 +14,7 @@ export default function ProQuickActions({ isPro }: Props) {
       router.push("/melo-pro")
       return
     }
-    router.push("/seller-hub/payout-history")
+    router.push("/payout-history")
   }
 
   return (

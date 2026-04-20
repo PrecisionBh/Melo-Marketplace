@@ -62,76 +62,79 @@ export default function ListingsGrid({
   const NUM_COLUMNS = 3
   const MEGA_BOOST_FREQUENCY = 9
 
-  /* 🧠 SHUFFLE MEGA BOOSTS ONLY WHEN DATA CHANGES */
+  /* 🧠 SHUFFLE MEGA BOOSTS (ONLY ONCE) */
 
   const shuffledMegaBoosts = useMemo(() => {
     return shuffleArray(megaBoostListings)
-  }, [megaBoostListings])
+  }, [])
 
-  /* ---------------- REMOVE MEGA BOOST LISTINGS FROM NORMAL GRID ---------------- */
+  /* 🧠 STABLE FILTERED LISTINGS (FIXES FLASH) */
 
-  const megaIds = new Set(megaBoostListings.map((l) => l.id))
-  const filteredListings = listings.filter((l) => !megaIds.has(l.id))
+  const filteredListings = useMemo(() => {
+    const megaIds = new Set(megaBoostListings.map((l) => l.id))
+    return listings.filter((l) => !megaIds.has(l.id))
+  }, [listings, megaBoostListings])
 
-  /* ---------------- BUILD NORMAL GRID ROWS ---------------- */
+  /* 🧠 BUILD + INJECT ROWS (MEMOIZED) */
 
-  const baseRows: GridRowItem[] = []
-  let rowIndex = 0
+  const rows: GridRowItem[] = useMemo(() => {
+    const baseRows: GridRowItem[] = []
+    let rowIndex = 0
 
-  for (let i = 0; i < filteredListings.length; i += NUM_COLUMNS) {
-    const chunk = filteredListings.slice(i, i + NUM_COLUMNS)
+    for (let i = 0; i < filteredListings.length; i += NUM_COLUMNS) {
+      const chunk = filteredListings.slice(i, i + NUM_COLUMNS)
 
-    baseRows.push({
-      type: "row",
-      id: `row-${rowIndex++}`,
-      listings: chunk,
+      baseRows.push({
+        type: "row",
+        id: `row-${rowIndex++}`,
+        listings: chunk,
+      })
+    }
+
+    const builtRows: GridRowItem[] = []
+    let megaIndex = 0
+
+    baseRows.forEach((row, index) => {
+      builtRows.push(row)
+
+      const shouldInsertMega =
+        shuffledMegaBoosts.length > 0 &&
+        (index + 1) % MEGA_BOOST_FREQUENCY === 0
+
+      if (shouldInsertMega && megaIndex < shuffledMegaBoosts.length) {
+        const megaSlice = shuffledMegaBoosts.slice(megaIndex, megaIndex + 1)
+
+        builtRows.push({
+          type: "mega_boost",
+          id: `mega-boost-${index}`,
+          listings: megaSlice,
+        })
+
+        megaIndex++
+      }
     })
-  }
 
-  /* ---------------- INJECT MEGA BOOST ROWS ---------------- */
-
-  const rows: GridRowItem[] = []
-  let megaIndex = 0
-
-  baseRows.forEach((row, index) => {
-    rows.push(row)
-
-    const shouldInsertMega =
-      shuffledMegaBoosts.length > 0 &&
-      (index + 1) % MEGA_BOOST_FREQUENCY === 0
-
-    if (shouldInsertMega && megaIndex < shuffledMegaBoosts.length) {
+    while (megaIndex < shuffledMegaBoosts.length) {
       const megaSlice = shuffledMegaBoosts.slice(megaIndex, megaIndex + 1)
 
-      rows.push({
+      builtRows.push({
         type: "mega_boost",
-        id: `mega-boost-${index}`,
+        id: `mega-boost-fallback-${megaIndex}`,
         listings: megaSlice,
       })
 
       megaIndex++
     }
-  })
 
-  /* 🔥 FALLBACK INSERTION (if feed is small) */
+    if (showUpgradeRow && builtRows.length > 15) {
+      builtRows.splice(15, 0, {
+        type: "upgrade_row",
+        id: "upgrade-row",
+      })
+    }
 
-  while (megaIndex < shuffledMegaBoosts.length) {
-    const megaSlice = shuffledMegaBoosts.slice(megaIndex, megaIndex + 1)
-
-    rows.push({
-      type: "mega_boost",
-      id: `mega-boost-fallback-${megaIndex}`,
-      listings: megaSlice,
-    })
-
-    megaIndex++
-  }
-
-  /* ---------------- INSERT UPGRADE ROW ---------------- */
-
-  if (showUpgradeRow && rows.length > 15) {
-  rows.splice(15, 0, { type: "upgrade_row", id: "upgrade-row" })
-}
+    return builtRows
+  }, [filteredListings, shuffledMegaBoosts, showUpgradeRow])
 
   /* 🧠 RESTORE SCROLL POSITION */
 

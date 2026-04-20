@@ -60,6 +60,11 @@ const STATUS_CONFIG: Record<
     bg: "#FECACA",
     text: "#991B1B",
   },
+  cancelled: {
+  label: "Cancelled",
+  bg: "#E5E7EB",
+  text: "#374151",
+},
 }
 
 export default function OrdersScreen() {
@@ -232,26 +237,38 @@ function OrderCard({
   const isSeller = order.seller_id === currentUserId
 
   let cfg =
-    STATUS_CONFIG[order.status] ??
-    STATUS_CONFIG.paid
-
-  // 🔥 BUYER NEEDS TO PAY
-  if (isBuyer && order.status === "pending_payment") {
-    cfg = {
-      label: "Pay Now",
-      bg: "#D97732",
-      text: "#fff",
-    }
+  STATUS_CONFIG[order.status] ?? {
+    label: "Unknown",
+    bg: "#E5E7EB",
+    text: "#374151",
   }
 
-  // 🔥 SELLER NEEDS TO SHIP
-  if (isSeller && order.status === "paid") {
-    cfg = {
-      label: "Awaiting Label",
-      bg: "#FEF3C7",
-      text: "#92400E",
-    }
+// 🔥 CANCELLED (highest priority)
+if (order.status === "cancelled") {
+  cfg = {
+    label: "Cancelled",
+    bg: "#E5E7EB",
+    text: "#374151",
   }
+}
+
+// 🔥 BUYER NEEDS TO PAY
+else if (isBuyer && order.status === "pending_payment") {
+  cfg = {
+    label: "Pay Now",
+    bg: "#D97732",
+    text: "#fff",
+  }
+}
+
+// 🔥 SELLER NEEDS TO SHIP
+else if (isSeller && order.status === "paid") {
+  cfg = {
+    label: "Awaiting Label",
+    bg: "#FEF3C7",
+    text: "#92400E",
+  }
+}
 
   const image =
     order.listing_snapshot?.image_urls?.[0] ??

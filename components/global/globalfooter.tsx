@@ -1,14 +1,14 @@
 import { Ionicons } from "@expo/vector-icons"
 import {
-    usePathname,
-    useRouter,
+  usePathname,
+  useRouter,
 } from "expo-router"
 import React from "react"
 import {
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
@@ -32,7 +32,7 @@ const NAV_ITEMS: {
     label: "Home",
   },
   {
-    path: "/seller-hub/create-listing",
+    path: "/create-listing",
     icon: "add-circle-outline",
     activeIcon: "add-circle",
     label: "Sell",

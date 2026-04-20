@@ -130,7 +130,7 @@ Deno.serve(async (req) => {
             title: "Return Completed",
             body: "The item was returned and the buyer has been refunded.",
             data: {
-              route: `/seller-hub/orders/${order.id}`,
+              route: `/orders/${order.id}`,
             },
             dedupeKey: `auto-return-refund-seller-${order.id}`,
           }),
@@ -197,7 +197,7 @@ Deno.serve(async (req) => {
               title: "Return Completed",
               body: "The return has been processed and refunded.",
               data: {
-                route: `/seller-hub/orders/${order.id}`,
+                route: `/orders/${order.id}`,
               },
               dedupeKey: `auto-return-refund-seller-${order.id}`,
             }),

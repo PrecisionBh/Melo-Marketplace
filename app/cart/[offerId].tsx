@@ -12,16 +12,15 @@ import { handleAppError } from "@/lib/errors/appError"
 import { supabase } from "@/lib/supabase"
 
 import { useLocalSearchParams } from "expo-router"
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import {
-  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
   StyleSheet,
   Text,
-  View,
+  View
 } from "react-native"
 
 type OfferCheckoutData = {
@@ -59,6 +58,9 @@ export default function OfferCheckoutScreen() {
   const [paying, setPaying] = useState(false)
   const [offer, setOffer] =
     useState<OfferCheckoutData | null>(null)
+    const [shippingCentsState, setShippingCentsState] = useState(0)
+const [shippingLoading, setShippingLoading] = useState(false)
+const [shippingVerified, setShippingVerified] = useState(false)
 
   const [shippingExpanded, setShippingExpanded] =
     useState(true)
@@ -74,15 +76,42 @@ export default function OfferCheckoutScreen() {
   const [postal, setPostal] = useState("")
   const [phone, setPhone] = useState("")
 
-  useEffect(() => {
-    if (!session?.user?.id || !offerId) {
-      setLoading(false)
-      return
-    }
+  /* ---------------- VERIFY ADDRESS ---------------- */
 
-    loadOffer()
-    loadSavedAddress()
-  }, [session?.user?.id, offerId])
+const verifyCheckoutAddress = async () => {
+  try {
+    const res = await fetch(
+      "https://ccrrxdpfepsoghtgtpwx.functions.supabase.co/verify-address",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          address_line1: line1,
+          address_line2: line2,
+          city,
+          state,
+          postal_code: postal,
+        }),
+      }
+    )
+
+    const text = await res.text()
+
+    console.log("VERIFY STATUS:", res.status)
+    console.log("VERIFY RAW:", text)
+
+    try {
+      return JSON.parse(text)
+    } catch {
+      return null
+    }
+  } catch (err) {
+    console.warn("⚠️ VERIFY FAILED:", err)
+    return null
+  }
+}
 
   const loadOffer = async () => {
     try {
@@ -243,6 +272,101 @@ const previewItems = offer
     ]
   : []
 
+  /* ---------------- SHIPPING QUOTE ---------------- */
+
+const getShippingQuote = async () => {
+  try {
+    if (!offer) return 0
+
+    // 🔥 FETCH SELLER PROFILE
+    const { data: seller, error } = await supabase
+      .from("profiles")
+      .select(`
+        address_line1,
+        address_line2,
+        city,
+        state,
+        postal_code
+      `)
+      .eq("id", offer.seller_id)
+      .single()
+
+      console.log("🧾 SELLER PROFILE:", seller)
+console.log("🧾 SELLER ERROR:", error)
+
+    if (error || !seller) {
+      console.warn("⚠️ Missing seller address")
+      return 0
+    }
+
+    // 🔥 CALL SHIPPING FUNCTION
+    const res = await fetch(
+      "https://ccrrxdpfepsoghtgtpwx.functions.supabase.co/get-shipping-quote",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          to: {
+            name: name || "Customer",
+            street1: line1,
+            street2: line2,
+            city,
+            state,
+            zip: postal,
+            country: "US",
+          },
+          from: {
+            name: "Seller",
+            street1: seller.address_line1,
+            street2: seller.address_line2,
+            city: seller.city,
+            state: seller.state,
+            zip: seller.postal_code,
+            country: "US",
+          },
+          weight: 16,
+        }),
+      }
+    )
+
+    const data = await res.json()
+
+    console.log("📦 SHIPPING RATE:", data)
+
+    return Math.round(Number(data.rate) * 100)
+  } catch (err) {
+    console.warn("⚠️ shipping quote failed", err)
+    return 0
+  }
+}
+
+const calculateShipping = async () => {
+  if (!offer) return
+
+  if (offer.accepted_shipping_type !== "buyer_pays") {
+    setShippingCentsState(0)
+    return
+  }
+
+  setShippingLoading(true)
+
+  try {
+    const rate = await getShippingQuote()
+    setShippingCentsState(rate)
+  } catch (err) {
+    console.warn("⚠️ shipping calc failed", err)
+    setShippingCentsState(0)
+    Alert.alert(
+      "Shipping Error",
+      "Unable to calculate shipping. Please check your address."
+    )
+  } finally {
+    setShippingLoading(false)
+  }
+}
+
   const subtotalCents = useMemo(() => {
     if (!offer) return 0
     return (
@@ -251,20 +375,7 @@ const previewItems = offer
     )
   }, [offer, quantity])
 
-  const shippingCents = useMemo(() => {
-    if (!offer) return 0
-
-    if (
-      offer.accepted_shipping_type ===
-      "buyer_pays"
-    ) {
-      return Math.round(
-        offer.accepted_shipping_price * 100
-      )
-    }
-
-    return 0
-  }, [offer])
+  const shippingCents = shippingCentsState
 
   const buyerFeeCents = useMemo(() => {
     const escrow =
@@ -291,186 +402,222 @@ const previewItems = offer
     taxCents
 
   const handleCheckout = async () => {
-    if (!session?.user?.id || !offer) return
+  if (shippingLoading) {
+    Alert.alert("Please wait", "Calculating shipping...")
+    return
+  }
+  if (!session?.user?.id || !offer) return
 
-    const valid =
-      name.trim() &&
-      line1.trim() &&
-      city.trim() &&
-      state.trim() &&
-      postal.trim()
+  const valid =
+    name.trim() &&
+    line1.trim() &&
+    city.trim() &&
+    state.trim() &&
+    postal.trim()
 
-    if (!valid) {
-      Alert.alert(
-        "Missing Shipping Info",
-        "Please complete your shipping address."
-      )
-      return
+  if (!valid) {
+    Alert.alert(
+      "Missing Shipping Info",
+      "Please complete your shipping address."
+    )
+    return
+  }
+
+  setPaying(true)
+
+  try {
+    /* 🔥 VERIFY ADDRESS */
+
+    const verifyData = await verifyCheckoutAddress()
+
+    const finalLine1 =
+      verifyData?.verifications?.delivery?.success
+        ? verifyData.street1 ?? line1
+        : line1
+
+    const finalLine2 =
+      verifyData?.verifications?.delivery?.success
+        ? verifyData.street2 ?? line2
+        : line2
+
+    const finalCity =
+      verifyData?.verifications?.delivery?.success
+        ? verifyData.city ?? city
+        : city
+
+    const finalState =
+      verifyData?.verifications?.delivery?.success
+        ? verifyData.state ?? state
+        : state
+
+    const finalPostal =
+      verifyData?.verifications?.delivery?.success
+        ? verifyData.zip ?? postal
+        : postal
+
+   if (
+  verifyData &&
+  !verifyData?.fallback &&
+  !verifyData?.verifications?.delivery?.success
+) {
+  Alert.alert(
+    "Invalid Address",
+    "Please enter a valid shipping address."
+  )
+  return
+}
+
+    /* optional UI update */
+    setLine1(finalLine1)
+    setLine2(finalLine2)
+    setCity(finalCity)
+    setState(finalState)
+    setPostal(finalPostal)
+
+
+    if (saveAsDefault) {
+      await supabase
+        .from("profiles")
+        .update({
+          shipping_name: name.trim(),
+          address_line1: finalLine1.trim(),
+          address_line2:
+            finalLine2.trim() || null,
+          city: finalCity.trim(),
+          state: finalState.trim(),
+          postal_code: finalPostal.trim(),
+          shipping_phone:
+            phone.trim() || null,
+        })
+        .eq("id", session.user.id)
     }
 
-    setPaying(true)
+    let orderIdToUse = orderId
 
-    try {
-      if (saveAsDefault) {
+    if (!orderIdToUse) {
+      const { data: existingPendingOrder } =
         await supabase
-          .from("profiles")
-          .update({
+          .from("orders")
+          .select("id")
+          .eq("buyer_id", session.user.id)
+          .eq("offer_id", offer.offer_id)
+          .eq("status", "pending_payment")
+          .maybeSingle()
+
+      orderIdToUse =
+        existingPendingOrder?.id
+    }
+
+    if (!orderIdToUse) {
+      const listingSnapshot = {
+        ...(offer.listings ?? {}),
+        accepted_offer: true,
+        accepted_price:
+          offer.accepted_price,
+        accepted_quantity:
+          offer.quantity,
+        accepted_shipping_type:
+          offer.accepted_shipping_type,
+        accepted_shipping_price:
+          offer.accepted_shipping_price,
+        accepted_title: title,
+        accepted_image_url: image,
+      }
+
+      const escrowCents =
+        subtotalCents + shippingCents
+
+      const { data: order, error } =
+        await supabase
+          .from("orders")
+          .insert({
+            buyer_id: session.user.id,
+            seller_id: offer.seller_id,
+            listing_id: offer.listing_id,
+            offer_id: offer.offer_id,
+
+            status: "pending_payment",
+            quantity: offer.quantity,
+
+            image_url: image,
+
+            amount_cents: totalCents,
+            currency: "usd",
+
+            item_price_cents:
+              subtotalCents,
+            shipping_amount_cents:
+              shippingCents,
+            tax_cents: taxCents,
+            buyer_fee_cents:
+              buyerFeeCents,
+            escrow_amount_cents:
+              escrowCents,
+
+            listing_snapshot:
+              listingSnapshot,
+
+            // 🔥 FIXED ADDRESS
             shipping_name: name.trim(),
-            address_line1: line1.trim(),
-            address_line2:
-              line2.trim() || null,
-            city: city.trim(),
-            state: state.trim(),
-            postal_code: postal.trim(),
+            shipping_line1:
+              finalLine1.trim(),
+            shipping_line2:
+              finalLine2.trim() || null,
+            shipping_city:
+              finalCity.trim(),
+            shipping_state:
+              finalState.trim(),
+            shipping_postal_code:
+              finalPostal.trim(),
+            shipping_country: "US",
             shipping_phone:
               phone.trim() || null,
           })
-          .eq("id", session.user.id)
-      }
+          .select("id")
+          .single()
 
-      let orderIdToUse = orderId
-
-if (!orderIdToUse) {
-  const { data: existingPendingOrder } =
-    await supabase
-      .from("orders")
-      .select("id")
-      .eq("buyer_id", session.user.id)
-      .eq("offer_id", offer.offer_id)
-      .eq("status", "pending_payment")
-      .maybeSingle()
-
-  orderIdToUse = existingPendingOrder?.id
-}
-
-      if (!orderIdToUse) {
-        const listingSnapshot = {
-          ...(offer.listings ?? {}),
-          accepted_offer: true,
-          accepted_price:
-            offer.accepted_price,
-          accepted_quantity: offer.quantity,
-          accepted_shipping_type:
-            offer.accepted_shipping_type,
-          accepted_shipping_price:
-            offer.accepted_shipping_price,
-          accepted_title: title,
-          accepted_image_url: image,
-        }
-
-        const escrowCents =
-          subtotalCents + shippingCents
-
-        const { data: order, error } =
-          await supabase
-            .from("orders")
-            .insert({
-              buyer_id: session.user.id,
-              seller_id: offer.seller_id,
-              listing_id: offer.listing_id,
-              offer_id: offer.offer_id,
-
-              status: "pending_payment",
-              quantity: offer.quantity,
-
-              image_url: image,
-
-              amount_cents: totalCents,
-              currency: "usd",
-
-              item_price_cents:
-                subtotalCents,
-              shipping_amount_cents:
-                shippingCents,
-              tax_cents: taxCents,
-              buyer_fee_cents:
-                buyerFeeCents,
-              escrow_amount_cents:
-                escrowCents,
-
-              listing_snapshot:
-                listingSnapshot,
-
-              shipping_name: name.trim(),
-              shipping_line1: line1.trim(),
-              shipping_line2:
-                line2.trim() || null,
-              shipping_city: city.trim(),
-              shipping_state: state.trim(),
-              shipping_postal_code:
-                postal.trim(),
-              shipping_country: "US",
-              shipping_phone:
-                phone.trim() || null,
-            })
-            .select("id")
-            .single()
-
-        if (error || !order) {
-          console.error(
-            "❌ OFFER ORDER INSERT FAILED",
-            JSON.stringify(error, null, 2)
-          )
-
-          throw new Error(
-            error?.message ||
-              "Failed creating offer order."
-          )
-        }
-
-        orderIdToUse = order.id
-      }
-
-      const { data, error } =
-        await supabase.functions.invoke(
-          "create-cart-checkout-session",
-          {
-            body: {
-  order_ids: [orderIdToUse],
-  amount: totalCents,
-  email: session.user.email,
-},
-          }
+      if (error || !order) {
+        console.error(
+          "❌ OFFER ORDER INSERT FAILED",
+          JSON.stringify(error, null, 2)
         )
 
-      if (error || !data?.url) {
         throw new Error(
-          "Failed to create checkout session."
+          error?.message ||
+            "Failed creating offer order."
         )
       }
 
-      await Linking.openURL(data.url)
-    } catch (err) {
-      handleAppError(err, {
-        fallbackMessage:
-          "Checkout failed.",
-      })
-    } finally {
-      setPaying(false)
+      orderIdToUse = order.id
     }
-  }
 
-  if (loading) {
-    return (
-      <View style={styles.loaderWrap}>
-        <ActivityIndicator />
-      </View>
-    )
-  }
+    const { data, error } =
+      await supabase.functions.invoke(
+        "create-cart-checkout-session",
+        {
+          body: {
+            order_ids: [orderIdToUse],
+            amount: totalCents,
+            email: session.user.email,
+          },
+        }
+      )
 
-  if (!offer) {
-    return (
-      <View style={styles.screen}>
-        <GlobalHeader />
-        <View style={styles.emptyWrap}>
-          <Text style={styles.emptyText}>
-            Offer checkout not found.
-          </Text>
-        </View>
-        <GlobalFooter />
-      </View>
-    )
+    if (error || !data?.url) {
+      throw new Error(
+        "Failed to create checkout session."
+      )
+    }
+
+    await Linking.openURL(data.url)
+  } catch (err) {
+    handleAppError(err, {
+      fallbackMessage: "Checkout failed.",
+    })
+  } finally {
+    setPaying(false)
   }
+}
 
   return (
     <View style={styles.screen}>
@@ -525,20 +672,24 @@ if (!orderIdToUse) {
           />
 
           <CheckoutSummaryCard
-            subtotalCents={
-              subtotalCents
-            }
-            shippingCents={
-              shippingCents
-            }
-            buyerFeeCents={
-              buyerFeeCents
-            }
-            taxCents={taxCents}
-            totalCents={totalCents}
-            paying={paying}
-            onPay={handleCheckout}
-          />
+  subtotalCents={subtotalCents}
+  shippingCents={shippingCents}
+  buyerFeeCents={buyerFeeCents}
+  taxCents={taxCents}
+  totalCents={totalCents}
+  paying={paying}
+  onPay={async () => {
+  if (!shippingVerified) {
+    await calculateShipping()
+    setShippingVerified(true)
+    return
+  }
+
+  handleCheckout()
+}}
+  shippingLoading={shippingLoading}
+  shippingVerified={shippingVerified}
+/>
 
           <BuyerProtectionNotice />
         </ScrollView>

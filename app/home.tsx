@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons"
 import { useFocusEffect, useRouter } from "expo-router"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import {
@@ -81,7 +80,6 @@ const [draftMaxPrice, setDraftMaxPrice] = useState("")
   const [hasUnreadNotifications, setHasUnreadNotifications] =
     useState(false)
 
-  const [menuOpen, setMenuOpen] = useState(false)
   const [isPro, setIsPro] = useState(false)
   const [megaBoostListings, setMegaBoostListings] = useState<Listing[]>([])
   const [page, setPage] = useState(0)
@@ -95,7 +93,7 @@ useEffect(() => {
   if (scrollOffset > threshold && hasMore && !loadingMore) {
     loadMoreListings()
   }
-}, [scrollOffset, hasMore])
+}, [scrollOffset, hasMore, loadingMore])
 
   const requireAuth = (action?: () => void) => {
     if (!session?.user) {
@@ -112,7 +110,7 @@ useEffect(() => {
   return [
     { key: "all" as any, label: "All" },
     { key: "electronics" as any, label: "Electronics" },
-    { key: "fashion" as any, label: "Clothing" },
+    { key: "clothing_apparel" as any, label: "Clothing" },
     { key: "home_garden" as any, label: "Home" },
     { key: "sports_outdoors" as any, label: "Sports" },
     { key: "collectibles" as any, label: "Collectibles" },
@@ -195,137 +193,154 @@ useEffect(() => {
       if (error) throw error
 
       const rows = (data ?? []) as ListingRow[]
-      const newAllListings = Array.from(
-  new Map(
-    [...allListings, ...rows].map(item => [item.id, item])
-  ).values()
-)
 
-setAllListings(newAllListings)
-      if ((rows ?? []).length < PAGE_SIZE) {
+const mergedAllListings =
+  page === 0
+    ? rows
+    : Array.from(
+        new Map(
+          [...allListings, ...rows].map((item) => [item.id, item])
+        ).values()
+      )
+
+setAllListings(mergedAllListings)
+
+if (rows.length < PAGE_SIZE) {
   setHasMore(false)
 } else {
   setHasMore(true)
 }
 
-      const validRows = newAllListings.filter(
-        (l) =>
-          Array.isArray(l.image_urls) &&
-          l.image_urls.length > 0 &&
-          l.title?.trim().length > 0 &&
-          Number(l.price) > 0
-      )
+const validRows = mergedAllListings.filter(
+  (l) =>
+    Array.isArray(l.image_urls) &&
+    l.image_urls.length > 0 &&
+    l.title?.trim().length > 0 &&
+    Number(l.price) > 0
+)
 
-      const activeMegaBoostRows = validRows.filter(
-        (l) => l.is_mega_boost === true
-      )
+const activeMegaBoostRows = validRows.filter(
+  (l) => l.is_mega_boost === true
+)
 
-      const boostedRows = validRows.filter(
-        (l) => l.is_boosted === true
-      )
+const boostedRows = validRows.filter(
+  (l) => l.is_boosted === true
+)
 
-      const nonBoostedRows = validRows.filter(
-        (l) => !l.is_boosted
-      )
+const nonBoostedRows = validRows.filter(
+  (l) => !l.is_boosted
+)
 
-      const followedRows = nonBoostedRows.filter((l) =>
-        followedSellerIds.includes(l.user_id ?? "")
-      )
+const followedRows = nonBoostedRows.filter((l) =>
+  followedSellerIds.includes(l.user_id ?? "")
+)
 
-      const newRows = nonBoostedRows.filter(
-        (l) => !followedSellerIds.includes(l.user_id ?? "")
-      )
+const newRows = nonBoostedRows.filter(
+  (l) => !followedSellerIds.includes(l.user_id ?? "")
+)
 
-      const merged: ListingRow[] = []
+const orderedRows: ListingRow[] = []
 
-      let bIndex = 0
-      let fIndex = 0
-      let nIndex = 0
+let bIndex = 0
+let fIndex = 0
+let nIndex = 0
 
-      while (
-        bIndex < boostedRows.length ||
-        fIndex < followedRows.length ||
-        nIndex < newRows.length
-      ) {
-        for (let i = 0; i < 3; i++) {
-          if (bIndex < boostedRows.length) {
-            merged.push(boostedRows[bIndex++])
-          } else if (fIndex < followedRows.length) {
-            merged.push(followedRows[fIndex++])
-          } else if (nIndex < newRows.length) {
-            merged.push(newRows[nIndex++])
-          }
-        }
+while (
+  bIndex < boostedRows.length ||
+  fIndex < followedRows.length ||
+  nIndex < newRows.length
+) {
+  for (let i = 0; i < 3; i++) {
+    if (bIndex < boostedRows.length) {
+      orderedRows.push(boostedRows[bIndex++])
+    } else if (fIndex < followedRows.length) {
+      orderedRows.push(followedRows[fIndex++])
+    } else if (nIndex < newRows.length) {
+      orderedRows.push(newRows[nIndex++])
+    }
+  }
 
-        for (let i = 0; i < 3; i++) {
-          if (fIndex < followedRows.length) {
-            merged.push(followedRows[fIndex++])
-          } else if (nIndex < newRows.length) {
-            merged.push(newRows[nIndex++])
-          } else if (bIndex < boostedRows.length) {
-            merged.push(boostedRows[bIndex++])
-          }
-        }
+  for (let i = 0; i < 3; i++) {
+    if (fIndex < followedRows.length) {
+      orderedRows.push(followedRows[fIndex++])
+    } else if (nIndex < newRows.length) {
+      orderedRows.push(newRows[nIndex++])
+    } else if (bIndex < boostedRows.length) {
+      orderedRows.push(boostedRows[bIndex++])
+    }
+  }
 
-        for (let i = 0; i < 3; i++) {
-          if (nIndex < newRows.length) {
-            merged.push(newRows[nIndex++])
-          } else if (fIndex < followedRows.length) {
-            merged.push(followedRows[fIndex++])
-          } else if (bIndex < boostedRows.length) {
-            merged.push(boostedRows[bIndex++])
-          }
-        }
+  for (let i = 0; i < 3; i++) {
+    if (nIndex < newRows.length) {
+      orderedRows.push(newRows[nIndex++])
+    } else if (fIndex < followedRows.length) {
+      orderedRows.push(followedRows[fIndex++])
+    } else if (bIndex < boostedRows.length) {
+      orderedRows.push(boostedRows[bIndex++])
+    }
+  }
 
-        if (
-          bIndex >= boostedRows.length &&
-          fIndex >= followedRows.length &&
-          nIndex >= newRows.length
-        ) {
-          break
-        }
-      }
+  if (
+    bIndex >= boostedRows.length &&
+    fIndex >= followedRows.length &&
+    nIndex >= newRows.length
+  ) {
+    break
+  }
+}
 
-      const normalized: Listing[] = merged.map((l) => ({
-        id: l.id,
-        title: l.title,
-        price: Number(l.price),
-        category: l.category ?? "",
-        image_url: l.image_urls?.[0] ?? null,
-        allow_offers: false,
-        shipping_type: l.shipping_type ?? null,
-      }))
+const normalizedListings: Listing[] = orderedRows.map((l) => ({
+  id: l.id,
+  title: l.title,
+  price: Number(l.price),
+  category: l.category ?? "",
+  image_url: l.image_urls?.[0] ?? null,
+  allow_offers: false,
+  shipping_type: l.shipping_type ?? null,
+}))
 
-      const uniqueListings = Array.from(
-        new Map(normalized.map((item) => [item.id, item])).values()
-      )
-       
-      setListings(prev => {
-  const merged = [...prev, ...uniqueListings]
+const uniqueListings = Array.from(
+  new Map(
+    normalizedListings.map((item) => [item.id, item])
+  ).values()
+)
 
-  return Array.from(
-    new Map(merged.map(item => [item.id, item])).values()
+const normalizedMegaBoosts: Listing[] = activeMegaBoostRows.map((l) => ({
+  id: l.id,
+  title: l.title,
+  price: Number(l.price),
+  category: l.category ?? "",
+  image_url: l.image_urls?.[0] ?? null,
+  allow_offers: false,
+  shipping_type: l.shipping_type ?? null,
+}))
+
+const uniqueMegaBoosts = Array.from(
+  new Map(
+    normalizedMegaBoosts.map((item) => [item.id, item])
+  ).values()
+)
+
+if (page === 0) {
+  setListings(uniqueListings)
+  setMegaBoostListings(uniqueMegaBoosts)
+} else {
+  setListings((prev) =>
+    Array.from(
+      new Map(
+        [...prev, ...uniqueListings].map((item) => [item.id, item])
+      ).values()
+    )
   )
-})
 
-      const normalizedMegaBoosts: Listing[] =
-        activeMegaBoostRows.map((l) => ({
-          id: l.id,
-          title: l.title,
-          price: Number(l.price),
-          category: l.category ?? "",
-          image_url: l.image_urls?.[0] ?? null,
-          allow_offers: false,
-          shipping_type: l.shipping_type ?? null,
-        }))
-
-      setMegaBoostListings(prev => {
-  const merged = [...prev, ...normalizedMegaBoosts]
-
-  return Array.from(
-    new Map(merged.map(item => [item.id, item])).values()
+  setMegaBoostListings((prev) =>
+    Array.from(
+      new Map(
+        [...prev, ...uniqueMegaBoosts].map((item) => [item.id, item])
+      ).values()
+    )
   )
-})
+}
     } catch (err) {
       handleAppError(err, {
         fallbackMessage:
@@ -347,6 +362,8 @@ const loadMoreListings = async () => {
   setPage(0)
   setHasMore(true)
   setAllListings([])
+  setListings([])
+  setMegaBoostListings([])
   await loadListings()
   setRefreshing(false)
 }
@@ -559,81 +576,6 @@ const hasResults = filteredListings.length > 0
 
       </View>
       <GlobalFooter />
-      {menuOpen && (
-        <View style={styles.menuOverlay} pointerEvents="box-none">
-          <TouchableOpacity
-            style={styles.menuBackdrop}
-            activeOpacity={1}
-            onPress={() => setMenuOpen(false)}
-          />
-
-          <View style={styles.menuDropdown}>
-            <MenuItem
-              icon="albums-outline"
-              label="Buyer Hub"
-              onPress={() => {
-                setMenuOpen(false)
-                requireAuth(() => router.push("/buyer-hub"))
-              }}
-            />
-
-            <MenuDivider />
-
-            <MenuItem
-              icon="heart-outline"
-              label="My Likes"
-              onPress={() => {
-                setMenuOpen(false)
-                requireAuth(() => router.push("/watching"))
-              }}
-            />
-
-            <MenuDivider />
-
-            <MenuItem
-              icon="briefcase-outline"
-              label="Seller Hub"
-              onPress={() => {
-                setMenuOpen(false)
-                requireAuth(() => router.push("/seller-hub"))
-              }}
-            />
-
-            <MenuDivider />
-
-            <MenuItem
-              icon="wallet-outline"
-              label="Wallet"
-              onPress={() => {
-                setMenuOpen(false)
-                requireAuth(() => router.push("/seller-hub/wallet"))
-              }}
-            />
-
-            <MenuDivider />
-
-            <MenuItem
-              icon="create-outline"
-              label="Edit Profile"
-              onPress={() => {
-                setMenuOpen(false)
-                requireAuth(() => router.push("/settings/edit-profile"))
-              }}
-            />
-
-            <MenuDivider />
-
-            <MenuItem
-              icon="settings-outline"
-              label="Settings"
-              onPress={() => {
-                setMenuOpen(false)
-                requireAuth(() => router.push("/settings"))
-              }}
-            />
-          </View>
-        </View>
-      )}
 
       {showAuthModal && (
   <View style={styles.authOverlay}>
@@ -673,34 +615,6 @@ const hasResults = filteredListings.length > 0
     </>
   )
 }
-
-/* ---------------- MENU COMPONENTS ---------------- */
-
-function MenuItem({
-  icon,
-  label,
-  onPress,
-}: {
-  icon: any
-  label: string
-  onPress: () => void
-}) {
-  return (
-    <TouchableOpacity
-      style={styles.menuItemRow}
-      onPress={onPress}
-      activeOpacity={0.7}
-    >
-      <Ionicons name={icon} size={18} color="#0F1E17" />
-      <Text style={styles.menuItemText}>{label}</Text>
-    </TouchableOpacity>
-  )
-}
-
-function MenuDivider() {
-  return <View style={styles.menuDivider} />
-}
-
 /* ---------------- STYLES ---------------- */
 
 const styles = StyleSheet.create({
@@ -714,52 +628,6 @@ headerBlock: {
   backgroundColor: "#F8F8F8",
   paddingBottom: 10,
 },
-  menuOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 9999,
-    elevation: 9999,
-  },
-  menuBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.25)",
-  },
-  menuDropdown: {
-    position: "absolute",
-    top: 95,
-    left: 16,
-    width: 230,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 18,
-    paddingVertical: 6,
-    shadowColor: "#000",
-    shadowOpacity: 0.18,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 24,
-    borderWidth: 1,
-    borderColor: "#E6EFEA",
-  },
-  menuItemRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-  },
-  menuItemText: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#0F1E17",
-  },
-  menuDivider: {
-    height: 1,
-    backgroundColor: "#EEF3F0",
-    marginHorizontal: 12,
-  },
 
   authOverlay: {
   position: "absolute",

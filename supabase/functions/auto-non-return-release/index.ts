@@ -135,7 +135,7 @@ Deno.serve(async (req) => {
               title: "Escrow Released",
               body: "The buyer did not return the item in time. Funds have been released to you.",
               data: {
-                route: `/seller-hub/orders/${order.id}`,
+                route: `/orders/${order.id}`,
               },
               dedupeKey: `non-return-release-seller-${order.id}`,
             }),

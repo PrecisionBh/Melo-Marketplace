@@ -1,9 +1,9 @@
 import { Ionicons } from "@expo/vector-icons"
 import {
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native"
 
 type Props = {
@@ -15,6 +15,9 @@ type Props = {
 
   onPay: () => void
   paying: boolean
+
+  shippingLoading?: boolean
+  shippingVerified?: boolean // ✅ ADD THIS
 }
 
 export default function CheckoutSummaryCard({
@@ -25,9 +28,13 @@ export default function CheckoutSummaryCard({
   totalCents,
   onPay,
   paying,
+  shippingLoading = false,
+  shippingVerified = false, // ✅ ADD THIS
 }: Props) {
   const fmt = (cents: number) =>
     `$${(cents / 100).toFixed(2)}`
+
+  const isDisabled = paying || shippingLoading
 
   return (
     <View style={styles.card}>
@@ -40,16 +47,28 @@ export default function CheckoutSummaryCard({
         value={fmt(subtotalCents)}
       />
 
+      {/* 🔥 SHIPPING ROW */}
       <Row
         label="Shipping"
         value={
-          shippingCents === 0
-            ? "Free"
-            : fmt(shippingCents)
-        }
-        green={shippingCents === 0}
+  shippingLoading
+    ? "Calculating..."
+    : !shippingVerified
+    ? "Tap to calculate"
+    : shippingCents === 0
+    ? "Free"
+    : fmt(shippingCents)
+}
+        green={!shippingLoading && shippingCents === 0}
         icon="car-outline"
       />
+
+      {/* 🔥 SHIPPING NOTE */}
+      {!shippingLoading && shippingCents > 0 && (
+        <Text style={styles.subNote}>
+          Calculated based on your location
+        </Text>
+      )}
 
       <Row
         label="Buyer Protection Fee"
@@ -71,9 +90,12 @@ export default function CheckoutSummaryCard({
       />
 
       <TouchableOpacity
-        style={styles.payBtn}
+        style={[
+          styles.payBtn,
+          isDisabled && styles.payBtnDisabled,
+        ]}
         onPress={onPay}
-        disabled={paying}
+        disabled={isDisabled}
         activeOpacity={0.85}
       >
         <Ionicons
@@ -85,7 +107,11 @@ export default function CheckoutSummaryCard({
         <Text style={styles.payText}>
           {paying
             ? "Processing..."
-            : "Proceed to Payment"}
+            : shippingLoading
+            ? "Calculating Shipping..."
+            : !shippingVerified
+            ? "Verify Address & Calculate Shipping"
+            : "Pay Now"}
         </Text>
       </TouchableOpacity>
     </View>
@@ -190,6 +216,13 @@ const styles = StyleSheet.create({
     color: "#16A34A",
   },
 
+  subNote: {
+    fontSize: 11,
+    color: "#9CA3AF",
+    marginTop: -6,
+    marginBottom: 8,
+  },
+
   divider: {
     height: 1,
     backgroundColor: "#F1F1F1",
@@ -205,6 +238,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     flexDirection: "row",
     gap: 8,
+  },
+
+  payBtnDisabled: {
+    opacity: 0.6,
   },
 
   payText: {

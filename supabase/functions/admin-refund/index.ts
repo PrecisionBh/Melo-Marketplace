@@ -275,7 +275,7 @@ serve(async (req) => {
           title: "Dispute Lost",
           body: "A dispute was resolved in the buyer's favor and the order was refunded.",
           data: {
-            route: `/seller-hub/orders/${order.id}`,
+            route: `/orders/${order.id}`,
           },
           dedupeKey: `admin-refund-seller-${order.id}`,
         }),

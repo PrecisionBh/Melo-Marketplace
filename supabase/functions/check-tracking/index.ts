@@ -218,7 +218,7 @@ serve(async (req) => {
                   type: "order",
                   title: "Return In Transit",
                   body: "The buyer has shipped the return.",
-                  data: { route: `/seller-hub/orders/${order.id}` },
+                  data: { route: `/orders/${order.id}` },
                   dedupeKey: `return-in-transit-${order.id}`,
                 }),
               })
@@ -236,7 +236,7 @@ serve(async (req) => {
                   type: "order",
                   title: "Return Delivered",
                   body: "The returned item has been delivered.",
-                  data: { route: `/seller-hub/orders/${order.id}` },
+                  data: { route: `/orders/${order.id}` },
                   dedupeKey: `return-delivered-${order.id}`,
                 }),
               })

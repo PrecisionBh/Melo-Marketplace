@@ -18,21 +18,17 @@ import {
 } from "react-native"
 
 export default function ReturnAddressScreen() {
-  const [loading, setLoading] =
-    useState(false)
+  const [loading, setLoading] = useState(false)
 
-  const [fullName, setFullName] =
-    useState("")
-  const [line1, setLine1] =
-    useState("")
-  const [line2, setLine2] =
-    useState("")
-  const [city, setCity] =
-    useState("")
-  const [state, setState] =
-    useState("")
-  const [zip, setZip] =
-    useState("")
+  const [fullName, setFullName] = useState("")
+  const [line1, setLine1] = useState("")
+  const [line2, setLine2] = useState("")
+  const [city, setCity] = useState("")
+  const [state, setState] = useState("")
+  const [zip, setZip] = useState("")
+
+  const [showVerifyModal, setShowVerifyModal] = useState(false)
+  const [verifiedAddress, setVerifiedAddress] = useState<any>(null)
 
   useEffect(() => {
     loadAddress()
@@ -40,52 +36,106 @@ export default function ReturnAddressScreen() {
 
   const loadAddress = async () => {
     try {
-      const { data: userData } =
-        await supabase.auth.getUser()
-
-      const userId =
-        userData?.user?.id
-
+      const { data: userData } = await supabase.auth.getUser()
+      const userId = userData?.user?.id
       if (!userId) return
 
-      const { data } =
-        await supabase
-          .from("profiles")
-          .select(`
-            return_full_name,
-            return_address_line1,
-            return_address_line2,
-            return_city,
-            return_state,
-            return_zip
-          `)
-          .eq("id", userId)
-          .single()
+      const { data } = await supabase
+        .from("profiles")
+        .select(`
+          shipping_name,
+          address_line1,
+          address_line2,
+          city,
+          state,
+          postal_code
+        `)
+        .eq("id", userId)
+        .single()
 
       if (!data) return
 
-      setFullName(
-        data.return_full_name ?? ""
-      )
-      setLine1(
-        data.return_address_line1 ?? ""
-      )
-      setLine2(
-        data.return_address_line2 ?? ""
-      )
-      setCity(
-        data.return_city ?? ""
-      )
-      setState(
-        data.return_state ?? ""
-      )
-      setZip(
-        data.return_zip ?? ""
-      )
+      setFullName(data.shipping_name ?? "")
+      setLine1(data.address_line1 ?? "")
+      setLine2(data.address_line2 ?? "")
+      setCity(data.city ?? "")
+      setState(data.state ?? "")
+      setZip(data.postal_code ?? "")
     } catch (err) {
       handleAppError(err, {
-        fallbackMessage:
-          "Failed to load address.",
+        fallbackMessage: "Failed to load address.",
+      })
+    }
+  }
+
+  const verifyAddress = async () => {
+    try {
+      const res = await fetch(
+        "https://ccrrxdpfepsoghtgtpwx.functions.supabase.co/verify-address",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            address_line1: line1,
+            address_line2: line2,
+            city,
+            state,
+            postal_code: zip,
+          }),
+        }
+      )
+
+      return await res.json()
+    } catch {
+      return { fallback: true }
+    }
+  }
+
+  const deactivateUserListings = async () => {
+    try {
+      const { data: userData } = await supabase.auth.getUser()
+      const userId = userData?.user?.id
+      if (!userId) return
+
+      await supabase
+        .from("listings")
+        .update({ status: "inactive" })
+        .eq("user_id", userId)
+        .eq("status", "active")
+        .eq("is_sold", false)
+
+      Alert.alert(
+        "Listings Deactivated",
+        "Your active listings were turned off because you removed your address."
+      )
+    } catch (err) {
+      console.warn("⚠️ Deactivation error:", err)
+    }
+  }
+
+  const saveWithAddress = async (addr: any) => {
+    try {
+      const { data: userData } = await supabase.auth.getUser()
+      const userId = userData?.user?.id
+      if (!userId) return
+
+      await supabase
+        .from("profiles")
+        .update({
+          shipping_name: fullName.trim(),
+          address_line1: addr?.street1 ?? line1.trim(),
+          address_line2: addr?.street2 ?? line2.trim(),
+          city: addr?.city ?? city.trim(),
+          state: addr?.state ?? state.trim(),
+          postal_code: addr?.zip ?? zip.trim(),
+        })
+        .eq("id", userId)
+
+      Alert.alert("Saved", "Address saved successfully.")
+      await loadAddress()
+    } catch (err) {
+      handleAppError(err, {
+        fallbackMessage: "Failed to save address.",
       })
     }
   }
@@ -94,43 +144,44 @@ export default function ReturnAddressScreen() {
     try {
       setLoading(true)
 
-      const { data: userData } =
-        await supabase.auth.getUser()
+      const removingAddress =
+        !line1.trim() ||
+        !city.trim() ||
+        !state.trim() ||
+        !zip.trim()
 
-      const userId =
-        userData?.user?.id
+      const verifyData = await verifyAddress()
 
-      if (!userId) return
+      if (verifyData?.fallback) {
+        if (removingAddress) await deactivateUserListings()
+        return saveWithAddress({})
+      }
 
-      const { error } =
-        await supabase
-          .from("profiles")
-          .update({
-            return_full_name:
-              fullName.trim(),
-            return_address_line1:
-              line1.trim(),
-            return_address_line2:
-              line2.trim(),
-            return_city:
-              city.trim(),
-            return_state:
-              state.trim(),
-            return_zip:
-              zip.trim(),
-          })
-          .eq("id", userId)
+      if (!verifyData?.verifications?.delivery?.success) {
+        Alert.alert("Invalid Address", "Enter a valid address.")
+        return
+      }
 
-      if (error) throw error
+      const verified = verifyData
 
-      Alert.alert(
-        "Saved",
-        "Return address updated successfully."
-      )
+      const isDifferent =
+        verified?.street1 !== line1 ||
+        verified?.city !== city ||
+        verified?.state !== state ||
+        verified?.zip !== zip
+
+      if (isDifferent) {
+        setVerifiedAddress(verified)
+        setShowVerifyModal(true)
+        return
+      }
+
+      if (removingAddress) await deactivateUserListings()
+
+      await saveWithAddress(verified)
     } catch (err) {
       handleAppError(err, {
-        fallbackMessage:
-          "Failed to save address.",
+        fallbackMessage: "Failed to save address.",
       })
     } finally {
       setLoading(false)
@@ -143,94 +194,81 @@ export default function ReturnAddressScreen() {
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={
-          Platform.OS === "ios"
-            ? "padding"
-            : "height"
-        }
-        keyboardVerticalOffset={
-          Platform.OS === "ios"
-            ? 90
-            : 20
-        }
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
-        <ScrollView
-          contentContainerStyle={
-            styles.content
-          }
-          keyboardShouldPersistTaps="handled"
-        >
-          <Text style={styles.pageTitle}>
-            Return Address
-          </Text>
+        <ScrollView contentContainerStyle={styles.content}>
+          <Text style={styles.pageTitle}>Shipping Address</Text>
 
           <View style={styles.card}>
             <Text style={styles.helper}>
-              This address will be used to
-              auto-fill your return labels
-              and may be used for future
-              shipping defaults.
+              This address is required for selling and shipping.
             </Text>
 
-            <TextInput
-              value={fullName}
-              onChangeText={
-                setFullName
-              }
-              placeholder="Full Name"
-              style={styles.input}
-            />
-
-            <TextInput
-              value={line1}
-              onChangeText={setLine1}
-              placeholder="Address Line 1"
-              style={styles.input}
-            />
-
-            <TextInput
-              value={line2}
-              onChangeText={setLine2}
-              placeholder="Address Line 2 (Optional)"
-              style={styles.input}
-            />
-
-            <TextInput
-              value={city}
-              onChangeText={setCity}
-              placeholder="City"
-              style={styles.input}
-            />
-
-            <TextInput
-              value={state}
-              onChangeText={setState}
-              placeholder="State"
-              style={styles.input}
-            />
-
-            <TextInput
-              value={zip}
-              onChangeText={setZip}
-              placeholder="ZIP Code"
-              keyboardType="number-pad"
-              style={styles.input}
-            />
+            <TextInput value={fullName} onChangeText={setFullName} placeholder="Full Name" style={styles.input} />
+            <TextInput value={line1} onChangeText={setLine1} placeholder="Address Line 1" style={styles.input} />
+            <TextInput value={line2} onChangeText={setLine2} placeholder="Address Line 2 (Optional)" style={styles.input} />
+            <TextInput value={city} onChangeText={setCity} placeholder="City" style={styles.input} />
+            <TextInput value={state} onChangeText={setState} placeholder="State" style={styles.input} />
+            <TextInput value={zip} onChangeText={setZip} placeholder="ZIP Code" style={styles.input} />
           </View>
 
           <TouchableOpacity
             style={styles.saveBtn}
-            onPress={saveAddress}
-            disabled={loading}
+            onPress={() => {
+              const removingAddress =
+                !line1.trim() ||
+                !city.trim() ||
+                !state.trim() ||
+                !zip.trim()
+
+              if (removingAddress) {
+                Alert.alert(
+                  "Remove Address?",
+                  "This will deactivate all active listings.",
+                  [
+                    { text: "Cancel", style: "cancel" },
+                    { text: "Continue", onPress: saveAddress },
+                  ]
+                )
+                return
+              }
+
+              saveAddress()
+            }}
           >
             <Text style={styles.saveText}>
-              {loading
-                ? "Saving..."
-                : "Save Address"}
+              {loading ? "Verifying..." : "Save Address"}
             </Text>
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* VERIFY MODAL */}
+      {showVerifyModal && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>
+              We found a better formatted address
+            </Text>
+
+            <Text style={styles.modalText}>
+              {verifiedAddress?.street1}
+              {"\n"}
+              {verifiedAddress?.city}, {verifiedAddress?.state} {verifiedAddress?.zip}
+            </Text>
+
+            <TouchableOpacity
+              style={styles.primaryBtn}
+              onPress={() => {
+                setShowVerifyModal(false)
+                saveWithAddress(verifiedAddress)
+              }}
+            >
+              <Text style={styles.primaryText}>Use Verified</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
       <GlobalFooter />
     </View>
@@ -238,37 +276,26 @@ export default function ReturnAddressScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: "#F8F8F8",
-  },
-
-  content: {
-    padding: 16,
-    paddingBottom: 120,
-  },
+  screen: { flex: 1, backgroundColor: "#F8F8F8" },
+  content: { padding: 16, paddingBottom: 120 },
 
   pageTitle: {
     fontSize: 28,
     fontWeight: "800",
-    color: "#111",
     marginBottom: 24,
   },
 
   card: {
     backgroundColor: "#fff",
     borderRadius: 22,
-    borderWidth: 1,
-    borderColor: "#E8E8E8",
     padding: 18,
     marginBottom: 18,
   },
 
   helper: {
     fontSize: 13,
-    color: "#6B7280",
-    lineHeight: 20,
     marginBottom: 16,
+    color: "#6B7280",
   },
 
   input: {
@@ -276,9 +303,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E5E7EB",
     borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    fontSize: 14,
+    padding: 14,
     marginBottom: 12,
   },
 
@@ -293,6 +318,46 @@ const styles = StyleSheet.create({
   saveText: {
     color: "#fff",
     fontWeight: "800",
+  },
+
+  modalOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  modalCard: {
+    backgroundColor: "#fff",
+    borderRadius: 20,
+    padding: 24,
+    width: "85%",
+  },
+
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    marginBottom: 12,
+  },
+
+  modalText: {
     fontSize: 15,
+    marginBottom: 16,
+  },
+
+  primaryBtn: {
+    backgroundColor: "#D97732",
+    padding: 14,
+    borderRadius: 14,
+    alignItems: "center",
+  },
+
+  primaryText: {
+    color: "#fff",
+    fontWeight: "800",
   },
 })

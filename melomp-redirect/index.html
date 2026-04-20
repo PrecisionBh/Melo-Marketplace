@@ -39,17 +39,6 @@
 
       const ts = Date.now();
 
-      /**
-       * CRITICAL:
-       * We now deep link to melomp://wallet (NOT seller-hub/wallet)
-       * because you created:
-       * app/wallet.tsx (redirect shim)
-       *
-       * This prevents:
-       * - unmatched route
-       * - //wallet bug
-       * - Stripe deep link inconsistencies
-       */
       const deepLink = "melomp://wallet?from=stripe&ts=" + ts;
 
       console.log("🚀 Redirecting to:", deepLink);

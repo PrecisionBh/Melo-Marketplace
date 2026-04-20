@@ -321,7 +321,7 @@ try {
         type: "order",
         title: "New Order Paid",
         body: "A buyer has paid. Prepare the order for shipment.",
-        data: { route: `/seller-hub/orders/${orderId}` },
+        data: { route: `/orders/${orderId}` },
         dedupeKey: `order-paid-seller-${orderId}`,
       }),
     })
@@ -442,117 +442,152 @@ serve(async (req) => {
     return new Response("Invalid signature", { status: 400 })
   }
 
+  // ================================
+  // 🛑 CANCEL / EXPIRED CHECKOUT
+  // ================================
+  if (event.type === "checkout.session.expired") {
+    const session = event.data.object as Stripe.Checkout.Session
+    const metadata = session.metadata || {}
+
+    const orderId = metadata.order_id
+    const orderIdsRaw = metadata.order_ids
+
+    console.log("⚠️ Checkout session expired", {
+      orderId,
+      orderIdsRaw,
+    })
+
+    try {
+      if (orderId) {
+        await supabase
+          .from("orders")
+          .update({
+            status: "cancelled_payment",
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", orderId)
+          .eq("status", "pending_payment")
+      }
+
+      if (orderIdsRaw) {
+        const orderIds: string[] = JSON.parse(orderIdsRaw)
+
+        for (const id of orderIds) {
+          await supabase
+            .from("orders")
+            .update({
+              status: "cancelled_payment",
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", id)
+            .eq("status", "pending_payment")
+        }
+      }
+
+      console.log("🛑 Orders marked as cancelled_payment")
+    } catch (err) {
+      console.error("❌ Failed to cancel expired session", err)
+    }
+
+    return json(200, { received: true })
+  }
+
+  // ================================
+  // ✅ SUCCESS HANDLER
+  // ================================
   if (
-  event.type === "checkout.session.completed" ||
-  event.type === "checkout.session.async_payment_succeeded"
-) {
-  const session = event.data.object as Stripe.Checkout.Session
-  const metadata = session.metadata || {}
+    event.type === "checkout.session.completed" ||
+    event.type === "checkout.session.async_payment_succeeded"
+  ) {
+    const session = event.data.object as Stripe.Checkout.Session
+    const metadata = session.metadata || {}
 
-  const orderId = metadata.order_id
-const orderIdsRaw = metadata.order_ids
-const userId = metadata.user_id
-const type = metadata.type
+    const orderId = metadata.order_id
+    const orderIdsRaw = metadata.order_ids
 
-// ---------------- SINGLE ORDER ----------------
-if (orderId) {
-  return await markOrderPaid({
-    orderId,
-    sessionId: session.id,
-    paymentIntentId:
-      session.payment_intent as string | null,
-    amountTotal:
-      session.amount_total ?? null,
-  })
-}
-
-// ---------------- MULTI ORDER CART ----------------
-if (orderIdsRaw) {
-  try {
-    const orderIds: string[] =
-      JSON.parse(orderIdsRaw)
-
-    for (const id of orderIds) {
-      await markOrderPaid({
-        orderId: id,
+    // 🔹 SINGLE ORDER
+    if (orderId) {
+      return await markOrderPaid({
+        orderId,
         sessionId: session.id,
         paymentIntentId:
           session.payment_intent as string | null,
+        amountTotal:
+          session.amount_total ?? null,
       })
     }
 
-    return json(200, {
-      received: true,
-    })
-  } catch (err) {
-    console.error(
-      "❌ Failed parsing order_ids:",
-      err
-    )
+    // 🔹 MULTI ORDER CART
+    if (orderIdsRaw) {
+      try {
+        const orderIds: string[] = JSON.parse(orderIdsRaw)
 
-    return json(400, {
-      error:
-        "Invalid order_ids metadata",
-    })
-  }
-}
+        for (const id of orderIds) {
+          await markOrderPaid({
+            orderId: id,
+            sessionId: session.id,
+            paymentIntentId:
+              session.payment_intent as string | null,
+          })
+        }
 
-return json(200, { received: true })
-}
+        return json(200, { received: true })
+      } catch (err) {
+        console.error("❌ Failed parsing order_ids:", err)
+        return json(400, { error: "Invalid order_ids metadata" })
+      }
+    }
 
-if (event.type === "payout.paid") {
-  const payout = event.data.object as Stripe.Payout
-  const stripePayoutId = payout.id
-
-  console.log("💸 Payout paid webhook received", {
-    payout_id: stripePayoutId,
-    status: payout.status,
-    amount: payout.amount,
-  })
-
-  await supabase
-    .from("payouts")
-    .update({
-      status: "paid",
-      updated_at: new Date().toISOString(),
-    })
-    .eq("stripe_payout_id", stripePayoutId)
-
-  return json(200, { received: true })
-}
-
-if (event.type === "customer.subscription.updated") {
-  const subscription = event.data.object as Stripe.Subscription
-
-  if (subscription.cancel_at_period_end === true) {
-    console.log("📅 Melo Pro scheduled to cancel at period end:", subscription.id)
     return json(200, { received: true })
   }
-}
 
-if (event.type === "customer.subscription.deleted") {
-  const subscription = event.data.object as Stripe.Subscription
-  const stripeCustomerId = subscription.customer as string
+  // ================================
+  // 💸 PAYOUT
+  // ================================
+  if (event.type === "payout.paid") {
+    const payout = event.data.object as Stripe.Payout
 
-  console.log("🚫 Melo Pro subscription fully canceled:", subscription.id)
+    await supabase
+      .from("payouts")
+      .update({
+        status: "paid",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("stripe_payout_id", payout.id)
 
-  const { error } = await supabase
-    .from("profiles")
-    .update({
-      is_pro: false,
-      stripe_subscription_id: null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("stripe_customer_id", stripeCustomerId)
-
-  if (error) {
-    console.error("❌ Failed to deactivate Melo Pro:", error)
-    return json(500, { error: "Failed to deactivate Melo Pro" })
+    return json(200, { received: true })
   }
 
-  console.log("✅ Melo Pro access revoked")
-  return json(200, { received: true })
-}
+  // ================================
+  // 📅 SUB UPDATE (noop)
+  // ================================
+  if (event.type === "customer.subscription.updated") {
+    return json(200, { received: true })
+  }
 
-return json(200, { received: true })
+  // ================================
+  // 🚫 SUB DELETED
+  // ================================
+  if (event.type === "customer.subscription.deleted") {
+    const subscription = event.data.object as Stripe.Subscription
+    const stripeCustomerId = subscription.customer as string
+
+    const { error } = await supabase
+      .from("profiles")
+      .update({
+        is_pro: false,
+        stripe_subscription_id: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("stripe_customer_id", stripeCustomerId)
+
+    if (error) {
+      console.error("❌ Failed to deactivate Melo Pro:", error)
+      return json(500, { error: "Failed to deactivate Melo Pro" })
+    }
+
+    return json(200, { received: true })
+  }
+
+  return json(200, { received: true })
 })
