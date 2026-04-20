@@ -1,5 +1,11 @@
 import { Ionicons } from "@expo/vector-icons"
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import {
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native"
 
 type Props = {
   category: string | null
@@ -7,13 +13,21 @@ type Props = {
   conditionSubtext?: string
   onPressCategory: () => void
   onPressCondition: () => void
+
+  // 👇 NEW
+  size?: string | null
+  setSize?: (val: string) => void
+
+  quantity?: string
+  setQuantity?: (val: string) => void
+  isPro?: boolean
 }
 
 const CATEGORY_LABEL_MAP: Record<string, string> = {
   electronics: "Electronics",
-  fashion: "Fashion",
-  sports_outdoors: "Sports & Outdoors",
+  clothing_apparel: "Clothing / Apparel",
   home_garden: "Home & Garden",
+  sports_outdoors: "Sports & Outdoors",
   collectibles: "Collectibles",
   automotive: "Automotive",
   toys_games: "Toys & Games",
@@ -21,8 +35,10 @@ const CATEGORY_LABEL_MAP: Record<string, string> = {
   beauty_health: "Beauty & Health",
   tools: "Tools",
   music_instruments: "Music / Instruments",
-  hobbies: "Hobbies",
   pet_supplies: "Pet Supplies",
+  books_media: "Books & Media",
+  office_supplies: "Office Supplies",
+  art_handmade: "Art & Handmade",
   other: "Other",
 }
 
@@ -33,6 +49,8 @@ const CONDITION_LABEL_MAP: Record<string, string> = {
   fair: "Fair",
   poor: "Poor",
 }
+
+const SIZES = ["XS","S","M","L","XL","2XL","3XL","4XL","5XL"]
 
 function formatCategory(value: string | null) {
   if (!value) return "Select category"
@@ -50,21 +68,79 @@ export default function CreateListingSelectors({
   conditionSubtext,
   onPressCategory,
   onPressCondition,
+  size,
+  setSize,
+  quantity,
+  setQuantity,
+  isPro,
 }: Props) {
   return (
     <View style={styles.wrap}>
+      {/* CATEGORY */}
       <SelectorField
         label="Category"
         value={formatCategory(category)}
         onPress={onPressCategory}
       />
 
+      {/* CONDITION */}
       <SelectorField
         label="Condition"
         value={formatCondition(condition)}
         subtext={conditionSubtext}
         onPress={onPressCondition}
       />
+
+      {/* 👕 SIZE (ONLY FOR APPAREL) */}
+      {category === "clothing_apparel" && (
+        <View style={styles.section}>
+          <Text style={styles.label}>Size</Text>
+
+          <View style={styles.sizeWrap}>
+            {SIZES.map((s) => (
+              <TouchableOpacity
+                key={s}
+                onPress={() => setSize?.(s)}
+                style={[
+                  styles.sizePill,
+                  size === s && styles.sizePillActive,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.sizeText,
+                    size === s && styles.sizeTextActive,
+                  ]}
+                >
+                  {s}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      )}
+
+      {/* 📦 QUANTITY (PRO ONLY) */}
+      {isPro && (
+        <View style={styles.section}>
+          <Text style={styles.label}>Quantity</Text>
+
+          <TextInput
+            value={quantity}
+            onChangeText={setQuantity}
+            keyboardType="numeric"
+            style={styles.input}
+            placeholder="Enter quantity"
+          />
+        </View>
+      )}
+
+      {/* 🔒 FREE USER NOTICE */}
+      {!isPro && (
+        <Text style={styles.lockedText}>
+          Quantity limited to 1 on free plan
+        </Text>
+      )}
     </View>
   )
 }
@@ -95,11 +171,7 @@ function SelectorField({
         )}
       </View>
 
-      <Ionicons
-        name="chevron-forward"
-        size={18}
-        color="#999"
-      />
+      <Ionicons name="chevron-forward" size={18} color="#999" />
     </TouchableOpacity>
   )
 }
@@ -139,5 +211,59 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#777",
     marginTop: 3,
+  },
+
+  /* 👕 SIZE */
+
+  section: {
+    backgroundColor: "#fff",
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "#E8E8E8",
+    padding: 16,
+  },
+
+  sizeWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+
+  sizePill: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "#eee",
+  },
+
+  sizePillActive: {
+    backgroundColor: "#D97732",
+  },
+
+  sizeText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#111",
+  },
+
+  sizeTextActive: {
+    color: "#fff",
+  },
+
+  /* 📦 QUANTITY */
+
+  input: {
+    borderWidth: 1,
+    borderColor: "#E8E8E8",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+  },
+
+  lockedText: {
+    fontSize: 12,
+    color: "#888",
+    marginTop: 6,
   },
 })

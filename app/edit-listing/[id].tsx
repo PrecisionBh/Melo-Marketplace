@@ -54,11 +54,12 @@ type ListingRow = {
   quantity_available: number | null
   is_boosted: boolean | null
   is_mega_boost: boolean | null
+  size: string | null
 }
 
 const MARKETPLACE_CATEGORIES: SelectorOption[] = [
   { label: "Electronics", value: "electronics" },
-  { label: "Fashion", value: "fashion" },
+  { label: "Clothing / Apparel", value: "clothing_apparel" },
   { label: "Home & Garden", value: "home_garden" },
   { label: "Sports & Outdoors", value: "sports_outdoors" },
   { label: "Collectibles", value: "collectibles" },
@@ -152,6 +153,7 @@ export default function EditListingScreen() {
   ] = useState(false)
 
   const [quantity, setQuantity] = useState("1")
+  const [size, setSize] = useState<string | null>(null)
   const [boostsRemaining, setBoostsRemaining] =
     useState<number>(0)
   const [megaBoostsRemaining, setMegaBoostsRemaining] =
@@ -255,9 +257,17 @@ export default function EditListingScreen() {
       }
 
       setTitle(data.title ?? "")
-      setDescription(data.description ?? "")
-      setCategory(data.category ?? null)
-      setCondition(data.condition ?? null)
+setDescription(data.description ?? "")
+
+const safeCategory =
+  data.category === "fashion"
+    ? "clothing_apparel"
+    : data.category
+
+setCategory(safeCategory ?? null)
+
+setCondition(data.condition ?? null)
+setSize(data.size || null)
 
       setPrice(
         typeof data.price === "number"
@@ -394,10 +404,10 @@ export default function EditListingScreen() {
       const updatePayload = {
         title: title.trim(),
         description: description.trim() || null,
-        sport_type: "billiards",
-        brand: "precision",
+        brand: null,
         category,
         condition,
+        size: category === "clothing_apparel" ? size : null,
         price: parsedPrice,
         allow_offers: allowOffers,
         min_offer: allowOffers
@@ -529,20 +539,27 @@ export default function EditListingScreen() {
           />
 
           <CreateListingSelectors
-            category={category}
-            condition={condition}
-            conditionSubtext={
-              CONDITIONS.find(
-                (c) => c.value === condition
-              )?.subtext || ""
-            }
-            onPressCategory={() =>
-              setShowCategoryModal(true)
-            }
-            onPressCondition={() =>
-              setShowConditionModal(true)
-            }
-          />
+  category={category}
+  condition={condition}
+  conditionSubtext={
+    CONDITIONS.find(
+      (c) => c.value === condition
+    )?.subtext || ""
+  }
+  onPressCategory={() =>
+    setShowCategoryModal(true)
+  }
+  onPressCondition={() =>
+    setShowConditionModal(true)
+  }
+
+  size={size}
+  setSize={setSize}
+
+  quantity={quantity}
+  setQuantity={setQuantity}
+  isPro={isPro}
+/>
 
           <CreateListingShipping
             shippingType={

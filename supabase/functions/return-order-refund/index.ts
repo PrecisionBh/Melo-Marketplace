@@ -153,10 +153,9 @@ serve(async (req) => {
     const now = new Date().toISOString()
 
     if (order.wallet_credited && typeof order.seller_net_cents === "number") {
-      await supabase.rpc("increment_wallet_pending", {
-        p_user_id: order.seller_id,
-        p_amount_cents: -order.seller_net_cents,
-      })
+      await supabase.rpc("recalculate_wallet", {
+  p_user_id: order.seller_id,
+})
     }
 
     await supabase

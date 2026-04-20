@@ -1,8 +1,8 @@
 import {
-    Image,
-    StyleSheet,
-    Text,
-    View,
+  Image,
+  StyleSheet,
+  Text,
+  View,
 } from "react-native"
 
 const STATUS_CONFIG: Record<
@@ -18,49 +18,41 @@ const STATUS_CONFIG: Record<
     bg: "#FEF3C7",
     text: "#92400E",
   },
-
   shipped: {
     label: "Shipped",
     bg: "#DBEAFE",
     text: "#1D4ED8",
   },
-
   in_transit: {
     label: "In Transit",
     bg: "#E0E7FF",
     text: "#4338CA",
   },
-
   out_for_delivery: {
     label: "Out For Delivery",
     bg: "#DDD6FE",
     text: "#6D28D9",
   },
-
   delivered: {
     label: "Delivered",
     bg: "#CCFBF1",
     text: "#0F766E",
   },
-
   completed: {
     label: "Completed",
     bg: "#DCFCE7",
     text: "#15803D",
   },
-
   return_started: {
     label: "Return Started",
     bg: "#FEF3C7",
     text: "#92400E",
   },
-
   return_processing: {
     label: "Return Processing",
     bg: "#FECACA",
     text: "#991B1B",
   },
-
   disputed: {
     label: "Disputed",
     bg: "#FECACA",
@@ -87,15 +79,10 @@ export default function OrderSummaryCard({
     if (order.tracking_status === "delivered")
       return "delivered"
 
-    if (
-      order.tracking_status ===
-      "out_for_delivery"
-    )
+    if (order.tracking_status === "out_for_delivery")
       return "out_for_delivery"
 
-    if (
-      order.tracking_status === "in_transit"
-    )
+    if (order.tracking_status === "in_transit")
       return "in_transit"
 
     return order.status
@@ -106,6 +93,7 @@ export default function OrderSummaryCard({
     STATUS_CONFIG.paid
 
   const image =
+    order.listing_snapshot?.image ??
     order.listing_snapshot?.image_urls?.[0] ??
     order.image_url
 
@@ -140,12 +128,14 @@ export default function OrderSummaryCard({
 
           <Text style={styles.orderNum}>
             Order #
-            {order.public_order_number ??
-              order.id}
+            {order.public_order_number ?? order.id}
           </Text>
 
           <Text style={styles.meta}>
             Qty: {quantity}
+            {order.listing_snapshot?.size
+              ? ` • Size: ${order.listing_snapshot.size}`
+              : ""}
           </Text>
 
           <Text style={styles.price}>

@@ -18,7 +18,7 @@ import { handleAppError } from "@/lib/errors/appError"
 import { supabase } from "@/lib/supabase"
 
 import { useFocusEffect, useRouter } from "expo-router"
-import { useCallback, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 
 import {
   ActivityIndicator,
@@ -45,9 +45,11 @@ type SelectorOption = {
 
 /* ---------------- SELECTOR DATA ---------------- */
 
+/* ---------------- SELECTOR DATA ---------------- */
+
 const MARKETPLACE_CATEGORIES: SelectorOption[] = [
   { label: "Electronics", value: "electronics" },
-  { label: "Fashion", value: "fashion" },
+  { label: "Clothing / Apparel", value: "clothing_apparel" },
   { label: "Home & Garden", value: "home_garden" },
   { label: "Sports & Outdoors", value: "sports_outdoors" },
   { label: "Collectibles", value: "collectibles" },
@@ -91,6 +93,7 @@ export default function CreateListingScreen() {
   const [isMegaBoosted, setIsMegaBoosted] = useState(false)
 
   const [quantity, setQuantity] = useState("1")
+  const [size, setSize] = useState<string | null>(null)
   const [boostsRemaining, setBoostsRemaining] = useState<number>(0)
   const [megaBoostsRemaining, setMegaBoostsRemaining] = useState<number>(0)
 
@@ -121,6 +124,12 @@ const [height, setHeight] = useState("")
   const [showLimitModal, setShowLimitModal] = useState(false)
 
 /* ---------------- RESET CATEGORY + BRAND WHEN SPORT CHANGES ---------------- */
+
+useEffect(() => {
+  if (category !== "clothing_apparel") {
+    setSize(null)
+  }
+}, [category])
 
 const handleCreateListing = async () => {
   if (!session?.user) return
@@ -159,6 +168,19 @@ const handleCreateListing = async () => {
     const safeQuantity = isPro
       ? Math.max(1, Number.isFinite(rawQty) ? rawQty : 1)
       : 1
+
+      if (!title.trim() || !category || !condition || images.length === 0) {
+  Alert.alert(
+    "Missing Details",
+    "Please complete all required fields."
+  )
+  return
+}
+
+if (category === "clothing_apparel" && !size) {
+  Alert.alert("Select Size", "Please select a size.")
+  return
+}
 
     if (isNaN(parsedPrice)) {
       Alert.alert("Invalid Price", "Please enter a valid price.")
@@ -207,9 +229,9 @@ const handleCreateListing = async () => {
   user_id: session.user.id,
   title: title.trim(),
   description: description.trim() || null,
-  sport_type: "billiards",
-brand: "precision",
+brand: null,
   category: category,
+  size: category === "clothing_apparel" ? size : null,
   condition: condition,
   price: parsedPrice,
   allow_offers: allowOffers,
@@ -341,14 +363,21 @@ return (
         />
 
         <CreateListingSelectors
-          category={category}
-          condition={condition}
-          conditionSubtext={
-            CONDITIONS.find((c) => c.value === condition)?.subtext || ""
-          }
-          onPressCategory={() => setShowCategoryModal(true)}
-          onPressCondition={() => setShowConditionModal(true)}
-        />
+  category={category}
+  condition={condition}
+  conditionSubtext={
+    CONDITIONS.find((c) => c.value === condition)?.subtext || ""
+  }
+  onPressCategory={() => setShowCategoryModal(true)}
+  onPressCondition={() => setShowConditionModal(true)}
+
+  size={size}
+  setSize={setSize}
+
+  quantity={quantity}
+  setQuantity={setQuantity}
+  isPro={isPro}
+/>
 
         <CreateListingShipping
           shippingType={

@@ -19,12 +19,18 @@ type Props = {
 
 const DEFAULT_FILTERS: FilterOption[] = [
   { key: "all", label: "All" },
+
   { key: "electronics", label: "Electronics" },
-  { key: "fashion", label: "Clothing" },
+  { key: "clothing_apparel", label: "Clothing" },
   { key: "home_garden", label: "Home" },
   { key: "sports_outdoors", label: "Sports" },
+  { key: "automotive", label: "Auto" },
   { key: "collectibles", label: "Collectibles" },
-  { key: "automotive", label: "Automotive" },
+
+  // 🔥 collapsed groups
+  { key: "hobbies", label: "Hobbies" },       // toys, music, books
+  { key: "lifestyle", label: "Lifestyle" },   // baby, beauty, pets
+  { key: "tools", label: "Tools" },           // tools + office
   { key: "other", label: "Other" },
 ]
 
