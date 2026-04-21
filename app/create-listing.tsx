@@ -81,6 +81,7 @@ export default function CreateListingScreen() {
   const router = useRouter()
 
   const [images, setImages] = useState<string[]>([])
+  const [video, setVideo] = useState<any>(null)
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
   const [category, setCategory] = useState<string | null>(null)
@@ -221,6 +222,38 @@ if (category === "clothing_apparel" && !size) {
 
     const uploadedImageUrls = await Promise.all(uploadPromises)
 
+    /* ---------------- VIDEO UPLOAD ---------------- */
+
+let videoUrl = null
+
+if (video) {
+  try {
+    const response = await fetch(video.uri)
+    const arrayBuffer = await response.arrayBuffer()
+
+    const fileName = `${session.user.id}/${Date.now()}-video.mp4`
+
+    const { error: uploadError } = await supabase.storage
+      .from("listing-videos")
+      .upload(fileName, arrayBuffer, {
+        contentType: "video/mp4",
+        upsert: false,
+      })
+
+    if (uploadError) {
+      console.log("Video upload error:", uploadError)
+      throw uploadError
+    }
+
+    const { data } = supabase.storage
+      .from("listing-videos")
+      .getPublicUrl(fileName)
+
+    videoUrl = data.publicUrl
+  } catch (err) {
+    console.warn("Video upload failed:", err)
+  }
+}
     /* ---------------- INSERT LISTING ---------------- */
 
     const { data, error } = await supabase
@@ -360,10 +393,12 @@ return (
     {hasReturnAddress && (
       <ScrollView contentContainerStyle={styles.content}>
         <ImageUpload
-          images={images}
-          setImages={setImages}
-          max={5}
-        />
+  images={images}
+  setImages={setImages}
+  video={video}
+  setVideo={setVideo}
+  max={5}
+/>
 
         <CreateListingDetails
           title={title}

@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons"
+import { ResizeMode, Video } from "expo-av"
 import * as ImageManipulator from "expo-image-manipulator"
 import * as ImagePicker from "expo-image-picker"
 import { useState } from "react"
@@ -19,15 +20,58 @@ import { handleAppError } from "@/lib/errors/appError"
 type Props = {
   images: string[]
   setImages: (images: string[] | ((prev: string[]) => string[])) => void
+
+  // 🔥 ADD VIDEO (only addition)
+  video: any
+  setVideo: (video: any) => void
+
   max?: number
 }
 
 export default function ImageUpload({
   images,
   setImages,
+  video,
+  setVideo,
   max = 5,
 }: Props) {
   const [showPicker, setShowPicker] = useState(false)
+
+  /* ---------------- VIDEO ---------------- */
+
+  const pickVideo = async () => {
+    try {
+      setShowPicker(false)
+
+      if (video) {
+        Alert.alert("Limit reached", "Only 1 video allowed.")
+        return
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["videos"],
+        videoMaxDuration: 7,
+        quality: 0.7,
+      })
+
+      if (!result.canceled && result.assets?.length > 0) {
+        const asset = result.assets[0]
+
+        if (asset.duration && asset.duration > 7000) {
+          Alert.alert("Too long", "Video must be 7 seconds or less.")
+          return
+        }
+
+        setVideo(asset)
+      }
+    } catch (err) {
+      handleAppError(err, { context: "video_picker" })
+    }
+  }
+
+  const removeVideo = () => {
+    setVideo(null)
+  }
 
   /* ---------------- LIBRARY ---------------- */
 
@@ -136,11 +180,38 @@ export default function ImageUpload({
       <View style={styles.inner}>
         <Text style={styles.title}>Photos</Text>
 
+        {/* 🔥 DISCLAIMER */}
+        <Text style={styles.disclaimer}>
+          Add up to {max} photos and 1 video (max 7 seconds). Videos only appear
+          on the home feed when Mega Boosted.
+        </Text>
+
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.row}
         >
+          {video && (
+  <View style={styles.squareWrapper}>
+    <Video
+      source={{ uri: video.uri }}
+      style={styles.squareImage}
+      resizeMode={ResizeMode.COVER}
+      isMuted
+      isLooping
+      shouldPlay
+    />
+
+    <TouchableOpacity
+      style={styles.deleteButton}
+      onPress={removeVideo}
+    >
+      <Ionicons name="close" size={14} color="#fff" />
+    </TouchableOpacity>
+  </View>
+)}
+
+          {/* 🖼 IMAGES (UNCHANGED) */}
           {images.map((uri, index) => (
             <View key={`${uri}-${index}`} style={styles.squareWrapper}>
               <Image source={{ uri }} style={styles.squareImage} />
@@ -160,12 +231,7 @@ export default function ImageUpload({
               style={styles.addSquare}
               onPress={() => setShowPicker(true)}
             >
-              <Ionicons
-                name="image-outline"
-                size={26}
-                color="#8A8A8A"
-              />
-
+              <Ionicons name="image-outline" size={26} color="#8A8A8A" />
               <Text style={styles.addText}>Add</Text>
             </TouchableOpacity>
           ))}
@@ -191,6 +257,12 @@ export default function ImageUpload({
               <Text style={styles.optionText}>Choose from Library</Text>
             </TouchableOpacity>
 
+            {/* 🔥 VIDEO OPTION */}
+            <TouchableOpacity style={styles.option} onPress={pickVideo}>
+              <Ionicons name="videocam" size={20} color="#111" />
+              <Text style={styles.optionText}>Add Video</Text>
+            </TouchableOpacity>
+
             <TouchableOpacity
               style={[styles.option, styles.cancel]}
               onPress={() => setShowPicker(false)}
@@ -205,25 +277,23 @@ export default function ImageUpload({
 }
 
 const styles = StyleSheet.create({
-  fullBleedSection: {
-    marginTop: 4,
-  },
-
-  inner: {
-    paddingBottom: 4,
-  },
+  fullBleedSection: { marginTop: 4 },
+  inner: { paddingBottom: 4 },
 
   title: {
     fontSize: 14,
     fontWeight: "700",
     color: "#111",
-    marginBottom: 14,
+    marginBottom: 6,
   },
 
-  row: {
-    flexDirection: "row",
-    gap: 12,
+  disclaimer: {
+    fontSize: 12,
+    color: "#666",
+    marginBottom: 10,
   },
+
+  row: { flexDirection: "row", gap: 12 },
 
   squareWrapper: {
     width: 110,
@@ -237,6 +307,20 @@ const styles = StyleSheet.create({
   squareImage: {
     width: "100%",
     height: "100%",
+  },
+
+  videoBox: {
+    flex: 1,
+    backgroundColor: "#111",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  videoText: {
+    color: "#fff",
+    marginTop: 4,
+    fontSize: 12,
+    fontWeight: "600",
   },
 
   addSquare: {
