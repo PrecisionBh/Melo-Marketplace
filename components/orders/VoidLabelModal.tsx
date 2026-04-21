@@ -1,4 +1,4 @@
-import React from "react"
+import React, { useState } from "react"
 import {
     ActivityIndicator,
     StyleSheet,
@@ -10,7 +10,7 @@ import {
 type Props = {
   visible: boolean
   onClose: () => void
-  onConfirm: () => void
+  onConfirm: () => Promise<void>
   loading?: boolean
 }
 
@@ -20,7 +20,31 @@ const VoidLabelModal = ({
   onConfirm,
   loading,
 }: Props) => {
+  const [success, setSuccess] = useState(false)
+  const [errorMsg, setErrorMsg] = useState("")
+
   if (!visible) return null
+
+  const handleConfirm = async () => {
+    if (loading) return
+
+    try {
+      setErrorMsg("")
+      setSuccess(false)
+
+      await onConfirm()
+
+      setSuccess(true)
+
+      // 🔥 fallback alert (optional but nice)
+      setTimeout(() => {
+        onClose()
+      }, 1200)
+    } catch (err: any) {
+      console.log("Void error:", err)
+      setErrorMsg("Failed to void label. Please try again.")
+    }
+  }
 
   return (
     <View style={styles.overlay}>
@@ -37,10 +61,27 @@ const VoidLabelModal = ({
           Only void labels that have NOT been used.
         </Text>
 
+        {/* 🔥 SUCCESS */}
+        {success && (
+          <Text style={styles.success}>
+            Label voided successfully
+          </Text>
+        )}
+
+        {/* 🔥 ERROR */}
+        {!!errorMsg && (
+          <Text style={styles.error}>
+            {errorMsg}
+          </Text>
+        )}
+
         {/* CONFIRM */}
         <TouchableOpacity
-          style={styles.confirmBtn}
-          onPress={onConfirm}
+          style={[
+            styles.confirmBtn,
+            loading && { opacity: 0.7 },
+          ]}
+          onPress={handleConfirm}
           disabled={loading}
         >
           {loading ? (
@@ -56,6 +97,7 @@ const VoidLabelModal = ({
         <TouchableOpacity
           style={styles.cancelBtn}
           onPress={onClose}
+          disabled={loading}
         >
           <Text style={styles.cancelText}>
             Cancel
@@ -103,7 +145,19 @@ const styles = StyleSheet.create({
   warning: {
     fontSize: 12,
     color: "#DC2626",
-    marginBottom: 16,
+    marginBottom: 12,
+  },
+
+  success: {
+    color: "#16A34A",
+    fontWeight: "700",
+    marginBottom: 10,
+  },
+
+  error: {
+    color: "#DC2626",
+    fontWeight: "700",
+    marginBottom: 10,
   },
 
   confirmBtn: {

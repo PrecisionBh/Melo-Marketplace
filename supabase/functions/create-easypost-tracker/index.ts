@@ -125,6 +125,7 @@ serve(async (req) => {
               },
             },
             dedupeKey: `order-shipped-${order.id}`,
+            email: true,
           },
         }
       )

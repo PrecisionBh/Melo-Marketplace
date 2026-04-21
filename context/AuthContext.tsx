@@ -5,7 +5,7 @@ import React, { createContext, useContext, useEffect, useState } from "react"
 import { ActivityIndicator, StyleSheet, View } from "react-native"
 import { supabase } from "../lib/supabase"
 
-// ✅ NEW
+// ✅ RevenueCat
 import { initRevenueCat } from "@/lib/revenuecat"
 
 type AuthContextType = {
@@ -18,6 +18,9 @@ const AuthContext = createContext<AuthContextType>({
   loading: true,
 })
 
+// 🔥 prevent duplicate push registration
+let pushRegistered = false
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
@@ -25,6 +28,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   /* ---------------- PUSH REGISTRATION ---------------- */
 
   const registerPushToken = async (userId: string) => {
+    if (pushRegistered) return
+
     try {
       console.log("[PUSH] Registering push token...")
 
@@ -53,6 +58,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .from("profiles")
         .update({ expo_push_token: token })
         .eq("id", userId)
+
+      pushRegistered = true
     } catch (err: any) {
       console.log("[PUSH] Registration error:", err?.message ?? err)
     }
@@ -113,18 +120,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setSession(restoredSession)
         setLoading(false)
 
-        // ✅ REGISTER PUSH TOKEN
-        if (userId) {
-          registerPushToken(userId)
-        }
+        // ❌ REMOVED duplicate push + RevenueCat from here
 
-        // 🔥 NEW — INIT REVENUECAT HERE
-        if (userId) {
-          await initRevenueCat(userId)
-          console.log("🔥 RevenueCat initialized from AuthProvider")
-        }
-
-        // 🔎 BAN CHECK
+        // 🔎 BAN CHECK (still fine here)
         if (userId) {
           checkBanStatus(userId).then(async (isBanned) => {
             if (isBanned) {
@@ -150,25 +148,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         const userId = newSession?.user?.id
 
-        // ✅ REGISTER PUSH
+        // ✅ REGISTER PUSH (ONLY HERE)
         if (userId) {
           registerPushToken(userId)
         }
 
-        // 🔥 NEW — INIT AGAIN ON LOGIN / SESSION CHANGE
+        // ✅ INIT REVENUECAT (ONLY HERE)
         if (userId) {
           await initRevenueCat(userId)
-          console.log("🔥 RevenueCat re-initialized on auth change")
-        }
-
-        if (userId) {
-          checkBanStatus(userId).then(async (isBanned) => {
-            if (isBanned) {
-              console.log("[AUTH] 🚫 BANNED USER — FORCING SIGN OUT")
-              await supabase.auth.signOut()
-              setSession(null)
-            }
-          })
+          console.log("🔥 RevenueCat initialized")
         }
       }
     )

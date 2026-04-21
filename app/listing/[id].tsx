@@ -553,6 +553,7 @@ setIsSellerPro(!!data?.is_pro)
                   id: newOffer.id,
                 },
               },
+              email: false,
             },
           }
         )
@@ -715,10 +716,10 @@ const duplicateListing = async () => {
           description:
             listing.description || null,
 
-          sport_type: "billiards",
-          brand:
-            listing.brand ||
-            "precision",
+          // ✅ optional brand
+          ...(listing.brand && {
+            brand: listing.brand,
+          }),
 
           category:
             listing.category || null,
@@ -735,8 +736,7 @@ const duplicateListing = async () => {
             listing.shipping_type,
 
           shipping_price:
-            listing.shipping_price ||
-            0,
+            listing.shipping_price || 0,
 
           image_urls:
             listing.image_urls || [],
@@ -761,10 +761,12 @@ const duplicateListing = async () => {
 
     if (error) throw error
 
-    router.push(
-      `/edit-listing/${newListing.id}`
-    )
+    console.log("✅ Listing duplicated:", newListing.id)
+
+    router.push(`/edit-listing/${newListing.id}`)
   } catch (err) {
+    console.error("❌ Duplicate failed:", err)
+
     handleAppError(err, {
       fallbackMessage:
         "Failed to duplicate listing.",

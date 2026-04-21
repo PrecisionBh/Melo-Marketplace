@@ -142,6 +142,7 @@ Deno.serve(async (req) => {
             route: "/wallet",
           },
           dedupeKey: `wallet-available-${order_id}`,
+          email: true,
         },
       })
 

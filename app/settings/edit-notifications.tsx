@@ -13,98 +13,105 @@ import {
   View,
 } from "react-native"
 
+import { useAuth } from "@/context/AuthContext"
 import { handleAppError } from "@/lib/errors/appError"
+import { supabase } from "@/lib/supabase"
 
 export default function NotificationsSettingsScreen() {
-  const [notificationsEnabled, setNotificationsEnabled] =
-    useState(false)
+  const { session } = useAuth()
+  const userId = session?.user?.id
 
-  const [loading, setLoading] =
-    useState(false)
+  const [pushEnabled, setPushEnabled] = useState(false)
+  const [emailEnabled, setEmailEnabled] = useState(true)
+  const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    checkPermissionStatus()
+    loadSettings()
+    checkDevicePermission()
   }, [])
 
-  const checkPermissionStatus = async () => {
-    try {
-      const { status } =
-        await Notifications.getPermissionsAsync()
+  const loadSettings = async () => {
+    if (!userId) return
 
-      setNotificationsEnabled(
-        status === "granted"
-      )
-    } catch (err) {
-      handleAppError(err, {
-        fallbackMessage:
-          "Failed to check notification permissions.",
-        silent: true,
-      })
+    const { data } = await supabase
+      .from("profiles")
+      .select("notifications_enabled, email_notifications")
+      .eq("id", userId)
+      .single()
+
+    if (data) {
+      setPushEnabled(data.notifications_enabled !== false)
+      setEmailEnabled(data.email_notifications !== false)
     }
   }
 
-  const handleToggleNotifications =
-    async () => {
-      if (loading) return
+  const checkDevicePermission = async () => {
+    const { status } = await Notifications.getPermissionsAsync()
 
-      try {
-        setLoading(true)
-
-        if (!notificationsEnabled) {
-          const { status } =
-            await Notifications.requestPermissionsAsync()
-
-          if (status !== "granted") {
-            Alert.alert(
-              "Permission Required",
-              "Notifications are disabled at the device level. Please enable them in your phone settings."
-            )
-            return
-          }
-
-          setNotificationsEnabled(true)
-
-          Alert.alert(
-            "Notifications Enabled",
-            "You will now receive Melo alerts."
-          )
-        } else {
-          setNotificationsEnabled(false)
-
-          Alert.alert(
-            "Notifications Disabled",
-            "You can re-enable notifications anytime."
-          )
-        }
-      } catch (err) {
-        handleAppError(err, {
-          fallbackMessage:
-            "Failed to update notification settings.",
-        })
-      } finally {
-        setLoading(false)
-      }
+    if (status !== "granted") {
+      setPushEnabled(false)
     }
+  }
+
+  const togglePush = async () => {
+    if (loading) return
+
+    try {
+      setLoading(true)
+
+      let newVal = !pushEnabled
+
+      if (newVal) {
+        const { status } =
+          await Notifications.requestPermissionsAsync()
+
+        if (status !== "granted") {
+          Alert.alert(
+            "Permission Required",
+            "Enable notifications in your device settings."
+          )
+          return
+        }
+      }
+
+      setPushEnabled(newVal)
+
+      await supabase
+        .from("profiles")
+        .update({ notifications_enabled: newVal })
+        .eq("id", userId)
+
+    } catch (err) {
+      handleAppError(err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const toggleEmail = async () => {
+    const newVal = !emailEnabled
+    setEmailEnabled(newVal)
+
+    await supabase
+      .from("profiles")
+      .update({ email_notifications: newVal })
+      .eq("id", userId)
+  }
 
   return (
     <View style={styles.screen}>
       <GlobalHeader />
 
-      <ScrollView
-        contentContainerStyle={styles.content}
-      >
+      <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.pageTitle}>
           Notifications
         </Text>
 
+        {/* 🔥 PUSH */}
         <View style={styles.card}>
           <View style={styles.iconWrap}>
             <Ionicons
-              name={
-                notificationsEnabled
-                  ? "notifications"
-                  : "notifications-outline"
-              }
+              name="notifications-outline"
               size={26}
               color="#D97732"
             />
@@ -115,16 +122,13 @@ export default function NotificationsSettingsScreen() {
           </Text>
 
           <Text style={styles.text}>
-            Get real-time alerts for new
-            messages, order updates,
-            offers, and important Melo
-            activity.
+            Get real-time alerts for orders, offers, and messages.
           </Text>
 
           <View
             style={[
               styles.statusBadge,
-              notificationsEnabled
+              pushEnabled
                 ? styles.statusOn
                 : styles.statusOff,
             ]}
@@ -132,54 +136,75 @@ export default function NotificationsSettingsScreen() {
             <Text
               style={[
                 styles.statusText,
-                notificationsEnabled
+                pushEnabled
                   ? styles.statusTextOn
                   : styles.statusTextOff,
               ]}
             >
-              {notificationsEnabled
-                ? "Enabled"
-                : "Disabled"}
+              {pushEnabled ? "Enabled" : "Disabled"}
             </Text>
           </View>
 
           <TouchableOpacity
-            style={[
-              styles.toggleBtn,
-              loading && {
-                opacity: 0.6,
-              },
-            ]}
-            onPress={
-              handleToggleNotifications
-            }
-            disabled={loading}
+            style={styles.toggleBtn}
+            onPress={togglePush}
           >
-            <Ionicons
-              name={
-                notificationsEnabled
-                  ? "notifications-off"
-                  : "notifications"
-              }
-              size={18}
-              color="#fff"
-            />
-
-            <Text
-              style={styles.toggleText}
-            >
-              {notificationsEnabled
+            <Text style={styles.toggleText}>
+              {pushEnabled
                 ? "Disable Notifications"
                 : "Enable Notifications"}
             </Text>
           </TouchableOpacity>
+        </View>
 
-          <Text
-            style={styles.helperText}
-          >
-            Melo only sends relevant
-            marketplace notifications.
+        {/* 🔥 EMAIL */}
+        <View style={styles.card}>
+          <View style={styles.iconWrap}>
+            <Ionicons
+              name="mail-outline"
+              size={26}
+              color="#D97732"
+            />
+          </View>
+
+          <Text style={styles.title}>
+            Email Notifications
           </Text>
+
+          <Text style={styles.text}>
+            Receive important updates via email.
+          </Text>
+
+          <View
+            style={[
+              styles.statusBadge,
+              emailEnabled
+                ? styles.statusOn
+                : styles.statusOff,
+            ]}
+          >
+            <Text
+              style={[
+                styles.statusText,
+                emailEnabled
+                  ? styles.statusTextOn
+                  : styles.statusTextOff,
+              ]}
+            >
+              {emailEnabled ? "Enabled" : "Disabled"}
+            </Text>
+          </View>
+
+          <TouchableOpacity
+            style={styles.toggleBtn}
+            onPress={toggleEmail}
+          >
+            <Text style={styles.toggleText}>
+              {emailEnabled
+                ? "Disable Email"
+                : "Enable Email"}
+            </Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
 
@@ -188,115 +213,97 @@ export default function NotificationsSettingsScreen() {
   )
 }
 
-const styles =
-  StyleSheet.create({
-    screen: {
-      flex: 1,
-      backgroundColor:
-        "#F8F8F8",
-    },
+const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: "#F8F8F8",
+  },
 
-    content: {
-      padding: 16,
-      paddingBottom: 120,
-    },
+  content: {
+    padding: 16,
+    paddingBottom: 120,
+  },
 
-    pageTitle: {
-      fontSize: 28,
-      fontWeight: "800",
-      color: "#111",
-      marginBottom: 24,
-    },
+  pageTitle: {
+    fontSize: 28,
+    fontWeight: "800",
+    color: "#111",
+    marginBottom: 24,
+  },
 
-    card: {
-      backgroundColor:
-        "#fff",
-      borderRadius: 22,
-      borderWidth: 1,
-      borderColor: "#E8E8E8",
-      padding: 22,
-      alignItems: "center",
-    },
+  card: {
+    backgroundColor: "#fff",
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: "#E8E8E8",
+    padding: 22,
+    alignItems: "center",
+    marginBottom: 16,
+  },
 
-    iconWrap: {
-      width: 64,
-      height: 64,
-      borderRadius: 20,
-      backgroundColor:
-        "#FFF7ED",
-      alignItems: "center",
-      justifyContent:
-        "center",
-      marginBottom: 16,
-    },
+  iconWrap: {
+    width: 64,
+    height: 64,
+    borderRadius: 20,
+    backgroundColor: "#FFF7ED",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
+  },
 
-    title: {
-      fontSize: 18,
-      fontWeight: "800",
-      color: "#111",
-      marginBottom: 10,
-    },
+  title: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#111",
+    marginBottom: 10,
+  },
 
-    text: {
-      textAlign: "center",
-      fontSize: 14,
-      color: "#666",
-      lineHeight: 21,
-      marginBottom: 18,
-    },
+  text: {
+    textAlign: "center",
+    fontSize: 14,
+    color: "#666",
+    lineHeight: 21,
+    marginBottom: 18,
+  },
 
-    statusBadge: {
-      paddingHorizontal: 14,
-      paddingVertical: 7,
-      borderRadius: 999,
-      marginBottom: 20,
-    },
+  statusBadge: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 999,
+    marginBottom: 20,
+  },
 
-    statusOn: {
-      backgroundColor:
-        "#ECFDF5",
-    },
+  statusOn: {
+    backgroundColor: "#ECFDF5",
+  },
 
-    statusOff: {
-      backgroundColor:
-        "#F3F4F6",
-    },
+  statusOff: {
+    backgroundColor: "#F3F4F6",
+  },
 
-    statusText: {
-      fontSize: 12,
-      fontWeight: "800",
-    },
+  statusText: {
+    fontSize: 12,
+    fontWeight: "800",
+  },
 
-    statusTextOn: {
-      color: "#16A34A",
-    },
+  statusTextOn: {
+    color: "#16A34A",
+  },
 
-    statusTextOff: {
-      color: "#6B7280",
-    },
+  statusTextOff: {
+    color: "#6B7280",
+  },
 
-    toggleBtn: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 8,
-      backgroundColor:
-        "#D97732",
-      paddingVertical: 14,
-      paddingHorizontal: 22,
-      borderRadius: 18,
-    },
+  toggleBtn: {
+    backgroundColor: "#D97732",
+    paddingVertical: 14,
+    paddingHorizontal: 22,
+    borderRadius: 18,
+  },
 
-    toggleText: {
-      color: "#fff",
-      fontWeight: "800",
-      fontSize: 14,
-    },
-
-    helperText: {
-      marginTop: 14,
-      textAlign: "center",
-      fontSize: 12,
-      color: "#888",
-      lineHeight: 18,
-    },
-  })
+  toggleText: {
+    color: "#fff",
+    fontWeight: "800",
+    fontSize: 14,
+  },
+})

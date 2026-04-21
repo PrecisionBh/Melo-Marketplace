@@ -56,6 +56,7 @@ export default function HomeScreen() {
   const router = useRouter()
   const { session } = useAuth()
   const [showAuthModal, setShowAuthModal] = useState(false)
+  const [notifCount, setNotifCount] = useState(0)
 
   const [listings, setListings] = useState<Listing[]>([])
   const [allListings, setAllListings] = useState<ListingRow[]>([])
@@ -84,7 +85,7 @@ const [draftMaxPrice, setDraftMaxPrice] = useState("")
   const [isPro, setIsPro] = useState(false)
   const [megaBoostListings, setMegaBoostListings] = useState<Listing[]>([])
   const [page, setPage] = useState(0)
-const PAGE_SIZE = 25
+const PAGE_SIZE = 500
 const [hasMore, setHasMore] = useState(true)
 const [loadingMore, setLoadingMore] = useState(false)
 
@@ -407,6 +408,7 @@ const checkUnreadMessages = async () => {
 
     if (!user) {
       setHasUnreadNotifications(false)
+      setNotifCount(0)
       return
     }
 
@@ -419,12 +421,19 @@ const checkUnreadMessages = async () => {
 
     if (error) throw error
 
+    console.log("🔔 REAL notif count:", count)
+
+    // ✅ SET BOTH
     setHasUnreadNotifications((count ?? 0) > 0)
+    setNotifCount(count || 0)
+
   } catch (err) {
     handleAppError(err, {
       context: "check_unread_notifications",
     })
+
     setHasUnreadNotifications(false)
+    setNotifCount(0)
   }
 }
 
@@ -520,14 +529,14 @@ const hasResults = filteredListings.length > 0
       <View style={styles.screen}>
         <View style={styles.headerBlock}>
   <GlobalHeader
-    notifCount={hasUnreadNotifications ? 1 : 0}
-    onNotificationsPress={() =>
-      requireAuth(() => router.push("/notifications"))
-    }
-    onMessagesPress={() =>
-      requireAuth(() => router.push("/messages"))
-    }
-  />
+    notifCount={notifCount}
+onNotificationsPress={() =>
+  requireAuth(() => router.push("/notifications"))
+}
+onMessagesPress={() =>
+  requireAuth(() => router.push("/messages"))
+}
+/>
 
  <SearchBar
   value={search}

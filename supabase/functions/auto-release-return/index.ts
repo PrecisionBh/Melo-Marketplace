@@ -14,9 +14,6 @@ const supabase = createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 )
 
-const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!
-const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-
 const CRON_SECRET = Deno.env.get("CRON_SECRET")
 
 Deno.serve(async (req) => {
@@ -29,10 +26,7 @@ Deno.serve(async (req) => {
 
   console.log("🔎 Checking eligible return refunds...")
 
-  const now = new Date()
-  const nowISO = now.toISOString()
-
-  console.log("🧪 CURRENT TIME:", nowISO)
+  const now = new Date().toISOString()
 
   const { data: orders, error } = await supabase
     .from("orders")
@@ -43,14 +37,12 @@ Deno.serve(async (req) => {
     .eq("escrow_released", false)
     .eq("escrow_status", "held")
     .not("return_refund_at", "is", null)
-    .lte("return_refund_at", nowISO)
+    .lte("return_refund_at", now)
 
   if (error) {
     console.error("❌ Fetch failed:", error)
     return new Response("Error", { status: 500 })
   }
-
-  console.log("🧪 QUERY RESULT COUNT:", orders?.length || 0)
 
   if (!orders?.length) {
     console.log("🚫 No eligible return refunds")
@@ -70,6 +62,7 @@ Deno.serve(async (req) => {
         continue
       }
 
+      // 🔥 REFUND
       const refund = await stripe.refunds.create({
         payment_intent: order.stripe_payment_intent,
         amount: order.amount_cents,
@@ -96,47 +89,41 @@ Deno.serve(async (req) => {
 
       /* ---------------- NOTIFICATIONS ---------------- */
       try {
-        await fetch(`${SUPABASE_URL}/functions/v1/send-notification`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-          },
-          body: JSON.stringify({
+        await supabase.functions.invoke("send-notification", {
+          body: {
             userId: order.buyer_id,
             type: "order",
             title: "Refund Issued",
             body: "Your return has been received and your refund has been processed.",
             data: {
-              route: `/buyer-hub/orders/${order.id}`,
+              route: "/orders/[id]",
+              params: { id: order.id },
             },
             dedupeKey: `auto-return-refund-buyer-${order.id}`,
-          }),
+            email: true,
+          },
         })
       } catch (e) {
-        console.log("⚠️ Buyer return refund notification failed:", e)
+        console.log("⚠️ Buyer notification failed:", e)
       }
 
       try {
-        await fetch(`${SUPABASE_URL}/functions/v1/send-notification`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-          },
-          body: JSON.stringify({
+        await supabase.functions.invoke("send-notification", {
+          body: {
             userId: order.seller_id,
             type: "order",
             title: "Return Completed",
             body: "The item was returned and the buyer has been refunded.",
             data: {
-              route: `/orders/${order.id}`,
+              route: "/orders/[id]",
+              params: { id: order.id },
             },
             dedupeKey: `auto-return-refund-seller-${order.id}`,
-          }),
+            email: true,
+          },
         })
       } catch (e) {
-        console.log("⚠️ Seller return refund notification failed:", e)
+        console.log("⚠️ Seller notification failed:", e)
       }
 
       processed++
@@ -157,58 +144,51 @@ Deno.serve(async (req) => {
         )
 
         if (rpcError) {
-          console.error("❌ RPC failed after already refunded:", rpcError)
+          console.error("❌ RPC failed:", rpcError)
           continue
         }
 
-        /* ---------------- NOTIFICATIONS (SYNC CASE) ---------------- */
+        /* ---------------- SYNC NOTIFICATIONS ---------------- */
         try {
-          await fetch(`${SUPABASE_URL}/functions/v1/send-notification`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-            },
-            body: JSON.stringify({
+          await supabase.functions.invoke("send-notification", {
+            body: {
               userId: order.buyer_id,
               type: "order",
               title: "Refund Issued",
               body: "Your return has been processed and refunded.",
               data: {
-                route: `/buyer-hub/orders/${order.id}`,
+                route: "/orders/[id]",
+                params: { id: order.id },
               },
               dedupeKey: `auto-return-refund-buyer-${order.id}`,
-            }),
+              email: true,
+            },
           })
         } catch (e) {
-          console.log("⚠️ Buyer sync refund notification failed:", e)
+          console.log("⚠️ Buyer sync notification failed:", e)
         }
 
         try {
-          await fetch(`${SUPABASE_URL}/functions/v1/send-notification`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-            },
-            body: JSON.stringify({
+          await supabase.functions.invoke("send-notification", {
+            body: {
               userId: order.seller_id,
               type: "order",
               title: "Return Completed",
               body: "The return has been processed and refunded.",
               data: {
-                route: `/orders/${order.id}`,
+                route: "/orders/[id]",
+                params: { id: order.id },
               },
               dedupeKey: `auto-return-refund-seller-${order.id}`,
-            }),
+              email: true,
+            },
           })
         } catch (e) {
-          console.log("⚠️ Seller sync refund notification failed:", e)
+          console.log("⚠️ Seller sync notification failed:", e)
         }
 
         processed++
         console.log("✅ Synced already-refunded order:", order.id)
-        continue
       }
     }
   }

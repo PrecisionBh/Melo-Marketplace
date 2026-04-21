@@ -124,41 +124,46 @@ serve(async (req) => {
           if (oldStatus !== newStatus) {
 
             if (newStatus === "in_transit") {
-              await fetch(`${SUPABASE_URL}/functions/v1/send-notification`, {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-                },
-                body: JSON.stringify({
-                  userId: order.buyer_id,
-                  type: "order",
-                  title: "Order In Transit",
-                  body: "Your package is on the way.",
-                  data: { route: `/buyer-hub/orders/${order.id}` },
-                  dedupeKey: `tracking-in-transit-${order.id}`,
-                }),
-              })
-            }
+  try {
+    await supabase.functions.invoke("send-notification", {
+      body: {
+        userId: order.buyer_id,
+        type: "order",
+        title: "Order In Transit",
+        body: "Your package is on the way.",
+        data: {
+          route: "/orders/[id]",
+          params: { id: order.id },
+        },
+        dedupeKey: `tracking-in-transit-${order.id}`,
+        email: true,
+      },
+    })
+  } catch (err) {
+    console.log("⚠️ In-transit notification failed:", err)
+  }
+}
 
-            if (newStatus === "delivered") {
-              await fetch(`${SUPABASE_URL}/functions/v1/send-notification`, {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-                },
-                body: JSON.stringify({
-                  userId: order.buyer_id,
-                  type: "order",
-                  title: "Order Delivered",
-                  body: "Your order has been delivered.",
-                  data: { route: `/buyer-hub/orders/${order.id}` },
-                  dedupeKey: `tracking-delivered-${order.id}`,
-                }),
-              })
-            }
-          }
+if (newStatus === "delivered") {
+  try {
+    await supabase.functions.invoke("send-notification", {
+      body: {
+        userId: order.buyer_id,
+        type: "order",
+        title: "Order Delivered",
+        body: "Your order has been delivered.",
+        data: {
+          route: "/orders/[id]",
+          params: { id: order.id },
+        },
+        dedupeKey: `tracking-delivered-${order.id}`,
+        email: true,
+      },
+    })
+  } catch (err) {
+    console.log("⚠️ Delivered notification failed:", err)
+  }
+}
 
           await supabase.from("orders").update(updateData).eq("id", order.id)
         }
@@ -207,41 +212,46 @@ serve(async (req) => {
           if (oldStatus !== newStatus) {
 
             if (newStatus === "in_transit") {
-              await fetch(`${SUPABASE_URL}/functions/v1/send-notification`, {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-                },
-                body: JSON.stringify({
-                  userId: order.seller_id,
-                  type: "order",
-                  title: "Return In Transit",
-                  body: "The buyer has shipped the return.",
-                  data: { route: `/orders/${order.id}` },
-                  dedupeKey: `return-in-transit-${order.id}`,
-                }),
-              })
-            }
+  try {
+    await supabase.functions.invoke("send-notification", {
+      body: {
+        userId: order.seller_id,
+        type: "order",
+        title: "Return In Transit",
+        body: "The buyer has shipped the return.",
+        data: {
+          route: "/orders/[id]",
+          params: { id: order.id },
+        },
+        dedupeKey: `return-in-transit-${order.id}`,
+        email: true,
+      },
+    })
+  } catch (err) {
+    console.log("⚠️ Return in-transit notification failed:", err)
+  }
+}
 
-            if (newStatus === "delivered") {
-              await fetch(`${SUPABASE_URL}/functions/v1/send-notification`, {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-                },
-                body: JSON.stringify({
-                  userId: order.seller_id,
-                  type: "order",
-                  title: "Return Delivered",
-                  body: "The returned item has been delivered.",
-                  data: { route: `/orders/${order.id}` },
-                  dedupeKey: `return-delivered-${order.id}`,
-                }),
-              })
-            }
-          }
+if (newStatus === "delivered") {
+  try {
+    await supabase.functions.invoke("send-notification", {
+      body: {
+        userId: order.seller_id,
+        type: "order",
+        title: "Return Delivered",
+        body: "The returned item has been delivered.",
+        data: {
+          route: "/orders/[id]",
+          params: { id: order.id },
+        },
+        dedupeKey: `return-delivered-${order.id}`,
+        email: true,
+      },
+    })
+  } catch (err) {
+    console.log("⚠️ Return delivered notification failed:", err)
+  }
+}
 
           await supabase.from("orders").update(updateData).eq("id", order.id)
         }

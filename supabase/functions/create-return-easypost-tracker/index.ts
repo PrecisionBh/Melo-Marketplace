@@ -198,6 +198,7 @@ serve(async (req) => {
               },
             },
             dedupeKey: `return-tracking-${orderId}`,
+            email: true,
           },
         }
       )

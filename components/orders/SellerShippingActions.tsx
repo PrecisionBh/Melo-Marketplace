@@ -1,45 +1,16 @@
-import { useRouter } from "expo-router"
-import {
-  ActivityIndicator,
-  Linking,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native"
+import { StyleSheet, Text, View } from "react-native"
 
 export default function SellerShippingActions({
   order,
-  refreshOrder,
-  onAddTracking,
-  onCancelOrder,
-  onBuyLabel,
-  onVoidLabel,
-  loadingRates,
 }: {
   order: any
-  refreshOrder?: () => void
-  onAddTracking?: () => void
-  onCancelOrder?: () => void
-  onBuyLabel?: () => void
-  onVoidLabel?: () => void
-  loadingRates?: boolean
 }) {
-  const router = useRouter()
-
   const status = order.status
   const trackingStatus =
     order.tracking_status?.toLowerCase()
 
-  // 🔥 TRUE SOURCE OF STATE
   const hasLabel = !!order.label_url
   const hasTracking = !!order.tracking_number
-
-  const canVoid =
-    hasLabel && trackingStatus !== "in_transit"
-
-  const canBuyLabel =
-    status === "paid" && !hasLabel && !hasTracking
 
   const completed = status === "completed"
 
@@ -60,8 +31,10 @@ export default function SellerShippingActions({
     (status === "shipped" ||
       trackingStatus === "in_transit")
 
-  // 🔥 SELLER GUIDANCE
+  /* ---------------- SELLER GUIDANCE ---------------- */
+
   const getSellerMessage = () => {
+    // ❌ CANCELLED
     if (status === "cancelled") {
       return {
         title: "Order Cancelled",
@@ -70,6 +43,7 @@ export default function SellerShippingActions({
       }
     }
 
+    // ✅ COMPLETE
     if (status === "completed") {
       return {
         title: "Order Complete",
@@ -78,39 +52,57 @@ export default function SellerShippingActions({
       }
     }
 
-    if (!hasLabel && !hasTracking && status === "paid") {
+    // 🔥 READY TO SHIP
+    if (status === "paid" && !hasLabel && !hasTracking) {
       return {
         title: "Ready to Ship",
-        sub: "Purchase a label or add tracking to ship this order.",
+        sub: "Package the item and purchase a shipping label or add tracking to ship this order.",
         type: "notice",
       }
     }
 
+    // 🔥 LABEL PURCHASED (BIG ONE YOU WERE MISSING)
+    if (hasLabel && !inTransit && !outForDelivery && !delivered) {
+      return {
+        title: "Label Purchased",
+        sub: "Print or scan the label and drop off the package with the carrier.",
+        type: "notice",
+      }
+    }
+
+    // 🚚 IN TRANSIT
     if (inTransit) {
       return {
         title: "In Transit",
-        sub: "The package is on the way to the buyer.",
+        sub: "The package is on the way. No action required.",
         type: "notice",
       }
     }
 
+    // 📦 OUT FOR DELIVERY
     if (outForDelivery) {
       return {
         title: "Out For Delivery",
-        sub: "Package is arriving to the buyer today.",
+        sub: "Package is arriving to the buyer today. No action required.",
         type: "notice",
       }
     }
 
+    // 📬 DELIVERED
     if (delivered) {
       return {
         title: "Delivered",
-        sub: "Waiting for buyer confirmation or return window.",
+        sub: "Waiting for buyer confirmation or return window. No action required.",
         type: "notice",
       }
     }
 
-    return null
+    // 🔄 FALLBACK (NEVER BLANK)
+    return {
+      title: "Processing Order",
+      sub: "Monitor the order status. Further action may be required soon.",
+      type: "notice",
+    }
   }
 
   const message = getSellerMessage()
@@ -121,132 +113,44 @@ export default function SellerShippingActions({
         Seller Actions
       </Text>
 
-      {/* 🔥 GUIDANCE */}
-      {message && (
-        <View
+      <View
+        style={[
+          styles.noticeBox,
+          message.type === "success" &&
+            styles.successBox,
+          message.type === "error" &&
+            styles.errorBox,
+        ]}
+      >
+        <Text
           style={[
-            styles.noticeBox,
+            styles.noticeTitle,
             message.type === "success" &&
-              styles.successBox,
+              styles.successTitle,
             message.type === "error" &&
-              styles.errorBox,
+              styles.errorTitle,
           ]}
         >
-          <Text
-            style={[
-              styles.noticeTitle,
-              message.type === "success" &&
-                styles.successTitle,
-              message.type === "error" &&
-                styles.errorTitle,
-            ]}
-          >
-            {message.title}
-          </Text>
+          {message.title}
+        </Text>
 
-          <Text
-            style={[
-              styles.noticeSub,
-              message.type === "success" &&
-                styles.successSub,
-              message.type === "error" &&
-                styles.errorSub,
-            ]}
-          >
-            {message.sub}
-          </Text>
-        </View>
-      )}
-
-      {/* 🔥 ACTIONS */}
-
-      {/* BUY LABEL */}
-      {canBuyLabel && (
-        <TouchableOpacity
-          style={styles.primaryBtn}
-          onPress={onBuyLabel}
-          disabled={loadingRates}
+        <Text
+          style={[
+            styles.noticeSub,
+            message.type === "success" &&
+              styles.successSub,
+            message.type === "error" &&
+              styles.errorSub,
+          ]}
         >
-          {loadingRates ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.primaryText}>
-              Buy Shipping Label
-            </Text>
-          )}
-        </TouchableOpacity>
-      )}
-
-      {/* ADD TRACKING */}
-      {!hasLabel && !hasTracking && (
-        <TouchableOpacity
-          style={styles.primaryBtn}
-          onPress={onAddTracking}
-        >
-          <Text style={styles.primaryText}>
-            Add Tracking / Mark Shipped
-          </Text>
-        </TouchableOpacity>
-      )}
-
-      {/* 🔥 EASYPOST FLOW */}
-      {hasLabel && (
-        <>
-          <TouchableOpacity
-            style={styles.primaryBtn}
-            onPress={() =>
-              router.push({
-                pathname: "/shippinglabel",
-                params: { id: order.id },
-              })
-            }
-          >
-            <Text style={styles.primaryText}>
-              View Label
-            </Text>
-          </TouchableOpacity>
-
-          {canVoid && (
-            <TouchableOpacity
-              style={styles.secondaryBtn}
-              onPress={onVoidLabel}
-            >
-              <Text style={styles.secondaryText}>
-                Void Label
-              </Text>
-            </TouchableOpacity>
-          )}
-        </>
-      )}
-
-      {/* TRACK PACKAGE */}
-      {!hasLabel && hasTracking && (
-        <TouchableOpacity
-          style={styles.primaryBtn}
-          onPress={() =>
-            Linking.openURL(order.tracking_url)
-          }
-        >
-          <Text style={styles.primaryText}>
-            Track Package
-          </Text>
-        </TouchableOpacity>
-      )}
-
-      {/* CANCEL */}
-      {status === "paid" && (
-        <TouchableOpacity
-          style={styles.secondaryBtn}
-          onPress={onCancelOrder}
-        >
-          <Text style={styles.secondaryText}>
-            Cancel / Refund Order
-          </Text>
-        </TouchableOpacity>
-      )}
+          {message.sub}
+        </Text>
+      </View>
     </View>
   )
 }
+
+/* ---------------- STYLES ---------------- */
 
 const styles = StyleSheet.create({
   card: {
@@ -269,7 +173,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#EFF6FF",
     borderRadius: 16,
     padding: 14,
-    marginBottom: 14,
   },
 
   noticeTitle: {
@@ -307,35 +210,5 @@ const styles = StyleSheet.create({
 
   errorSub: {
     color: "#991B1B",
-  },
-
-  primaryBtn: {
-    backgroundColor: "#D97732",
-    borderRadius: 16,
-    paddingVertical: 14,
-    alignItems: "center",
-    marginBottom: 10,
-  },
-
-  primaryText: {
-    color: "#fff",
-    fontWeight: "800",
-    fontSize: 14,
-  },
-
-  secondaryBtn: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    paddingVertical: 14,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#DC2626",
-    marginBottom: 10,
-  },
-
-  secondaryText: {
-    color: "#DC2626",
-    fontWeight: "800",
-    fontSize: 14,
   },
 })

@@ -25,9 +25,10 @@ serve(async (req) => {
       )
     }
 
-    // --------------------------------------------------
-    // GET ORDER
-    // --------------------------------------------------
+    /* -------------------------------------------------- */
+    /* ---------------- GET ORDER ------------------------ */
+    /* -------------------------------------------------- */
+
     const { data: order, error } = await supabase
       .from("orders")
       .select("*")
@@ -50,9 +51,10 @@ serve(async (req) => {
       )
     }
 
-    // --------------------------------------------------
-    // RETRIEVE EXISTING SHIPMENT
-    // --------------------------------------------------
+    /* -------------------------------------------------- */
+    /* ------------ RETRIEVE SHIPMENT -------------------- */
+    /* -------------------------------------------------- */
+
     const shipment =
       await easypost.Shipment.retrieve(
         shipment_id
@@ -60,9 +62,10 @@ serve(async (req) => {
 
     console.log("📦 Shipment retrieved:", shipment.id)
 
-    // --------------------------------------------------
-    // FIND SELECTED RATE
-    // --------------------------------------------------
+    /* -------------------------------------------------- */
+    /* ---------------- FIND RATE ------------------------ */
+    /* -------------------------------------------------- */
+
     const rate = shipment.rates.find(
       (r: any) => r.id === rate_id
     )
@@ -73,9 +76,10 @@ serve(async (req) => {
 
     console.log("📦 Selected rate:", rate)
 
-    // --------------------------------------------------
-    // MARKUP
-    // --------------------------------------------------
+    /* -------------------------------------------------- */
+    /* ---------------- MARKUP --------------------------- */
+    /* -------------------------------------------------- */
+
     const markup = 1.5
 
     const baseCost = Number(rate.rate)
@@ -84,9 +88,10 @@ serve(async (req) => {
     console.log("💰 Base cost:", baseCost)
     console.log("💰 Charged:", finalPrice)
 
-    // --------------------------------------------------
-    // BUY LABEL (FIXED + DEBUG)
-    // --------------------------------------------------
+    /* -------------------------------------------------- */
+    /* ---------------- BUY LABEL ------------------------ */
+    /* -------------------------------------------------- */
+
     console.log("🚀 Attempting label purchase:", {
       shipment_id: shipment.id,
       rate_id: rate.id,
@@ -97,7 +102,7 @@ serve(async (req) => {
     try {
       bought = await easypost.Shipment.buy(
         shipment.id,
-        rate.id // ✅ FIXED
+        rate.id
       )
 
       console.log("✅ PURCHASE RESPONSE:", bought)
@@ -129,20 +134,22 @@ serve(async (req) => {
       throw new Error("Label was not generated")
     }
 
-    // --------------------------------------------------
-    // UPDATE ORDER (🔥 FIXED STATUS)
-    // --------------------------------------------------
+    /* -------------------------------------------------- */
+    /* ---------------- UPDATE ORDER --------------------- */
+    /* -------------------------------------------------- */
+
     const { error: updateError } = await supabase
       .from("orders")
       .update({
-        // SHIPPING STATE
-        status: "shipped", // ✅ FIXED
-        shipped_at: new Date().toISOString(),
+        // ✅ KEEP ORDER ACTIVE (DO NOT MARK SHIPPED)
+        status: "paid",
+
+        // ✅ LABEL CREATED (NOT SHIPPED)
+        tracking_status: "label_created",
 
         // TRACKING
         tracking_number: trackingNumber,
         tracking_url: trackingUrl,
-        tracking_status: "in_transit",
 
         // CARRIER
         carrier:
@@ -175,18 +182,16 @@ serve(async (req) => {
       throw new Error("Failed to update order")
     }
 
-    // --------------------------------------------------
-    // FINAL LOG
-    // --------------------------------------------------
     console.log("📦 LABEL CREATED SUCCESS:", {
       order_id,
       labelUrl,
       tracking: trackingNumber,
     })
 
-    // --------------------------------------------------
-    // NOTIFY BUYER
-    // --------------------------------------------------
+    /* -------------------------------------------------- */
+    /* ---------------- NOTIFY BUYER --------------------- */
+    /* -------------------------------------------------- */
+
     try {
       await supabase.functions.invoke(
         "send-notification",
@@ -194,18 +199,22 @@ serve(async (req) => {
           body: {
             userId: order.buyer_id,
             type: "order",
-            title: "Item Shipped 📦",
-            body: "Your order has been shipped.",
+            title: "Shipping Label Created 📦",
+            body:
+              "Your seller has prepared your shipment.",
             data: {
               route: "/orders/[id]",
               params: { id: order.id },
             },
             dedupeKey: `label-${order.id}`,
+            email: true,
           },
         }
       )
     } catch {
-      console.log("Notification failed (non-blocking)")
+      console.log(
+        "Notification failed (non-blocking)"
+      )
     }
 
     return Response.json({

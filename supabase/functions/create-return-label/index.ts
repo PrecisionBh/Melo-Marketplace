@@ -145,6 +145,7 @@ serve(async (req) => {
               params: { id: order.id },
             },
             dedupeKey: `return-label-buyer-${order.id}`,
+            email: true,
           },
         }
       )
@@ -169,6 +170,7 @@ serve(async (req) => {
               params: { id: order.id },
             },
             dedupeKey: `return-label-seller-${order.id}`,
+            email: true,
           },
         }
       )

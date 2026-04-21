@@ -303,6 +303,7 @@ const canRespond =
               route: "/offers/[id]",
               params: { id: offer.id },
             },
+            email: false,
           },
         }
       )
@@ -399,6 +400,7 @@ const canRespond =
                 route: "/offers/[id]",
                 params: { id: offer.id },
               },
+              email: true,
             },
           }
         )
@@ -466,6 +468,7 @@ const canRespond =
               route: "/offers/[id]",
               params: { id: offer.id },
             },
+            email: false,
           },
         }
       )
@@ -529,6 +532,7 @@ const canRespond =
               route: "/offers/[id]",
               params: { id: offer.id },
             },
+            email: false,
           },
         }
       )

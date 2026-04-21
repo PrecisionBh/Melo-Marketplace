@@ -113,49 +113,43 @@ Deno.serve(async (req) => {
       }
 
       /* ---------------- NOTIFICATIONS ---------------- */
-      try {
-        await fetch(`${SUPABASE_URL}/functions/v1/send-notification`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-          },
-          body: JSON.stringify({
-            userId: order.seller_id,
-            type: "order",
-            title: "Escrow Released",
-            body: "Funds from your completed order have been released to your account.",
-            data: {
-              route: `/seller-hub/orders/${order.id}`,
-            },
-            dedupeKey: `auto-release-seller-${order.id}`,
-          }),
-        })
-      } catch (e) {
-        console.log("⚠️ Seller auto-release notification failed:", e)
-      }
+try {
+  await supabase.functions.invoke("send-notification", {
+    body: {
+      userId: order.seller_id,
+      type: "order",
+      title: "Escrow Released",
+      body: "Funds from your completed order have been released to your account.",
+      data: {
+        route: "/orders/[id]",
+        params: { id: order.id },
+      },
+      dedupeKey: `auto-release-seller-${order.id}`,
+      email: true,
+    },
+  })
+} catch (e) {
+  console.log("⚠️ Seller auto-release notification failed:", e)
+}
 
-      try {
-        await fetch(`${SUPABASE_URL}/functions/v1/send-notification`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-          },
-          body: JSON.stringify({
-            userId: order.buyer_id,
-            type: "order",
-            title: "Order Completed",
-            body: "Your order has been successfully completed and payment has been released.",
-            data: {
-              route: `/buyer-hub/orders/${order.id}`,
-            },
-            dedupeKey: `auto-release-buyer-${order.id}`,
-          }),
-        })
-      } catch (e) {
-        console.log("⚠️ Buyer auto-release notification failed:", e)
-      }
+try {
+  await supabase.functions.invoke("send-notification", {
+    body: {
+      userId: order.buyer_id,
+      type: "order",
+      title: "Order Completed",
+      body: "Your order has been successfully completed and payment has been released.",
+      data: {
+        route: "/orders/[id]",
+        params: { id: order.id },
+      },
+      dedupeKey: `auto-release-buyer-${order.id}`,
+      email: true,
+    },
+  })
+} catch (e) {
+  console.log("⚠️ Buyer auto-release notification failed:", e)
+}
 
       processed++
       console.log("🎉 Escrow fully released:", order.id)

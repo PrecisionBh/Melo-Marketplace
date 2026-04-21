@@ -275,6 +275,7 @@ export default function DisputeIssueForm({
         params: { id: orderId },
       },
       dedupeKey: `dispute-opened-${orderId}-${role}`, // 🔥 role-aware key
+      email: true,
     },
   })
 } catch (err) {

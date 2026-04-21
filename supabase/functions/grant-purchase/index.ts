@@ -78,7 +78,8 @@ async function fulfillBoostPack(userId: string, productId: string) {
       title: "Boosts Added 🚀",
       body: "Your boost credits have been added to your account.",
       data: { route: "/profile" },
-      dedupeKey: `boost-${Date.now()}`
+      dedupeKey: `boost-${Date.now()}`,
+      email: false,
     }
   })
 
@@ -143,7 +144,8 @@ async function activateMeloPro(userId: string) {
       title: "Melo Pro Activated 👑",
       body: "You now have Pro benefits and bonus boosts!",
       data: { route: "/profile" },
-      dedupeKey: `pro-${userId}-${Date.now()}`
+      dedupeKey: `pro-${userId}-${Date.now()}`,
+      email: true,
     }
   })
 

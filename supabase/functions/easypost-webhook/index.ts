@@ -118,10 +118,11 @@ serve(async (req) => {
               title: "Return Delivered 📦",
               body: "The returned item has been delivered to you.",
               data: {
-                route: "/seller-hub/orders/[id]",
+                route: "/orders/[id]",
                 params: { id: order.id },
               },
               dedupeKey: `return-delivered-${order.id}`,
+              email: true,
             },
           })
         }
@@ -135,10 +136,11 @@ serve(async (req) => {
               title: "Return In Transit 🔁",
               body: "The buyer has shipped the return.",
               data: {
-                route: "/seller-hub/orders/[id]",
+                route: "/orders/[id]",
                 params: { id: order.id },
               },
               dedupeKey: `return-transit-${order.id}`,
+              email: true,
             },
           })
         }
@@ -190,6 +192,7 @@ serve(async (req) => {
               params: { id: order.id },
             },
             dedupeKey: `delivered-${order.id}`,
+            email: true,
           },
         })
       }
@@ -207,6 +210,7 @@ serve(async (req) => {
               params: { id: order.id },
             },
             dedupeKey: `in-transit-${order.id}`,
+            email: true,
           },
         })
       }

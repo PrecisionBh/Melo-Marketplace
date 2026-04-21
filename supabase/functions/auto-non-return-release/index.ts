@@ -122,49 +122,43 @@ Deno.serve(async (req) => {
         }
 
         /* ---------------- NOTIFICATIONS ---------------- */
-        try {
-          await fetch(`${SUPABASE_URL}/functions/v1/send-notification`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-            },
-            body: JSON.stringify({
-              userId: order.seller_id,
-              type: "order",
-              title: "Escrow Released",
-              body: "The buyer did not return the item in time. Funds have been released to you.",
-              data: {
-                route: `/orders/${order.id}`,
-              },
-              dedupeKey: `non-return-release-seller-${order.id}`,
-            }),
-          })
-        } catch (e) {
-          console.log("⚠️ Seller non-return notification failed:", e)
-        }
+try {
+  await supabase.functions.invoke("send-notification", {
+    body: {
+      userId: order.seller_id,
+      type: "order",
+      title: "Escrow Released",
+      body: "The buyer did not return the item in time. Funds have been released to you.",
+      data: {
+        route: "/orders/[id]",
+        params: { id: order.id },
+      },
+      dedupeKey: `non-return-release-seller-${order.id}`,
+      email: true,
+    },
+  })
+} catch (e) {
+  console.log("⚠️ Seller non-return notification failed:", e)
+}
 
-        try {
-          await fetch(`${SUPABASE_URL}/functions/v1/send-notification`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-            },
-            body: JSON.stringify({
-              userId: order.buyer_id,
-              type: "order",
-              title: "Return Window Expired",
-              body: "You did not upload return tracking in time. The order has been completed and payment released.",
-              data: {
-                route: `/buyer-hub/orders/${order.id}`,
-              },
-              dedupeKey: `non-return-release-buyer-${order.id}`,
-            }),
-          })
-        } catch (e) {
-          console.log("⚠️ Buyer non-return notification failed:", e)
-        }
+try {
+  await supabase.functions.invoke("send-notification", {
+    body: {
+      userId: order.buyer_id,
+      type: "order",
+      title: "Return Window Expired",
+      body: "You did not upload return tracking in time. The order has been completed and payment released.",
+      data: {
+        route: "/orders/[id]",
+        params: { id: order.id },
+      },
+      dedupeKey: `non-return-release-buyer-${order.id}`,
+      email: true,
+    },
+  })
+} catch (e) {
+  console.log("⚠️ Buyer non-return notification failed:", e)
+}
 
         processed++
         console.log("✅ Escrow released:", order.id)

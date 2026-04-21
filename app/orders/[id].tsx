@@ -52,6 +52,10 @@ const [buyingLabel, setBuyingLabel] = useState(false)
 const [loadingRates, setLoadingRates] = useState(false)
 const [showVoidModal, setShowVoidModal] = useState(false)
 const [voidingLabel, setVoidingLabel] = useState(false)
+const [purchaseResult, setPurchaseResult] = useState<null | "success" | "error">(null)
+const [showPurchaseModal, setShowPurchaseModal] = useState(false)
+const [voidResult, setVoidResult] = useState<null | "success" | "error">(null)
+const [showVoidResultModal, setShowVoidResultModal] = useState(false)
 
   const [confirmVisible, setConfirmVisible] =
     useState(false)
@@ -248,6 +252,7 @@ const buyShippingLabel = async () => {
               },
             },
             dedupeKey: `order-completed-${order.id}`,
+            email: true,
           },
         }
       )
@@ -309,6 +314,7 @@ const startReturn = async () => {
               },
             },
             dedupeKey: `return-start-${order.id}`,
+            email: true,
           },
         }
       )
@@ -655,29 +661,25 @@ return (
         </View>
       )}
 
-      {!needsPayment && (
-  isReturnFlow ? (
-    <ReturnStepIndicator
-      order={order}
-      role={isSeller ? "seller" : "buyer"}
-    />
-  ) : (
-    <OrderStepIndicator
-      order={order}
-      role={isSeller ? "seller" : "buyer"}
-    />
-  )
-)}
+      {!needsPayment &&
+        (isReturnFlow ? (
+          <ReturnStepIndicator
+            order={order}
+            role={isSeller ? "seller" : "buyer"}
+          />
+        ) : (
+          <OrderStepIndicator
+            order={order}
+            role={isSeller ? "seller" : "buyer"}
+          />
+        ))}
 
-      <TrackPackageButton trackingUrl={order.tracking_url} />
-
+      {/* 🔥 SELLER ONLY */}
       {isSeller && (
         <>
-          <SellerShippingActions
+          <TrackPackageButton
   order={order}
   onAddTracking={() => setShowTrackingForm(true)}
-  onCancelOrder={() => setCancelOrderVisible(true)}
-  loadingRates={loadingRates}
   onBuyLabel={async () => {
     try {
       setLoadingRates(true)
@@ -700,100 +702,116 @@ return (
       console.log(err)
       alert("Failed to load shipping rates")
     } finally {
-      setLoadingRates(false)
+      setTimeout(() => {
+        setLoadingRates(false)
+      }, 150)
     }
   }}
-  onVoidLabel={() => setShowVoidModal(true)} // 🔥 ADD THIS LINE
+  onVoidLabel={() => setShowVoidModal(true)}
+  onCancelOrder={() => setCancelOrderVisible(true)}
+  loadingRates={loadingRates}
 />
 
-{isReturnFlow && isBuyer && (
-  <ReturnActions
-    order={order}
-    refreshOrder={loadOrder}
-    onCancelReturn={cancelBuyerReturn}
-    onBuyReturnLabel={async () => {
-      try {
-        setLoadingRates(true)
-
-        const { data, error } =
-          await supabase.functions.invoke(
-            "get-return-rates",
-            {
-              body: { order_id: order.id },
-            }
-          )
-
-        if (error) throw error
-
-        setRates(data.rates)
-        setShipmentId(data.shipment_id)
-
-        setShowRateModal(true)
-      } catch (err) {
-        console.log(err)
-        alert("Failed to load return rates")
-      } finally {
-        setLoadingRates(false)
-      }
-    }}
-  />
-)}
-
+          <SellerShippingActions order={order} />
         </>
+      )}
+
+      {/* 🔥 BUYER RETURN ACTIONS (FIXED LOCATION) */}
+      {isReturnFlow && isBuyer && (
+        <ReturnActions
+          order={order}
+          refreshOrder={loadOrder}
+          onCancelReturn={cancelBuyerReturn}
+          onBuyReturnLabel={async () => {
+            try {
+              setLoadingRates(true)
+
+              const { data, error } =
+                await supabase.functions.invoke(
+                  "get-return-rates",
+                  {
+                    body: { order_id: order.id },
+                  }
+                )
+
+              if (error) throw error
+
+              setRates(data.rates)
+              setShipmentId(data.shipment_id)
+              setShowRateModal(true)
+            } catch (err) {
+              console.log(err)
+              alert("Failed to load return rates")
+            } finally {
+              setLoadingRates(false)
+            }
+          }}
+        />
       )}
     </ScrollView>
 
     <AddTrackingModal
-  visible={showTrackingForm}
-  carrier={carrier}
-  setCarrier={setCarrier}
-  tracking={tracking}
-  setTracking={setTracking}
-  loading={saving}
-  onClose={() => setShowTrackingForm(false)}
-  onSubmit={submitTracking}
-/>
+      visible={showTrackingForm}
+      carrier={carrier}
+      setCarrier={setCarrier}
+      tracking={tracking}
+      setTracking={setTracking}
+      loading={saving}
+      onClose={() => setShowTrackingForm(false)}
+      onSubmit={submitTracking}
+    />
 
     <ShippingRatesModal
-  visible={showRateModal}
-  rates={rates}
-  loading={buyingLabel}
-  onClose={() => setShowRateModal(false)}
-  onPurchase={async (rate) => {
-    try {
-      setBuyingLabel(true)
+      visible={showRateModal}
+      rates={rates}
+      loading={buyingLabel}
+      onClose={() => setShowRateModal(false)}
+      onPurchase={async (rate) => {
+  try {
+    setBuyingLabel(true)
 
-      const { error } =
-        await supabase.functions.invoke(
-          "create-shipping-label",
-          {
-            body: {
-              order_id: order.id,
-              rate_id: rate.rate_id,
-              shipment_id: shipmentId,
-            },
-          }
-        )
+    const { error } =
+      await supabase.functions.invoke(
+        "create-shipping-label",
+        {
+          body: {
+            order_id: order.id,
+            rate_id: rate.rate_id,
+            shipment_id: shipmentId,
+          },
+        }
+      )
 
-      if (error) throw error
+    if (error) throw error
 
-      setShowRateModal(false)
+    setShowRateModal(false)
 
-      await loadOrder()
-    } catch (err) {
-      console.log(err)
-      alert("Failed to purchase label")
-    } finally {
-      setBuyingLabel(false)
-    }
-  }}
-/>
+    await loadOrder()
 
-<VoidLabelModal
-  visible={showVoidModal}
-  loading={voidingLabel}
-  onClose={() => setShowVoidModal(false)}
-  onConfirm={async () => {
+    // 🔥 SUCCESS
+    setPurchaseResult("success")
+    setShowPurchaseModal(true)
+
+  } catch (err) {
+    console.log(err)
+
+    // 🔥 ERROR
+    setPurchaseResult("error")
+    setShowPurchaseModal(true)
+
+  } finally {
+    setBuyingLabel(false)
+  }
+}}
+    />
+
+    <VoidLabelModal
+      visible={showVoidModal}
+      loading={voidingLabel}
+      onClose={() => setShowVoidModal(false)}
+      onConfirm={async () => {
+  if (voidingLabel) return
+
   try {
     if (order.tracking_status === "in_transit") {
       alert("Label already in transit and cannot be voided")
@@ -812,17 +830,26 @@ return (
 
     if (error) throw error
 
+    await loadOrder()
+
+    // 🔥 SUCCESS
+    setVoidResult("success")
+    setShowVoidResultModal(true)
+
     setShowVoidModal(false)
 
-    await loadOrder()
   } catch (err) {
     console.log(err)
-    alert("Failed to void label")
+
+    // 🔥 ERROR
+    setVoidResult("error")
+    setShowVoidResultModal(true)
+
   } finally {
     setVoidingLabel(false)
   }
 }}
-/>
+    />
 
 {cancelOrderVisible && (
   <View style={{
@@ -899,6 +926,101 @@ return (
   </View>
 )}
 
+{loadingRates && (
+  <View style={styles.loadingOverlay}>
+    <View style={styles.loadingCard}>
+      <ActivityIndicator size="large" color="#D97732" />
+      <Text style={styles.loadingText}>
+        Finding the best shipping rates...
+      </Text>
+    </View>
+  </View>
+)}
+
+{showPurchaseModal && (
+  <View style={styles.overlay}>
+    <View style={styles.modalCard}>
+
+      {purchaseResult === "success" ? (
+        <>
+          <Text style={styles.successTitle}>
+            🎉 Label Purchased
+          </Text>
+
+          <Text style={styles.successText}>
+            Your shipping label is ready.
+          </Text>
+        </>
+      ) : (
+        <>
+          <Text style={styles.errorTitle}>
+            Something went wrong
+          </Text>
+
+          <Text style={styles.errorText}>
+            Failed to purchase shipping label.
+          </Text>
+        </>
+      )}
+
+      <TouchableOpacity
+        style={styles.primaryBtn}
+        onPress={() => {
+          setShowPurchaseModal(false)
+          setPurchaseResult(null)
+        }}
+      >
+        <Text style={styles.primaryText}>
+          OK
+        </Text>
+      </TouchableOpacity>
+
+    </View>
+  </View>
+)}
+
+{showVoidResultModal && (
+  <View style={styles.overlay}>
+    <View style={styles.modalCard}>
+
+      {voidResult === "success" ? (
+        <>
+          <Text style={styles.successTitle}>
+            ✅ Label Voided
+          </Text>
+
+          <Text style={styles.successText}>
+            Your shipping label has been successfully voided.
+          </Text>
+        </>
+      ) : (
+        <>
+          <Text style={styles.errorTitle}>
+            Something went wrong
+          </Text>
+
+          <Text style={styles.errorText}>
+            Failed to void shipping label.
+          </Text>
+        </>
+      )}
+
+      <TouchableOpacity
+        style={styles.primaryBtn}
+        onPress={() => {
+          setShowVoidResultModal(false)
+          setVoidResult(null)
+        }}
+      >
+        <Text style={styles.primaryText}>
+          OK
+        </Text>
+      </TouchableOpacity>
+
+    </View>
+  </View>
+)}
+
     <GlobalFooter />
   </View>
 )
@@ -909,6 +1031,54 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#F8F8F8",
   },
+
+  overlay: {
+  position: "absolute",
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  backgroundColor: "rgba(0,0,0,0.45)",
+  justifyContent: "center",
+  alignItems: "center",
+  paddingHorizontal: 16,
+},
+
+modalCard: {
+  width: "100%",
+  backgroundColor: "#fff",
+  borderRadius: 22,
+  padding: 20,
+  alignItems: "center",
+},
+
+successTitle: {
+  fontSize: 18,
+  fontWeight: "800",
+  color: "#16A34A",
+  marginBottom: 8,
+},
+
+successText: {
+  fontSize: 13,
+  color: "#374151",
+  marginBottom: 16,
+  textAlign: "center",
+},
+
+errorTitle: {
+  fontSize: 18,
+  fontWeight: "800",
+  color: "#DC2626",
+  marginBottom: 8,
+},
+
+errorText: {
+  fontSize: 13,
+  color: "#374151",
+  marginBottom: 16,
+  textAlign: "center",
+},
 
   loaderWrap: {
     flex: 1,
@@ -937,6 +1107,31 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     color: "#111",
   },
+
+  loadingOverlay: {
+  position: "absolute",
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  backgroundColor: "rgba(0,0,0,0.45)",
+  justifyContent: "center",
+  alignItems: "center",
+  zIndex: 999,
+},
+
+loadingCard: {
+  backgroundColor: "#fff",
+  padding: 24,
+  borderRadius: 18,
+  alignItems: "center",
+},
+
+loadingText: {
+  marginTop: 12,
+  fontWeight: "700",
+  color: "#111",
+},
 
   carrierRow: {
     flexDirection: "row",
@@ -1034,6 +1229,22 @@ payNowBtn: {
 },
 
 payNowText: {
+  color: "#fff",
+  fontWeight: "800",
+  fontSize: 14,
+},
+
+primaryBtn: {
+  backgroundColor: "#D97732",
+  paddingVertical: 14,
+  paddingHorizontal: 24,
+  borderRadius: 14,
+  alignItems: "center",
+  marginTop: 10,
+  width: "100%",
+},
+
+primaryText: {
   color: "#fff",
   fontWeight: "800",
   fontSize: 14,

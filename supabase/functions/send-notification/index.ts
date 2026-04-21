@@ -17,18 +17,25 @@ serve(async (req) => {
       body,
       data,
       dedupeKey,
+      email,
     } = await req.json()
 
-    console.log("📦 payload:", { userId, type, title, body, data, dedupeKey })
+    console.log("📦 payload:", {
+      userId,
+      type,
+      title,
+      body,
+      data,
+      dedupeKey,
+      email,
+    })
 
-    if (!userId || !type) {
+    if (!userId || !type || !title || !body) {
       console.log("❌ missing required fields")
       return new Response("Missing fields", { status: 400 })
     }
 
-    /* ---------------- INSERT (IDEMPOTENT) ---------------- */
-
-    console.log("📤 inserting notification")
+    /* ---------------- INSERT ---------------- */
 
     const { error } = await supabase.from("notifications").insert({
       user_id: userId,
@@ -36,54 +43,114 @@ serve(async (req) => {
       title,
       body,
       data,
-      dedupe_key: dedupeKey, // ✅ enforced at DB level
+      dedupe_key: dedupeKey,
     })
 
-    if (!error) {
-      console.log("✅ notification inserted")
+    if (error && (error as any).code !== "23505") {
+      console.log("❌ insert error:", error)
+      return new Response("Insert failed", { status: 500 })
+    }
 
-      /* ---------------- PUSH (ONLY ON SUCCESS) ---------------- */
+    if ((error as any)?.code === "23505") {
+      console.log("🚫 duplicate notification blocked")
+      return new Response("Duplicate", { status: 200 })
+    }
 
-      console.log("🔍 fetching profile for push")
+    console.log("✅ notification inserted")
 
-      const { data: profile, error: profileError } = await supabase
-        .from("profiles")
-        .select("expo_push_token, notifications_enabled")
-        .eq("id", userId)
-        .single()
+    /* ---------------- FETCH PROFILE ---------------- */
 
-      console.log("👤 profile:", profile, profileError)
+    const { data: profile, error: profileErr } = await supabase
+      .from("profiles")
+      .select("expo_push_token, notifications_enabled, email")
+      .eq("id", userId)
+      .single()
 
+    if (profileErr || !profile) {
+      console.log("❌ profile fetch failed:", profileErr)
+      return new Response("Profile fetch failed", { status: 500 })
+    }
+
+    console.log("👤 profile:", profile)
+
+    /* ---------------- PUSH ---------------- */
+
+    try {
       if (
-        profile?.expo_push_token &&
+        profile.expo_push_token &&
         profile.notifications_enabled !== false
       ) {
         console.log("📡 sending push to:", profile.expo_push_token)
 
-        const pushRes = await fetch("https://exp.host/--/api/v2/push/send", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            to: profile.expo_push_token,
-            title,
-            body,
-            data,
-          }),
-        })
+        const pushRes = await fetch(
+          "https://exp.host/--/api/v2/push/send",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              to: profile.expo_push_token,
+              title,
+              body,
+              data,
+            }),
+          }
+        )
 
         const pushJson = await pushRes.json()
-        console.log("📨 push response:", pushJson)
+
+        if (!pushRes.ok) {
+          console.log("❌ push failed:", pushJson)
+        } else {
+          console.log("📨 push success:", pushJson)
+        }
       } else {
         console.log("⚠️ no push token or notifications disabled")
       }
+    } catch (pushErr) {
+      console.log("⚠️ PUSH CRASHED:", pushErr)
+    }
 
-    } else if ((error as any).code === "23505") {
-      console.log("🚫 duplicate notification blocked (expected)")
-    } else {
-      console.log("❌ real insert error:", error)
-      return new Response("Insert failed", { status: 500 })
+    /* ---------------- EMAIL ---------------- */
+
+    if (email) {
+      try {
+        const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY")
+
+        if (!RESEND_API_KEY) {
+          console.log("❌ Missing RESEND_API_KEY")
+        } else if (!profile.email) {
+          console.log("⚠️ No email found on profile")
+        } else {
+          console.log("📧 sending email to:", profile.email)
+
+          const emailRes = await fetch("https://api.resend.com/emails", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${RESEND_API_KEY}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              from: "Melo Marketplace <noreply@melomarketplace.app>",
+              to: profile.email,
+              subject: title,
+              text: body,
+              reply_to: "support@melomarketplace.app",
+            }),
+          })
+
+          const emailJson = await emailRes.json()
+
+          if (!emailRes.ok) {
+            console.log("❌ EMAIL FAILED:", emailJson)
+          } else {
+            console.log("✅ EMAIL SENT:", emailJson)
+          }
+        }
+      } catch (emailErr) {
+        console.log("⚠️ EMAIL CRASHED:", emailErr)
+      }
     }
 
     console.log("✅ send-notification COMPLETE")

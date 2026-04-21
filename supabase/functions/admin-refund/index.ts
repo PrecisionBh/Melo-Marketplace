@@ -240,49 +240,43 @@ serve(async (req) => {
     console.log("✅ Admin refund successful:", refund.id, "status:", refund.status)
 
     /* ---------------- NOTIFICATIONS ---------------- */
-    try {
-      await fetch(`${SUPABASE_URL}/functions/v1/send-notification`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-        },
-        body: JSON.stringify({
-          userId: order.buyer_id,
-          type: "order",
-          title: "Refund Issued",
-          body: "Your order has been refunded after dispute review.",
-          data: {
-            route: `/buyer-hub/orders/${order.id}`,
-          },
-          dedupeKey: `admin-refund-buyer-${order.id}`,
-        }),
-      })
-    } catch (e) {
-      console.log("⚠️ Buyer refund notification failed:", e)
-    }
+try {
+  await supabase.functions.invoke("send-notification", {
+    body: {
+      userId: order.buyer_id,
+      type: "order",
+      title: "Refund Issued",
+      body: "Your order has been refunded after dispute review.",
+      data: {
+        route: "/orders/[id]",
+        params: { id: order.id },
+      },
+      dedupeKey: `admin-refund-buyer-${order.id}`,
+      email: true,
+    },
+  })
+} catch (e) {
+  console.log("⚠️ Buyer refund notification failed:", e)
+}
 
-    try {
-      await fetch(`${SUPABASE_URL}/functions/v1/send-notification`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-        },
-        body: JSON.stringify({
-          userId: order.seller_id,
-          type: "order",
-          title: "Dispute Lost",
-          body: "A dispute was resolved in the buyer's favor and the order was refunded.",
-          data: {
-            route: `/orders/${order.id}`,
-          },
-          dedupeKey: `admin-refund-seller-${order.id}`,
-        }),
-      })
-    } catch (e) {
-      console.log("⚠️ Seller refund notification failed:", e)
-    }
+try {
+  await supabase.functions.invoke("send-notification", {
+    body: {
+      userId: order.seller_id,
+      type: "order",
+      title: "Dispute Lost",
+      body: "A dispute was resolved in the buyer's favor and the order was refunded.",
+      data: {
+        route: "/orders/[id]",
+        params: { id: order.id },
+      },
+      dedupeKey: `admin-refund-seller-${order.id}`,
+      email: true,
+    },
+  })
+} catch (e) {
+  console.log("⚠️ Seller refund notification failed:", e)
+}
 
     return json(200, {
       success: true,
