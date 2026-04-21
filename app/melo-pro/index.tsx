@@ -13,6 +13,7 @@ import Purchases from "react-native-purchases"
 
 import { useEffect, useState } from "react"
 import {
+  ActivityIndicator,
   Alert,
   Linking,
   Platform,
@@ -23,14 +24,15 @@ import {
   View,
 } from "react-native"
 
+import { useRouter } from "expo-router"
+
 export default function MeloProScreen() {
   const { session } = useAuth()
+  const router = useRouter()
 
-  const [loading, setLoading] =
-    useState(false)
-
-  const [isPro, setIsPro] =
-    useState(false)
+  const [loading, setLoading] = useState(false)
+  const [restoreLoading, setRestoreLoading] = useState(false) // ✅ NEW
+  const [isPro, setIsPro] = useState(false)
 
   const [rcPackage, setRcPackage] =
     useState<any>(null)
@@ -170,36 +172,85 @@ export default function MeloProScreen() {
       }
     }
 
-  const handleRestore =
-    async () => {
-      try {
-        const customerInfo =
-          await Purchases.restorePurchases()
+  // 🔥 RESTORE WITH SPINNER
+  const handleRestore = async () => {
+  try {
+    setRestoreLoading(true)
 
-        await supabase.functions.invoke(
-          "grant-purchase",
-          {
-            body: {
-              productId:
-                "melo_pro_subscription",
-              customerInfo,
-            },
-          }
-        )
+    const customerInfo =
+      await Purchases.restorePurchases()
 
-        Alert.alert(
-          "Restored",
-          "Purchases restored successfully."
-        )
+    const hasPro =
+      !!customerInfo.entitlements
+        .active["melo_marketplace_pro"]
 
-        await loadProfile()
-      } catch {
-        Alert.alert(
-          "Error",
-          "Failed to restore purchases."
-        )
-      }
+    const transactions =
+      customerInfo.nonSubscriptionTransactions || []
+
+    const hasBoosts = transactions.length > 0
+
+    // 🔥 CHECK CURRENT DB STATE
+    const userId = session?.user?.id
+
+    let dbHasPro = false
+
+    if (userId) {
+      const { data } = await supabase
+        .from("profiles")
+        .select("is_pro")
+        .eq("id", userId)
+        .single()
+
+      dbHasPro = !!data?.is_pro
     }
+
+    // 🔥 CASE 1: NOTHING EVER PURCHASED
+    if (!hasPro && !hasBoosts) {
+      Alert.alert(
+        "Nothing to Restore",
+        "We couldn’t find any purchases tied to this account."
+      )
+      return
+    }
+
+    // 🔥 CASE 2: EVERYTHING ALREADY RESTORED
+    if (hasPro && dbHasPro && !hasBoosts) {
+      Alert.alert(
+        "Already Up to Date",
+        "Your purchases are already restored and up to date."
+      )
+      return
+    }
+
+    // 🔥 OTHERWISE RESTORE
+    await supabase.functions.invoke(
+      "grant-purchase",
+      {
+        body: {
+          productId: "restore",
+          customerInfo,
+        },
+      }
+    )
+
+    // 🔥 SUCCESS MESSAGE
+    Alert.alert(
+      "Restored",
+      "Your purchases have been restored successfully."
+    )
+
+    await loadProfile()
+  } catch (err) {
+    console.log("Restore error:", err)
+
+    Alert.alert(
+      "Error",
+      "Failed to restore purchases."
+    )
+  } finally {
+    setRestoreLoading(false)
+  }
+}
 
   return (
     <View style={styles.screen}>
@@ -240,9 +291,7 @@ export default function MeloProScreen() {
 
         <TouchableOpacity
           onPress={() =>
-            Linking.openURL(
-              "https://www.melomarketplace.app/legal?tab=terms"
-            )
+            router.push("/legal/terms")
           }
         >
           <Text style={styles.link}>
@@ -252,9 +301,7 @@ export default function MeloProScreen() {
 
         <TouchableOpacity
           onPress={() =>
-            Linking.openURL(
-              "https://www.melomarketplace.app/legal?tab=privacy"
-            )
+            router.push("/legal/privacy")
           }
         >
           <Text style={styles.link}>
@@ -262,6 +309,13 @@ export default function MeloProScreen() {
           </Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {/* 🔥 FULL SCREEN SPINNER */}
+      {restoreLoading && (
+        <View style={styles.overlay}>
+          <ActivityIndicator size="large" color="#D97732" />
+        </View>
+      )}
 
       <GlobalFooter />
     </View>
@@ -292,5 +346,17 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
     color: "#6B7280",
+  },
+
+  // 🔥 OVERLAY STYLE
+  overlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(255,255,255,0.7)",
+    alignItems: "center",
+    justifyContent: "center",
   },
 })

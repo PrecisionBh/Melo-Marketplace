@@ -3,11 +3,11 @@ import * as ImagePicker from "expo-image-picker"
 import { useRouter } from "expo-router"
 import { useEffect, useState } from "react"
 import {
-    Image,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Image,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native"
 
 import { useAuth } from "@/context/AuthContext"
