@@ -282,9 +282,6 @@ try {
     order_id: orderId,
   })
 
-  // If buyer and seller are the same (dev testing), send ONE notification
-  const isSelfPurchase = order.buyer_id === order.seller_id
-
   // ✅ BUYER
   if (order.buyer_id) {
     await fetch(`${SUPABASE_URL}/functions/v1/send-notification`, {
@@ -296,13 +293,9 @@ try {
       body: JSON.stringify({
         userId: order.buyer_id,
         type: "order",
-        title: isSelfPurchase
-          ? "Test Order Paid"
-          : "Order Successful",
-        body: isSelfPurchase
-          ? "Your test order was processed successfully."
-          : "Your order was successful and is now secured in escrow.",
-        data: { route: `/buyer-hub/orders/${orderId}` },
+        title: "Order Successful",
+        body: "Your order was successful and is now secured in escrow.",
+        data: { route: `/orders/${orderId}` },
         dedupeKey: `order-paid-buyer-${orderId}`,
       }),
     })
@@ -310,6 +303,8 @@ try {
 
   // ✅ SELLER (only if different user)
   if (order.seller_id && order.seller_id !== order.buyer_id) {
+
+    // 1️⃣ Informational
     await fetch(`${SUPABASE_URL}/functions/v1/send-notification`, {
       method: "POST",
       headers: {
@@ -323,6 +318,23 @@ try {
         body: "A buyer has paid. Prepare the order for shipment.",
         data: { route: `/orders/${orderId}` },
         dedupeKey: `order-paid-seller-${orderId}`,
+      }),
+    })
+
+    // 2️⃣ Action (ship order)
+    await fetch(`${SUPABASE_URL}/functions/v1/send-notification`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      },
+      body: JSON.stringify({
+        userId: order.seller_id,
+        type: "order_action",
+        title: "📦 Please Ship This Order",
+        body: "Payment is complete. Ship the order to receive your payout.",
+        data: { route: `/orders/${orderId}` },
+        dedupeKey: `order-ship-${orderId}`,
       }),
     })
   }

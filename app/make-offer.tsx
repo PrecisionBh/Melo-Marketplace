@@ -212,7 +212,7 @@ try {
       title: "New offer received",
       body: `You received a new offer on "${listing.title}" (Qty: ${quantity})`,
       data: {
-        route: "/seller-hub/offers/[id]",
+        route: "/offers/[id]",
         params: { id: newOffer.id },
       },
       dedupeKey: `offer-${newOffer.id}`, // 🔥 CRITICAL

@@ -58,6 +58,8 @@ serve(async (req) => {
         shipment_id
       )
 
+    console.log("📦 Shipment retrieved:", shipment.id)
+
     // --------------------------------------------------
     // FIND SELECTED RATE
     // --------------------------------------------------
@@ -68,6 +70,8 @@ serve(async (req) => {
     if (!rate) {
       throw new Error("Invalid rate selected")
     }
+
+    console.log("📦 Selected rate:", rate)
 
     // --------------------------------------------------
     // MARKUP
@@ -81,30 +85,63 @@ serve(async (req) => {
     console.log("💰 Charged:", finalPrice)
 
     // --------------------------------------------------
-    // BUY LABEL
+    // BUY LABEL (FIXED + DEBUG)
     // --------------------------------------------------
-    const bought = await easypost.Shipment.buy(
-      shipment.id,
-      rate
-    )
+    console.log("🚀 Attempting label purchase:", {
+      shipment_id: shipment.id,
+      rate_id: rate.id,
+    })
 
-    if (!bought || !bought.tracking_code) {
-      throw new Error("Failed to purchase label")
+    let bought
+
+    try {
+      bought = await easypost.Shipment.buy(
+        shipment.id,
+        rate.id // ✅ FIXED
+      )
+
+      console.log("✅ PURCHASE RESPONSE:", bought)
+    } catch (err) {
+      console.error("❌ EASYPOST BUY FAILED:", err)
+      throw err
+    }
+
+    if (!bought) {
+      throw new Error("No shipment returned from EasyPost")
+    }
+
+    const trackingNumber =
+      bought.tracker?.tracking_code ||
+      bought.tracking_code ||
+      null
+
+    const trackingUrl =
+      bought.tracker?.public_url || null
+
+    const labelUrl =
+      bought.postage_label?.label_url || null
+
+    console.log("📦 LABEL URL:", labelUrl)
+    console.log("📦 TRACKING:", trackingNumber)
+    console.log("📦 TRACKING URL:", trackingUrl)
+
+    if (!labelUrl) {
+      throw new Error("Label was not generated")
     }
 
     // --------------------------------------------------
-    // UPDATE ORDER (FULLY)
+    // UPDATE ORDER (🔥 FIXED STATUS)
     // --------------------------------------------------
     const { error: updateError } = await supabase
       .from("orders")
       .update({
         // SHIPPING STATE
-        status: "label_purchased",
+        status: "shipped", // ✅ FIXED
         shipped_at: new Date().toISOString(),
 
         // TRACKING
-        tracking_number: bought.tracking_code,
-        tracking_url: bought.tracker?.public_url || null,
+        tracking_number: trackingNumber,
+        tracking_url: trackingUrl,
         tracking_status: "in_transit",
 
         // CARRIER
@@ -114,30 +151,38 @@ serve(async (req) => {
             : rate.carrier,
 
         // EASYPOST IDS
-        easypost_tracker_id: bought.tracker?.id,
+        easypost_tracker_id:
+          bought.tracker?.id || null,
         easypost_shipment_id: shipment.id,
 
         // LABEL
-        label_url: bought.postage_label?.label_url,
+        label_url: labelUrl,
         shipping_label_purchased: true,
         shipping_rate_id: rate.id,
 
-        // COST TRACKING (🔥 IMPORTANT)
-        shipping_label_cost_cents: Math.round(baseCost * 100),
+        // COST TRACKING
+        shipping_label_cost_cents: Math.round(
+          baseCost * 100
+        ),
 
-        // OPTIONAL PROFIT TRACKING
-        shipping_markup_cents: Math.round(markup * 100),
-        shipping_total_charged_cents: Math.round(finalPrice * 100),
-
-        // TIMESTAMPS
+        // TIMESTAMP
         updated_at: new Date().toISOString(),
       })
       .eq("id", order.id)
 
     if (updateError) {
-      console.error("DB UPDATE ERROR:", updateError)
+      console.error("❌ DB UPDATE ERROR:", updateError)
       throw new Error("Failed to update order")
     }
+
+    // --------------------------------------------------
+    // FINAL LOG
+    // --------------------------------------------------
+    console.log("📦 LABEL CREATED SUCCESS:", {
+      order_id,
+      labelUrl,
+      tracking: trackingNumber,
+    })
 
     // --------------------------------------------------
     // NOTIFY BUYER
@@ -159,13 +204,13 @@ serve(async (req) => {
           },
         }
       )
-    } catch (e) {
+    } catch {
       console.log("Notification failed (non-blocking)")
     }
 
     return Response.json({
       success: true,
-      label_url: bought.postage_label?.label_url,
+      label_url: labelUrl,
     })
   } catch (err: any) {
     console.error("💥 LABEL ERROR:", err)

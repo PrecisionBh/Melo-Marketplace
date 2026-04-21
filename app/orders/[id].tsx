@@ -242,7 +242,7 @@ const buyShippingLabel = async () => {
               "Buyer confirmed delivery. Funds released.",
             data: {
               route:
-                "/seller-hub/orders/[id]",
+                "/orders/[id]",
               params: {
                 id: order.id,
               },
@@ -303,7 +303,7 @@ const startReturn = async () => {
               "Buyer has initiated a return.",
             data: {
               route:
-                "/seller-hub/orders/[id]",
+                "/orders/[id]",
               params: {
                 id: order.id,
               },

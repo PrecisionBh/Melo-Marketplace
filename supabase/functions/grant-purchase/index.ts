@@ -70,6 +70,18 @@ async function fulfillBoostPack(userId: string, productId: string) {
 
   console.log("✅ Boost granted", { userId, boosts, mega })
 
+  // 🔔 Notification added
+  await supabase.functions.invoke("send-notification", {
+    body: {
+      userId,
+      type: "boost",
+      title: "Boosts Added 🚀",
+      body: "Your boost credits have been added to your account.",
+      data: { route: "/profile" },
+      dedupeKey: `boost-${Date.now()}`
+    }
+  })
+
   return json(200, { success: true })
 }
 
@@ -122,6 +134,18 @@ async function activateMeloPro(userId: string) {
   }
 
   console.log("✅ Pro activated", userId)
+
+  // 🔔 Notification added
+  await supabase.functions.invoke("send-notification", {
+    body: {
+      userId,
+      type: "pro",
+      title: "Melo Pro Activated 👑",
+      body: "You now have Pro benefits and bonus boosts!",
+      data: { route: "/profile" },
+      dedupeKey: `pro-${userId}-${Date.now()}`
+    }
+  })
 
   return json(200, { success: true })
 }

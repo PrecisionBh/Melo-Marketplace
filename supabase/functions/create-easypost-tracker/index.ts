@@ -119,7 +119,7 @@ serve(async (req) => {
               "Your order has been shipped. Tracking information is now available.",
             data: {
               route:
-                "/buyer-hub/orders/[id]",
+                "/orders/[id]",
               params: {
                 id: order.id,
               },

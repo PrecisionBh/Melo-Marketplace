@@ -270,8 +270,8 @@ export default function DisputeIssueForm({
       data: {
         route:
           role === "buyer"
-            ? "/seller-hub/orders/[id]"
-            : "/buyer-hub/orders/[id]",
+            ? "/orders/[id]"
+            : "/orders/[id]",
         params: { id: orderId },
       },
       dedupeKey: `dispute-opened-${orderId}-${role}`, // 🔥 role-aware key

@@ -411,18 +411,66 @@ setIsSellerPro(!!data?.is_pro)
 }
 
   const handleBuyNow = () => {
-    requireAuth(() => {
-      if (!listing) return
+  requireAuth(async () => {
+    if (!listing || !session?.user?.id) return
 
-      router.push({
-        pathname: "/cart/checkout",
-        params: {
-          listingId: listing.id,
-          quantity: String(quantity),
-        },
-      })
-    })
-  }
+    try {
+      const userId = session.user.id
+
+      // 🔍 Check if item already in cart
+      const { data: existing, error: existingError } =
+        await supabase
+          .from("cart_items")
+          .select("id, quantity")
+          .eq("user_id", userId)
+          .eq("listing_id", listing.id)
+          .maybeSingle()
+
+      if (existingError) throw existingError
+
+      if (existing) {
+        // 🔁 Update quantity instead of duplicating
+        const nextQty = Math.min(
+          (existing.quantity ?? 0) + quantity,
+          listing.quantity_available ?? quantity
+        )
+
+        const { error: updateError } =
+          await supabase
+            .from("cart_items")
+            .update({
+              quantity: nextQty,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", existing.id)
+
+        if (updateError) throw updateError
+      } else {
+        // ➕ Insert new item
+        const { error: insertError } =
+          await supabase
+            .from("cart_items")
+            .insert({
+              user_id: userId,
+              listing_id: listing.id,
+              seller_id: listing.user_id,
+              quantity: quantity,
+              title: listing.title,
+              price: listing.price,
+              image_url: listing.image_urls?.[0] ?? null,
+              shipping_type: listing.shipping_type,
+              shipping_price: listing.shipping_price ?? 0,
+            })
+
+        if (insertError) throw insertError
+      }
+
+      router.push("/cart/checkout")
+    } catch (err) {
+      console.error("❌ Buy Now failed:", err)
+    }
+  })
+}
 
   const handleMakeOffer = async () => {
   requireAuth(async () => {

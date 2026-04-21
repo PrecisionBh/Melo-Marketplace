@@ -1,5 +1,7 @@
+import { useRouter } from "expo-router"
 import {
   ActivityIndicator,
+  Linking,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -23,24 +25,21 @@ export default function SellerShippingActions({
   onVoidLabel?: () => void
   loadingRates?: boolean
 }) {
+  const router = useRouter()
+
   const status = order.status
   const trackingStatus =
     order.tracking_status?.toLowerCase()
 
+  // 🔥 TRUE SOURCE OF STATE
   const hasLabel = !!order.label_url
-  const hasPurchasedLabel =
-    order.shipping_label_purchased === true
+  const hasTracking = !!order.tracking_number
 
   const canVoid =
-    hasPurchasedLabel &&
-    trackingStatus !== "in_transit"
-
-  const canShip =
-    status === "paid" ||
-    status === "label_purchased"
+    hasLabel && trackingStatus !== "in_transit"
 
   const canBuyLabel =
-    status === "paid" && !hasLabel
+    status === "paid" && !hasLabel && !hasTracking
 
   const completed = status === "completed"
 
@@ -61,7 +60,7 @@ export default function SellerShippingActions({
     (status === "shipped" ||
       trackingStatus === "in_transit")
 
-  // 🔥 NEW: Seller guidance system
+  // 🔥 SELLER GUIDANCE
   const getSellerMessage = () => {
     if (status === "cancelled") {
       return {
@@ -79,7 +78,7 @@ export default function SellerShippingActions({
       }
     }
 
-    if (canShip) {
+    if (!hasLabel && !hasTracking && status === "paid") {
       return {
         title: "Ready to Ship",
         sub: "Purchase a label or add tracking to ship this order.",
@@ -106,7 +105,7 @@ export default function SellerShippingActions({
     if (delivered) {
       return {
         title: "Delivered",
-        sub: "Waiting for buyer to complete the order or initiate a return.",
+        sub: "Waiting for buyer confirmation or return window.",
         type: "notice",
       }
     }
@@ -122,7 +121,7 @@ export default function SellerShippingActions({
         Seller Actions
       </Text>
 
-      {/* 🔥 GUIDANCE BOX */}
+      {/* 🔥 GUIDANCE */}
       {message && (
         <View
           style={[
@@ -159,49 +158,55 @@ export default function SellerShippingActions({
         </View>
       )}
 
-      {/* 🔥 ACTION BUTTONS */}
-      {canShip && (
+      {/* 🔥 ACTIONS */}
+
+      {/* BUY LABEL */}
+      {canBuyLabel && (
+        <TouchableOpacity
+          style={styles.primaryBtn}
+          onPress={onBuyLabel}
+          disabled={loadingRates}
+        >
+          {loadingRates ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.primaryText}>
+              Buy Shipping Label
+            </Text>
+          )}
+        </TouchableOpacity>
+      )}
+
+      {/* ADD TRACKING */}
+      {!hasLabel && !hasTracking && (
+        <TouchableOpacity
+          style={styles.primaryBtn}
+          onPress={onAddTracking}
+        >
+          <Text style={styles.primaryText}>
+            Add Tracking / Mark Shipped
+          </Text>
+        </TouchableOpacity>
+      )}
+
+      {/* 🔥 EASYPOST FLOW */}
+      {hasLabel && (
         <>
-          {canBuyLabel && (
-            <TouchableOpacity
-              style={styles.primaryBtn}
-              onPress={onBuyLabel}
-              disabled={loadingRates}
-            >
-              {loadingRates ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.primaryText}>
-                  Buy Shipping Label
-                </Text>
-              )}
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity
+            style={styles.primaryBtn}
+            onPress={() =>
+              router.push({
+                pathname: "/shippinglabel",
+                params: { id: order.id },
+              })
+            }
+          >
+            <Text style={styles.primaryText}>
+              View Label
+            </Text>
+          </TouchableOpacity>
 
-          {!hasLabel &&
-            !order.tracking_number && (
-              <TouchableOpacity
-                style={styles.primaryBtn}
-                onPress={onAddTracking}
-              >
-                <Text style={styles.primaryText}>
-                  Add Tracking / Mark Shipped
-                </Text>
-              </TouchableOpacity>
-            )}
-
-          {hasPurchasedLabel && (
-            <TouchableOpacity
-              style={styles.primaryBtn}
-              onPress={onAddTracking}
-            >
-              <Text style={styles.primaryText}>
-                View Label / Reprint
-              </Text>
-            </TouchableOpacity>
-          )}
-
-          {hasPurchasedLabel && canVoid && (
+          {canVoid && (
             <TouchableOpacity
               style={styles.secondaryBtn}
               onPress={onVoidLabel}
@@ -211,16 +216,33 @@ export default function SellerShippingActions({
               </Text>
             </TouchableOpacity>
           )}
-
-          <TouchableOpacity
-            style={styles.secondaryBtn}
-            onPress={onCancelOrder}
-          >
-            <Text style={styles.secondaryText}>
-              Cancel / Refund Order
-            </Text>
-          </TouchableOpacity>
         </>
+      )}
+
+      {/* TRACK PACKAGE */}
+      {!hasLabel && hasTracking && (
+        <TouchableOpacity
+          style={styles.primaryBtn}
+          onPress={() =>
+            Linking.openURL(order.tracking_url)
+          }
+        >
+          <Text style={styles.primaryText}>
+            Track Package
+          </Text>
+        </TouchableOpacity>
+      )}
+
+      {/* CANCEL */}
+      {status === "paid" && (
+        <TouchableOpacity
+          style={styles.secondaryBtn}
+          onPress={onCancelOrder}
+        >
+          <Text style={styles.secondaryText}>
+            Cancel / Refund Order
+          </Text>
+        </TouchableOpacity>
       )}
     </View>
   )
