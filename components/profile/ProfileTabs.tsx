@@ -48,60 +48,6 @@ const TABS: {
   { key: "reviews", label: "Reviews" },
 ]
 
-const OFFER_EXPIRY_HOURS = 48
-
-function isExpired(createdAt: string) {
-  if (!createdAt) return false
-
-  const createdTime = Date.parse(createdAt)
-  if (isNaN(createdTime)) return false
-
-  const now = Date.now()
-  const diffMs = now - createdTime
-  const expiryMs =
-    OFFER_EXPIRY_HOURS * 60 * 60 * 1000
-
-  return diffMs >= expiryMs
-}
-
-function getDerivedStatus(offer: OfferRow) {
-  if (
-    offer.listings?.is_sold &&
-    offer.status !== "accepted"
-  ) {
-    return "sold"
-  }
-
-  if (
-    (offer.status === "pending" ||
-      offer.status === "accepted" ||
-      offer.status === "countered") &&
-    isExpired(offer.created_at)
-  ) {
-    return "expired"
-  }
-
-  return offer.status
-}
-
-function needsBuyerAction(offer: OfferRow) {
-  const derivedStatus = getDerivedStatus(offer)
-
-  return (
-    derivedStatus === "accepted" ||
-    derivedStatus === "countered"
-  )
-}
-
-function needsSellerAction(offer: OfferRow) {
-  const derivedStatus = getDerivedStatus(offer)
-
-  return (
-    derivedStatus === "pending" ||
-    derivedStatus === "countered"
-  )
-}
-
 export default function ProfileTabs({
   activeTab,
   onChange,
@@ -128,57 +74,26 @@ export default function ProfileTabs({
         await Promise.all([
           supabase
             .from("offers")
-            .select(
-              `
-              status,
-              created_at,
-              listings (
-                is_sold
-              )
-            `
-            )
+            .select(`status, created_at, listings ( is_sold )`)
             .eq("buyer_id", session.user.id)
             .returns<OfferRow[]>(),
           supabase
             .from("offers")
-            .select(
-              `
-              status,
-              created_at,
-              listings (
-                is_sold
-              )
-            `
-            )
+            .select(`status, created_at, listings ( is_sold )`)
             .eq("seller_id", session.user.id)
             .returns<OfferRow[]>(),
         ])
 
-      if (sentRes.error) {
-        throw sentRes.error
-      }
-
-      if (receivedRes.error) {
-        throw receivedRes.error
-      }
+      if (sentRes.error) throw sentRes.error
+      if (receivedRes.error) throw receivedRes.error
 
       const sentOffers = sentRes.data ?? []
-      const receivedOffers =
-        receivedRes.data ?? []
+      const receivedOffers = receivedRes.data ?? []
 
-      setSentCount(
-        sentOffers.filter(needsBuyerAction).length
-      )
-
-      setReceivedCount(
-        receivedOffers.filter(needsSellerAction)
-          .length
-      )
+      setSentCount(sentOffers.length)
+      setReceivedCount(receivedOffers.length)
     } catch (error) {
-      console.error(
-        "❌ Failed loading offer action counts",
-        error
-      )
+      console.error("❌ Failed loading counts", error)
       setSentCount(0)
       setReceivedCount(0)
     } finally {
@@ -195,8 +110,7 @@ export default function ProfileTabs({
   return (
     <View style={styles.wrapper}>
       {TABS.map((tab) => {
-        const active =
-          activeTab === tab.key
+        const active = activeTab === tab.key
 
         const badgeCount =
           tab.key === "sent"
@@ -209,21 +123,17 @@ export default function ProfileTabs({
           <TouchableOpacity
             key={tab.key}
             activeOpacity={0.85}
-            style={[
-              styles.tab,
-              active && styles.activeTab,
-            ]}
-            onPress={() =>
-              onChange(tab.key)
-            }
+            style={styles.tab}
+            onPress={() => onChange(tab.key)}
           >
             <View style={styles.tabInner}>
               <Text
                 style={[
                   styles.tabText,
-                  active &&
-                    styles.activeTabText,
+                  active && styles.activeTabText,
                 ]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
               >
                 {tab.label}
               </Text>
@@ -238,8 +148,7 @@ export default function ProfileTabs({
 
               {loadingCounts &&
                 (tab.key === "sent" ||
-                  tab.key ===
-                    "received") && (
+                  tab.key === "received") && (
                   <ActivityIndicator
                     size="small"
                     color="#D97732"
@@ -258,48 +167,32 @@ const styles = StyleSheet.create({
   wrapper: {
     marginTop: 22,
     marginHorizontal: 20,
-    backgroundColor: "#ECE9E4",
-    borderRadius: 22,
-    padding: 6,
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
   },
 
   tab: {
     flex: 1,
-    paddingVertical: 12,
-    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
+    paddingVertical: 10,
   },
 
   tabInner: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
     gap: 6,
   },
 
-  activeTab: {
-    backgroundColor: "#FFFFFF",
-    shadowColor: "#000",
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    elevation: 2,
-  },
-
   tabText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "500",
     color: "#6B7280",
   },
 
   activeTabText: {
-    color: "#111827",
+    color: "#D97732", // 🔥 orange when active
     fontWeight: "700",
   },
 

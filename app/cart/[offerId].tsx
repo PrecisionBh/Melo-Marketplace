@@ -12,7 +12,7 @@ import { handleAppError } from "@/lib/errors/appError"
 import { supabase } from "@/lib/supabase"
 
 import { useLocalSearchParams } from "expo-router"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
   Alert,
   KeyboardAvoidingView,
@@ -61,6 +61,13 @@ export default function OfferCheckoutScreen() {
     const [shippingCentsState, setShippingCentsState] = useState(0)
 const [shippingLoading, setShippingLoading] = useState(false)
 const [shippingVerified, setShippingVerified] = useState(false)
+
+useEffect(() => {
+  if (offerId && session?.user?.id) {
+    loadOffer()
+    loadSavedAddress()
+  }
+}, [offerId, session?.user?.id])
 
   const [shippingExpanded, setShippingExpanded] =
     useState(true)

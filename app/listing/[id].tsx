@@ -537,9 +537,14 @@ setIsSellerPro(!!data?.is_pro)
               offerMessage.trim() || null,
 
             status: "pending",
-          })
-          .select("id, seller_id")
-          .single()
+            expires_at: new Date(
+            Date.now() + 24 * 60 * 60 * 1000
+            ).toISOString(),
+            })
+            .select("id, seller_id")
+            .single()
+
+            console.log("CREATE OFFER:", { newOffer, error })
 
       if (error) throw error
 

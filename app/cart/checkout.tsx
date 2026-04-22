@@ -9,6 +9,7 @@ import GlobalHeader from "@/components/global/globalheader"
 import { useAuth } from "@/context/AuthContext"
 import { handleAppError } from "@/lib/errors/appError"
 import { supabase } from "@/lib/supabase"
+import * as Linking from "expo-linking"
 
 import { useFocusEffect } from "expo-router"
 import { useCallback, useMemo, useState } from "react"
@@ -456,6 +457,7 @@ const handleCheckout = async () => {
   setPaying(true)
 
   try {
+    /* 🔥 VERIFY ADDRESS */
     const verifyData = await verifyCheckoutAddress()
 
     if (
@@ -470,11 +472,103 @@ const handleCheckout = async () => {
       setPaying(false)
       return
     }
-    
-  } catch (err) {
-    handleAppError(err, {
-      fallbackMessage: "Checkout failed.",
+
+    console.log("🚀 Creating orders...")
+
+    /* 🔥 STEP 1 — CREATE ORDERS */
+    const createdOrderIds: string[] = []
+
+    for (const item of cart) {
+      const itemPriceCents =
+        Math.round(item.price * 100) * item.quantity
+
+      const shippingCents = item.shipping_cents || 0
+
+      const escrowCents =
+        itemPriceCents + shippingCents
+
+      const { data: order, error } =
+  await supabase
+    .from("orders")
+    .insert({
+      buyer_id: session.user.id,
+      seller_id: item.seller_id,
+      listing_id: item.listing_id,
+
+      status: "pending_payment",
+      quantity: item.quantity,
+
+      image_url: item.image_url,
+
+      amount_cents: escrowCents,
+      currency: "usd",
+
+      item_price_cents: itemPriceCents,
+      shipping_amount_cents: shippingCents,
+
+      buyer_fee_cents: 0,
+      tax_cents: 0,
+      escrow_amount_cents: escrowCents,
+
+      // 🔥 THIS IS WHAT WAS MISSING
+      listing_snapshot: {
+        listing_id: item.listing_id,
+        title: item.title,
+        image_url: item.image_url,
+        price: item.price,
+        quantity: item.quantity,
+        shipping_type: item.shipping_type,
+        shipping_price: item.shipping_cents || 0,
+      },
+
+      shipping_name: name.trim(),
+      shipping_line1: line1.trim(),
+      shipping_line2: line2.trim() || null,
+      shipping_city: city.trim(),
+      shipping_state: state.trim(),
+      shipping_postal_code: postal.trim(),
+      shipping_country: "US",
+      shipping_phone: phone.trim() || null,
     })
+    .select("id")
+    .single()
+
+      if (error || !order) {
+        console.error("❌ Order insert failed:", error)
+        throw new Error("Failed to create order")
+      }
+
+      createdOrderIds.push(order.id)
+    }
+
+    console.log("🧾 Created order IDs:", createdOrderIds)
+
+    /* 🔥 STEP 2 — CALL STRIPE FUNCTION */
+    const { data, error } =
+      await supabase.functions.invoke(
+        "create-cart-checkout-session",
+        {
+          body: {
+            order_ids: createdOrderIds,
+            amount: totalCents,
+            email: session.user.email,
+          },
+        }
+      )
+
+    console.log("🧪 Checkout response:", data)
+
+    if (error || !data?.url) {
+      console.error("❌ Stripe session error:", error)
+      throw new Error("Failed to create checkout session")
+    }
+
+    /* 🔥 STEP 3 — REDIRECT TO STRIPE */
+    await Linking.openURL(data.url)
+
+  } catch (err) {
+    console.error("❌ Checkout failed:", err)
+    Alert.alert("Checkout failed", "Please try again.")
   } finally {
     setPaying(false)
   }

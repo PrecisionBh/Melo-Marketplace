@@ -32,6 +32,7 @@ export default function OfferDetailScreen() {
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [isSellerPro, setIsSellerPro] = useState(false)
 
   const [offer, setOffer] = useState<any>(null)
 
@@ -81,6 +82,18 @@ export default function OfferDetailScreen() {
       if (error) throw error
 
       setOffer(data)
+
+      // 🔥 GET SELLER PRO STATUS
+const { data: sellerProfile, error: sellerError } = await supabase
+  .from("profiles")
+  .select("is_pro")
+  .eq("id", data.seller_id)
+  .single()
+
+if (!sellerError) {
+  setIsSellerPro(!!sellerProfile?.is_pro)
+}
+
     } catch (err) {
       handleAppError(err, {
         fallbackMessage:
@@ -115,14 +128,14 @@ export default function OfferDetailScreen() {
   if (!offer) return null
 
   const quantity = offer.quantity ?? 1
-  const unitPrice = offer.current_amount
+  const unitPrice =
+  offer.accepted_price ?? offer.current_amount ?? 0
   const itemTotal = unitPrice * quantity
 
   const shippingCost =
-    offer.listings?.shipping_type ===
-    "buyer_pays"
-      ? offer.listings?.shipping_price ?? 0
-      : 0
+  offer.accepted_shipping_type === "buyer_pays"
+    ? offer.accepted_shipping_price ?? 0
+    : 0
 
   const buyerFee = Number(
     (itemTotal * 0.044 + 0.3).toFixed(2)
@@ -136,12 +149,14 @@ export default function OfferDetailScreen() {
     ).toFixed(2)
   )
 
-  const sellerFee = Number(
-    (
-      (itemTotal + shippingCost) *
-      0.05
-    ).toFixed(2)
-  )
+  const sellerFeeRate = isSellerPro ? 0.01 : 0.05
+
+const sellerFee = Number(
+  (
+    (itemTotal + shippingCost) *
+    sellerFeeRate
+  ).toFixed(2)
+)
 
   const sellerPayout = Number(
     (
