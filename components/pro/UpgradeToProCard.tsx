@@ -1,7 +1,13 @@
 import { Ionicons } from "@expo/vector-icons"
 import { useRouter } from "expo-router"
 import { useEffect, useState } from "react"
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import {
+  ActivityIndicator,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native"
 
 import { useAuth } from "@/context/AuthContext"
 import { supabase } from "@/lib/supabase"
@@ -11,7 +17,10 @@ type Props = {
   style?: any
 }
 
-export default function UpgradeToProCard({ variant = "full", style }: Props) {
+export default function UpgradeToProCard({
+  variant = "full",
+  style,
+}: Props) {
   const router = useRouter()
   const { session } = useAuth()
   const userId = session?.user?.id
@@ -27,13 +36,11 @@ export default function UpgradeToProCard({ variant = "full", style }: Props) {
           return
         }
 
-        const { data, error } = await supabase
+        const { data } = await supabase
           .from("profiles")
           .select("is_pro")
           .eq("id", userId)
           .single()
-
-        if (error) throw error
 
         setIsPro(!!data?.is_pro)
       } catch {
@@ -49,7 +56,7 @@ export default function UpgradeToProCard({ variant = "full", style }: Props) {
   if (loading) {
     return (
       <View style={[styles.loadingWrap, style]}>
-        <ActivityIndicator />
+        <ActivityIndicator color="#D97732" />
       </View>
     )
   }
@@ -65,6 +72,7 @@ export default function UpgradeToProCard({ variant = "full", style }: Props) {
     router.push("/melo-pro")
   }
 
+  /* 🔹 COMPACT VERSION */
   if (variant === "compact") {
     return (
       <TouchableOpacity
@@ -72,37 +80,48 @@ export default function UpgradeToProCard({ variant = "full", style }: Props) {
         onPress={onPress}
         activeOpacity={0.85}
       >
-        <Ionicons name="diamond-outline" size={14} color="#FFD700" />
-        <Text style={styles.compactText}>Melo Pro • $24.99/mo</Text>
+        <Ionicons name="flash-outline" size={14} color="#D97732" />
+        <Text style={styles.compactText}>Upgrade • 1% Fees</Text>
       </TouchableOpacity>
     )
   }
 
+  /* 🔥 FULL CARD */
   return (
     <TouchableOpacity
-      style={[styles.proCard, style]}
+      style={[styles.card, style]}
       onPress={onPress}
       activeOpacity={0.9}
     >
-      <View style={styles.glow} />
-
       <View style={styles.row}>
         <View style={styles.iconWrap}>
-          <Ionicons name="diamond-outline" size={20} color="#FFD700" />
+          <Ionicons
+            name="flash-outline"
+            size={18}
+            color="#D97732"
+          />
         </View>
 
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>Upgrade to Melo Pro</Text>
 
-          {/* ✅ UPDATED TO MATCH BACKEND */}
           <Text style={styles.subtitle}>
-            $24.99/mo • 5 Boosts + 1 Mega Boost • Lower 3.5% seller fees • Track payouts • Sell multiple quantities • Unlimited Listings
+            Pay 1% instead of 5%. Keep more from every sale.
           </Text>
         </View>
 
-        <View style={styles.pill}>
-          <Text style={styles.pillText}>GO PRO</Text>
+        <View style={styles.cta}>
+          <Text style={styles.ctaText}>Upgrade</Text>
         </View>
+      </View>
+
+      {/* 🔥 VALUE STRIP */}
+      <View style={styles.valueRow}>
+        <Text style={styles.valueText}>1% Fees</Text>
+        <Text style={styles.dot}>•</Text>
+        <Text style={styles.valueText}>Unlimited Listings</Text>
+        <Text style={styles.dot}>•</Text>
+        <Text style={styles.valueText}>Boost Credits</Text>
       </View>
     </TouchableOpacity>
   )
@@ -110,35 +129,20 @@ export default function UpgradeToProCard({ variant = "full", style }: Props) {
 
 const styles = StyleSheet.create({
   loadingWrap: {
-    paddingVertical: 10,
+    paddingVertical: 12,
     alignItems: "center",
     justifyContent: "center",
   },
 
-  proCard: {
-    borderRadius: 18,
-    padding: 16,
-    backgroundColor: "#0B1511",
-    borderWidth: 1,
-    borderColor: "rgba(255,215,0,0.28)",
-    overflow: "hidden",
-    shadowColor: "#000",
-    shadowOpacity: 0.25,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 10,
-  },
-
-  glow: {
-    position: "absolute",
-    top: -40,
-    right: -40,
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    backgroundColor: "#FFD700",
-    opacity: 0.08,
-  },
+  /* 🔥 MATCH HEADER STYLE */
+  card: {
+  backgroundColor: "#F6EFE8",
+  borderRadius: 16,
+  padding: 14,
+  borderWidth: 1,
+  borderColor: "rgba(217,119,50,0.25)",
+  marginBottom: 10, // 👈 add this
+},
 
   row: {
     flexDirection: "row",
@@ -146,60 +150,73 @@ const styles = StyleSheet.create({
   },
 
   iconWrap: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
-    backgroundColor: "rgba(255,215,0,0.12)",
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: "rgba(217,119,50,0.15)",
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 12,
+    marginRight: 10,
   },
 
   title: {
-    fontSize: 16,
-    fontWeight: "900",
-    color: "#FFFFFF",
-    letterSpacing: 0.3,
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#111827",
   },
 
   subtitle: {
     fontSize: 12,
-    fontWeight: "600",
-    color: "rgba(255,255,255,0.72)",
-    marginTop: 3,
-    lineHeight: 17,
+    color: "#6B7280",
+    marginTop: 2,
   },
 
-  pill: {
-    backgroundColor: "#FFD700",
+  cta: {
+    backgroundColor: "#D97732",
     paddingHorizontal: 14,
     paddingVertical: 6,
     borderRadius: 999,
   },
 
-  pillText: {
-    fontSize: 11,
-    fontWeight: "900",
-    color: "#0B1511",
-    letterSpacing: 1,
+  ctaText: {
+    color: "#FFFFFF",
+    fontWeight: "800",
+    fontSize: 12,
   },
 
+  valueRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 10,
+  },
+
+  valueText: {
+    fontSize: 11,
+    color: "#374151",
+    fontWeight: "600",
+  },
+
+  dot: {
+    marginHorizontal: 6,
+    color: "#9CA3AF",
+  },
+
+  /* 🔹 COMPACT */
   compactBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    backgroundColor: "#0B1511",
-    borderWidth: 1,
-    borderColor: "rgba(255,215,0,0.35)",
-    paddingHorizontal: 12,
+    backgroundColor: "#F6EFE8",
+    paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(217,119,50,0.25)",
   },
 
   compactText: {
     fontSize: 12,
-    fontWeight: "900",
-    color: "#FFD700",
-    letterSpacing: 0.5,
+    fontWeight: "700",
+    color: "#D97732",
+    marginLeft: 4,
   },
 })

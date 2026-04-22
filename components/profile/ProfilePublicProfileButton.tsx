@@ -2,10 +2,10 @@ import { useAuth } from "@/context/AuthContext"
 import { Ionicons } from "@expo/vector-icons"
 import { useRouter } from "expo-router"
 import {
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native"
 
 export default function ProfilePublicProfileButton() {
@@ -20,50 +20,76 @@ export default function ProfilePublicProfileButton() {
       style={styles.button}
       onPress={() => {
         if (!userId) return
-
         router.push(`/public-profile/${userId}`)
       }}
     >
-      <Text style={styles.text}>
-        View public profile
-      </Text>
+      {/* LEFT */}
+      <View style={styles.left}>
+        <View style={styles.iconBox}>
+          <Ionicons
+            name="person-outline"
+            size={16}
+            color="#D97732"
+          />
+        </View>
 
-      <View style={styles.iconWrap}>
-        <Ionicons
-          name="chevron-forward"
-          size={18}
-          color="#6B7280"
-        />
+        <View>
+          <Text style={styles.title}>Public Profile</Text>
+          <Text style={styles.subtitle}>
+            See how others view your page
+          </Text>
+        </View>
       </View>
+
+      {/* RIGHT */}
+      <Ionicons
+        name="chevron-forward"
+        size={18}
+        color="#9CA3AF"
+      />
     </TouchableOpacity>
   )
 }
 
 const styles = StyleSheet.create({
   button: {
-    marginTop: 18,
-    marginHorizontal: 20,
-    backgroundColor: "#F8F8F7",
-    borderRadius: 22,
+    marginTop: 14,
+    marginHorizontal: 16,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#ECECEC",
-    paddingHorizontal: 20,
-    paddingVertical: 22,
+    borderColor: "#E5E7EB",
+    paddingHorizontal: 14,
+    paddingVertical: 14,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
 
-  text: {
-    fontSize: 18,
-    fontWeight: "500",
-    color: "#374151",
+  left: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
   },
 
-  iconWrap: {
-    width: 28,
-    height: 28,
+  iconBox: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: "rgba(217,119,50,0.12)",
     alignItems: "center",
     justifyContent: "center",
+  },
+
+  title: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#111827",
+  },
+
+  subtitle: {
+    fontSize: 11,
+    color: "#6B7280",
+    marginTop: 1,
   },
 })

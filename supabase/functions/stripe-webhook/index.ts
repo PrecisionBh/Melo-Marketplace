@@ -133,7 +133,7 @@ if (sellerErr) {
 // Free = 5%
 // (Fee applies to item + shipping as per your architecture)
 const isProSeller = sellerProfile?.is_pro === true
-const sellerFeeRate = isProSeller ? 0.035 : 0.05
+const sellerFeeRate = isProSeller ? 0.01 : 0.05
 
 const sellerFeeCents = Math.round(escrowAmountCents * sellerFeeRate)
 const sellerNetCents = escrowAmountCents - sellerFeeCents

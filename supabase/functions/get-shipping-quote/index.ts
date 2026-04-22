@@ -19,7 +19,8 @@ serve(async (req) => {
     }
 
     const body = await req.json()
-    console.log("📦 SHIPPING QUOTE BODY:", body)
+
+    console.log("📦 SHIPPING QUOTE BODY:", JSON.stringify(body, null, 2))
 
     // 🔥 VALIDATE INPUT
     if (!body?.to || !body?.from) {
@@ -30,9 +31,33 @@ serve(async (req) => {
       )
     }
 
+    // 🔥 NORMALIZE ADDRESSES (CRITICAL)
+    const toAddress = {
+      name: body.to.name || "Customer",
+      street1: body.to.street1,
+      street2: body.to.street2 || undefined,
+      city: body.to.city,
+      state: body.to.state,
+      zip: String(body.to.zip).slice(0, 5),
+      country: "US",
+    }
+
+    const fromAddress = {
+      name: body.from.name || "Seller",
+      street1: body.from.street1,
+      street2: body.from.street2 || undefined,
+      city: body.from.city,
+      state: body.from.state,
+      zip: String(body.from.zip).slice(0, 5),
+      country: "US",
+    }
+
+    console.log("📬 TO ADDRESS:", JSON.stringify(toAddress, null, 2))
+    console.log("📤 FROM ADDRESS:", JSON.stringify(fromAddress, null, 2))
+
     const shipment = await easypost.Shipment.create({
-      to_address: body.to,
-      from_address: body.from,
+      to_address: toAddress,
+      from_address: fromAddress,
       parcel: {
         weight: body.weight || 16,
       },
@@ -40,13 +65,14 @@ serve(async (req) => {
 
     console.log("🚚 Shipment created:", shipment.id)
 
+    // 🔥 LOG FULL RESPONSE IF NO RATES
     if (!shipment.rates || shipment.rates.length === 0) {
-      console.log("❌ No rates returned from EasyPost")
+      console.log("❌ FULL SHIPMENT RESPONSE:", JSON.stringify(shipment, null, 2))
       throw new Error("No rates returned from EasyPost")
     }
 
     console.log(
-      "📊 ALL RATES:",
+      "📊 RAW RATES:",
       shipment.rates.map((r: any) => ({
         carrier: r.carrier,
         service: r.service,
@@ -54,28 +80,15 @@ serve(async (req) => {
       }))
     )
 
-    // 🔥 MATCH YOUR LABEL FUNCTION (FILTER)
-    const validRates = shipment.rates.filter((r: any) => {
-      const carrier = r.carrier?.toUpperCase()
+    // 🔥 TEMP: DO NOT FILTER (we want to see ALL carriers first)
+    const validRates = shipment.rates
 
-      return (
-        carrier === "USPS" ||
-        carrier === "UPS" ||
-        carrier === "UPSDAP"
-      )
-    })
-
-    if (!validRates.length) {
-      console.log("❌ No valid carriers found")
-      throw new Error("No valid shipping rates found")
-    }
-
-    // 🔥 CHEAPEST FROM VALID
+    // 🔥 PICK CHEAPEST
     const cheapest = validRates.reduce((min: any, r: any) => {
       return Number(r.rate) < Number(min.rate) ? r : min
     }, validRates[0])
 
-    console.log("✅ CHEAPEST:", cheapest)
+    console.log("✅ CHEAPEST RATE:", cheapest)
 
     return Response.json({
       rate: cheapest.rate,

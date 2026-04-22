@@ -126,8 +126,8 @@ export default function ListingsGrid({
       megaIndex++
     }
 
-    if (showUpgradeRow && builtRows.length > 15) {
-      builtRows.splice(15, 0, {
+    if (showUpgradeRow && builtRows.length >10 ) {
+      builtRows.splice(10, 0, {
         type: "upgrade_row",
         id: "upgrade-row",
       })

@@ -2,7 +2,7 @@
   "expo": {
     "name": "Melo",
     "slug": "Melo-MP",
-    "version": "1.1.01",
+    "version": "1.1.02",
     "orientation": "portrait",
     "scheme": "melomp",
     "userInterfaceStyle": "automatic",
@@ -12,7 +12,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.bhoffman4.MeloMP",
-      "buildNumber": "18",
+      "buildNumber": "19",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }

@@ -67,7 +67,7 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#EAF4EF",
+    backgroundColor: "#F8F8F8",
   },
 
   content: {
