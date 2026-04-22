@@ -1,29 +1,67 @@
 import { Ionicons } from "@expo/vector-icons"
-import { Image } from "expo-image"
-import { useState } from "react"
+import { ResizeMode, Video } from "expo-av"
+import { useEffect, useRef, useState } from "react"
 import {
-    Dimensions,
-    Modal,
-    ScrollView,
-    StyleSheet,
-    TouchableOpacity,
-    View,
+  Dimensions,
+  Image,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  View,
 } from "react-native"
 
 const SCREEN_WIDTH = Dimensions.get("window").width
 
 export default function ListingImageGallery({
   images,
+  videoUrl,
 }: {
   images: string[]
+  videoUrl?: string | null
 }) {
-  const [fullscreenImage, setFullscreenImage] =
-    useState<string | null>(null)
+  const [fullscreenIndex, setFullscreenIndex] =
+    useState<number | null>(null)
 
   const [activeIndex, setActiveIndex] =
     useState(0)
 
-  if (!images?.length) {
+  const fullscreenScrollRef =
+    useRef<ScrollView>(null)
+
+  // 🔥 DEBUG INITIAL INPUT
+  useEffect(() => {
+    console.log("🧪 IMAGES PROP:", images)
+    console.log("🧪 VIDEO URL:", videoUrl)
+  }, [images, videoUrl])
+
+  // 🔥 Combine media
+  const media = [
+    ...(videoUrl ? [{ type: "video", uri: videoUrl }] : []),
+    ...images.map((uri) => ({ type: "image", uri })),
+  ]
+
+  // 🔥 DEBUG MEDIA
+  useEffect(() => {
+    console.log("🧪 MEDIA ARRAY:", media)
+  }, [media])
+
+  useEffect(() => {
+    if (
+      fullscreenIndex !== null &&
+      fullscreenScrollRef.current
+    ) {
+      setTimeout(() => {
+        fullscreenScrollRef.current?.scrollTo({
+          x: fullscreenIndex * SCREEN_WIDTH,
+          animated: false,
+        })
+      }, 0)
+    }
+  }, [fullscreenIndex])
+
+  if (!media.length) {
+    console.log("🚨 NO MEDIA TO RENDER")
     return (
       <View style={styles.emptyWrap}>
         <Ionicons
@@ -47,33 +85,67 @@ export default function ListingImageGallery({
               e.nativeEvent.contentOffset.x /
                 (SCREEN_WIDTH - 32)
             )
-
             setActiveIndex(index)
           }}
         >
-          {images.map((uri, i) => (
-            <TouchableOpacity
-              key={i}
-              activeOpacity={0.9}
-              onPress={() =>
-                setFullscreenImage(uri)
-              }
-              style={styles.imagePage}
-            >
-              <Image
-                source={uri}
-                style={styles.image}
-                contentFit="contain"
-                transition={100}
-                cachePolicy="memory-disk"
-              />
-            </TouchableOpacity>
-          ))}
+          {media.map((item, i) => {
+            console.log("🧪 RENDER ITEM:", item)
+
+            return (
+              <View key={i} style={styles.imagePage}>
+                {item.type === "image" ? (
+                  <TouchableOpacity
+                    activeOpacity={0.9}
+                    onPress={() =>
+                      setFullscreenIndex(i)
+                    }
+                    style={{ flex: 1 }}
+                  >
+                    <Image
+                      source={{ uri: item.uri }}
+                      style={styles.image}
+                      resizeMode="cover"
+                      onLoad={() =>
+                        console.log(
+                          "✅ IMAGE LOADED:",
+                          item.uri
+                        )
+                      }
+                      onError={(e) =>
+                        console.log(
+                          "❌ IMAGE ERROR:",
+                          item.uri,
+                          e.nativeEvent
+                        )
+                      }
+                    />
+                  </TouchableOpacity>
+                ) : (
+                  <Video
+                    source={{ uri: item.uri }}
+                    style={styles.image}
+                    resizeMode={ResizeMode.CONTAIN}
+                    shouldPlay
+                    isLooping
+                    isMuted
+                    useNativeControls={false}
+                    onError={(e) =>
+                      console.log(
+                        "❌ VIDEO ERROR:",
+                        item.uri,
+                        e
+                      )
+                    }
+                  />
+                )}
+              </View>
+            )
+          })}
         </ScrollView>
 
-        {images.length > 1 && (
+        {media.length > 1 && (
           <View style={styles.dotsWrap}>
-            {images.map((_, i) => (
+            {media.map((_, i) => (
               <View
                 key={i}
                 style={[
@@ -88,7 +160,7 @@ export default function ListingImageGallery({
       </View>
 
       <Modal
-        visible={!!fullscreenImage}
+        visible={fullscreenIndex !== null}
         transparent
         animationType="fade"
       >
@@ -96,7 +168,7 @@ export default function ListingImageGallery({
           <TouchableOpacity
             style={styles.closeBtn}
             onPress={() =>
-              setFullscreenImage(null)
+              setFullscreenIndex(null)
             }
           >
             <Ionicons
@@ -107,21 +179,62 @@ export default function ListingImageGallery({
           </TouchableOpacity>
 
           <ScrollView
-            style={{ flex: 1 }}
-            contentContainerStyle={
-              styles.zoomWrap
-            }
-            maximumZoomScale={3}
-            minimumZoomScale={1}
-            centerContent
+            ref={fullscreenScrollRef}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            onMomentumScrollEnd={(e) => {
+              const index = Math.round(
+                e.nativeEvent.contentOffset.x /
+                  SCREEN_WIDTH
+              )
+              setFullscreenIndex(index)
+            }}
           >
-            {fullscreenImage && (
-              <Image
-                source={fullscreenImage}
-                style={styles.fullImage}
-                contentFit="contain"
-              />
-            )}
+            {media.map((item, i) => (
+              <View
+                key={i}
+                style={styles.fullscreenPage}
+              >
+                {item.type === "image" ? (
+                  <Image
+                    source={{ uri: item.uri }}
+                    style={styles.fullImage}
+                    resizeMode="contain"
+                    onLoad={() =>
+                      console.log(
+                        "✅ FULL IMAGE LOADED:",
+                        item.uri
+                      )
+                    }
+                    onError={(e) =>
+                      console.log(
+                        "❌ FULL IMAGE ERROR:",
+                        item.uri,
+                        e.nativeEvent
+                      )
+                    }
+                  />
+                ) : (
+                  <Video
+                    source={{ uri: item.uri }}
+                    style={styles.fullImage}
+                    resizeMode={ResizeMode.CONTAIN}
+                    shouldPlay
+                    isLooping
+                    isMuted
+                    useNativeControls
+                    onError={(e) =>
+                      console.log(
+                        "❌ FULL VIDEO ERROR:",
+                        item.uri,
+                        e
+                      )
+                    }
+                  />
+                )}
+              </View>
+            ))}
           </ScrollView>
         </View>
       </Modal>
@@ -137,12 +250,10 @@ const styles = StyleSheet.create({
 
   imagePage: {
     width: SCREEN_WIDTH - 32,
-    height: 300,
-    backgroundColor: "#F4F1EE",
+    aspectRatio: 1,
+    backgroundColor: "#000",
     borderRadius: 26,
     overflow: "hidden",
-    justifyContent: "center",
-    alignItems: "center",
   },
 
   image: {
@@ -173,13 +284,13 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: "rgba(0,0,0,0.18)",
+    backgroundColor: "rgba(255,255,255,0.4)",
   },
 
   activeDot: {
     width: 22,
     borderRadius: 8,
-    backgroundColor: "#111",
+    backgroundColor: "#fff",
   },
 
   modal: {
@@ -194,14 +305,15 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
 
-  zoomWrap: {
+  fullscreenPage: {
+    width: SCREEN_WIDTH,
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
   },
 
   fullImage: {
-    width: "100%",
+    width: SCREEN_WIDTH,
     height: "100%",
   },
 })

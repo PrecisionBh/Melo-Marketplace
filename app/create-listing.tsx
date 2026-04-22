@@ -7,6 +7,9 @@ import CreateListingSelectors from "@/components/create-listing/CreateListingSel
 import CreateListingShipping from "@/components/create-listing/CreateListingShipping"
 import FullScreenSelector from "@/components/create-listing/FullScreenSelector"
 import ImageUpload from "@/components/create-listing/ImageUpload"
+import * as FileSystem from "expo-file-system/legacy"
+
+import { Video as VideoCompressor } from "react-native-compressor"
 
 import GlobalFooter from "@/components/global/globalfooter"
 import GlobalHeader from "@/components/global/globalheader"
@@ -19,6 +22,7 @@ import { supabase } from "@/lib/supabase"
 
 import { useFocusEffect, useRouter } from "expo-router"
 import { useCallback, useEffect, useState } from "react"
+
 
 import {
   ActivityIndicator,
@@ -222,34 +226,85 @@ if (category === "clothing_apparel" && !size) {
 
     const uploadedImageUrls = await Promise.all(uploadPromises)
 
-    /* ---------------- VIDEO UPLOAD ---------------- */
+   /* ---------------- VIDEO UPLOAD ---------------- */
 
 let videoUrl = null
+console.log("VIDEO STATE:", video)
 
 if (video) {
   try {
-    const response = await fetch(video.uri)
-    const arrayBuffer = await response.arrayBuffer()
+    console.log("VIDEO URI:", video.uri)
+
+    if (video.fileSize && video.fileSize > 80000000) {
+      Alert.alert(
+        "Video too large",
+        "Please choose a smaller video or lower quality recording."
+      )
+      setSubmitting(false)
+      return
+    }
 
     const fileName = `${session.user.id}/${Date.now()}-video.mp4`
 
+    // 🔥 STEP 1: COMPRESS VIDEO
+    const compressedUri = await VideoCompressor.compress(video.uri, {
+      compressionMethod: "auto",
+    })
+
+    console.log("COMPRESSED VIDEO:", compressedUri)
+
+    // 🔥 STEP 2: GET FILE INFO
+    const fileInfo = await FileSystem.getInfoAsync(compressedUri)
+
+    if (!fileInfo.exists) {
+      throw new Error("Compressed video not found")
+    }
+
+    if (fileInfo.size && fileInfo.size > 20000000) {
+      Alert.alert(
+        "Video too large",
+        "Please use a shorter or lower quality video."
+      )
+      setSubmitting(false)
+      return
+    }
+
+    // 🔥 STEP 3: READ FILE AS BASE64
+    const base64 = await FileSystem.readAsStringAsync(compressedUri, {
+      encoding: "base64",
+    })
+
+    // 🔥 STEP 4: CONVERT TO ARRAY BUFFER
+    const byteCharacters = atob(base64)
+    const byteNumbers = new Array(byteCharacters.length)
+
+    for (let i = 0; i < byteCharacters.length; i++) {
+      byteNumbers[i] = byteCharacters.charCodeAt(i)
+    }
+
+    const byteArray = new Uint8Array(byteNumbers)
+
+    // 🔥 STEP 5: UPLOAD TO SUPABASE
     const { error: uploadError } = await supabase.storage
       .from("listing-videos")
-      .upload(fileName, arrayBuffer, {
+      .upload(fileName, byteArray, {
         contentType: "video/mp4",
         upsert: false,
       })
 
     if (uploadError) {
-      console.log("Video upload error:", uploadError)
+      console.log("UPLOAD ERROR:", uploadError)
       throw uploadError
     }
 
+    // 🔥 STEP 6: GET PUBLIC URL
     const { data } = supabase.storage
       .from("listing-videos")
       .getPublicUrl(fileName)
 
     videoUrl = data.publicUrl
+
+    console.log("VIDEO UPLOADED:", videoUrl)
   } catch (err) {
     console.warn("Video upload failed:", err)
   }
@@ -272,6 +327,7 @@ brand: null,
   shipping_type: shippingType,
   shipping_price: parsedShippingPrice,
   image_urls: uploadedImageUrls,
+  video_url: videoUrl,
   quantity: safeQuantity,
   quantity_available: safeQuantity,
 })

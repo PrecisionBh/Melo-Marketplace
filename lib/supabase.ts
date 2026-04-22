@@ -20,6 +20,7 @@ const SupabaseStorage = {
   },
 }
 
+// ✅ create client
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
@@ -28,3 +29,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     storage: SupabaseStorage,
   },
 })
+
+// ✅ export keys separately (THIS IS THE FIX)
+export const SUPABASE_URL = supabaseUrl
+export const SUPABASE_ANON_KEY = supabaseAnonKey

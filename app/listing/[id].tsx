@@ -36,6 +36,7 @@ type Listing = {
   condition: string
   category: string
   image_urls: string[] | null
+  video_url?: string | null
   allow_offers: boolean
   shipping_type: "free" | "buyer_pays"
   shipping_price: number | null
@@ -131,6 +132,7 @@ const [offerMessage, setOfferMessage] =
           condition,
           category,
           image_urls,
+          video_url,
           allow_offers,
           shipping_type,
           shipping_price,
@@ -146,6 +148,10 @@ const [offerMessage, setOfferMessage] =
       }
 
       setListing(data)
+
+console.log("RAW image_urls:", data.image_urls)
+console.log("RAW video_url:", data.video_url)
+
     } catch (err) {
       handleAppError(err, {
         fallbackMessage: "Failed to load listing.",
@@ -851,21 +857,23 @@ const deleteListing = () => {
           <Text style={styles.backText}>Back</Text>
         </TouchableOpacity>
 
-        <ListingImageGallery images={images} />
+        <ListingImageGallery
+  images={images}
+  videoUrl={listing.video_url}
+/>
 
         <ListingHeroCard
-          title={listing.title}
-          price={listing.price}
-          liked={liked}
-          likesCount={likesCount}
-          shippingType={listing.shipping_type}
-          shippingPrice={listing.shipping_price}
-          allowOffers={listing.allow_offers}
-          quantityAvailable={
-            listing.quantity_available
-          }
-          onToggleWatch={toggleWatch}
-        />
+  title={listing.title}
+  price={listing.price}
+  liked={liked}
+  likesCount={likesCount}
+  shippingType={listing.shipping_type}
+  shippingPrice={listing.shipping_price}
+  allowOffers={listing.allow_offers}
+  quantityAvailable={listing.quantity_available}
+  onToggleWatch={toggleWatch}
+  listingId={listing.id} // 🔥 THIS WAS MISSING
+/>
 
         <SellerProfileCard
   sellerName={sellerName}

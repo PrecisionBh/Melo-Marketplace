@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons"
+import { ResizeMode, Video } from "expo-av"
 import { Image } from "expo-image"
 import {
   StyleSheet,
@@ -16,6 +17,7 @@ export type Listing = {
   description?: string | null
   brand?: string | null
   image_url: string | null
+  video_url?: string | null
   allow_offers?: boolean
   shipping_type?: "seller_pays" | "buyer_pays" | null
 }
@@ -58,34 +60,42 @@ export default function ListingCard({
       activeOpacity={0.85}
     >
       {/* IMAGE WRAP */}
-      <View
-        style={[
-          styles.imageWrap,
-          isMegaBoost && styles.megaGlowWrap,
-        ]}
-      >
-        {imageUri ? (
-          <Image
-            source={imageUri}
-            style={styles.image}
-            contentFit="cover"
-            cachePolicy="memory-disk"
-            transition={100}
-            onError={(e) => {
-             
-            }}
-            onLoad={() => {
-            }}
-          />
-        ) : (
-          <View style={styles.placeholder}>
-            <Ionicons
-              name="image-outline"
-              size={22}
-              color="#9FB8AC"
-            />
-          </View>
-        )}
+<View
+  style={[
+    styles.imageWrap,
+    isMegaBoost && styles.megaGlowWrap,
+  ]}
+>
+  {isMegaBoost && listing.video_url ? (
+    <Video
+      source={{ uri: listing.video_url }}
+      style={styles.image}
+      resizeMode={ResizeMode.COVER}
+      shouldPlay
+      isLooping
+      isMuted
+    />
+  ) : imageUri ? (
+    <Image
+      source={imageUri}
+      style={styles.image}
+      contentFit="cover"
+      cachePolicy="memory-disk"
+      transition={100}
+      onError={(e) => {
+      }}
+      onLoad={() => {
+      }}
+    />
+  ) : (
+    <View style={styles.placeholder}>
+      <Ionicons
+        name="image-outline"
+        size={22}
+        color="#9FB8AC"
+      />
+    </View>
+  )}
 
         {/* MEGA BOOST BADGE */}
         {isMegaBoost && (

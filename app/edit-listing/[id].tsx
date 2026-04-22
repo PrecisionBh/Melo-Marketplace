@@ -5,6 +5,8 @@ import CreateListingSelectors from "@/components/create-listing/CreateListingSel
 import CreateListingShipping from "@/components/create-listing/CreateListingShipping"
 import FullScreenSelector from "@/components/create-listing/FullScreenSelector"
 import ImageUpload from "@/components/create-listing/ImageUpload"
+import * as FileSystem from "expo-file-system/legacy"
+import { Video as VideoCompressor } from "react-native-compressor"
 
 import GlobalFooter from "@/components/global/globalfooter"
 import GlobalHeader from "@/components/global/globalheader"
@@ -46,6 +48,7 @@ type ListingRow = {
   category: string | null
   condition: string | null
   image_urls: string[] | null
+  video_url?: string | null
   allow_offers: boolean | null
   min_offer: number | null
   shipping_type: "seller_pays" | "buyer_pays" | null
@@ -126,6 +129,8 @@ export default function EditListingScreen() {
     useState(false)
 
   const [images, setImages] = useState<string[]>([])
+  const [video, setVideo] = useState<any>(null)
+const [existingVideoUrl, setExistingVideoUrl] = useState<string | null>(null)
   const [title, setTitle] = useState("")
   const [description, setDescription] =
     useState("")
@@ -293,6 +298,7 @@ setSize(data.size || null)
       )
 
       setImages(data.image_urls ?? [])
+      setExistingVideoUrl(data.video_url ?? null)
 
       const safeLoadedQty =
         data.quantity_available && data.quantity_available > 0
@@ -401,6 +407,91 @@ setSize(data.size || null)
         uploadedImageUrls.push(data.publicUrl)
       }
 
+      /* ---------------- VIDEO UPLOAD ---------------- */
+
+let videoUrl = existingVideoUrl
+
+// 🔥 CASE 1: NEW VIDEO SELECTED
+if (video && video.uri && !video.uri.startsWith("http")) {
+  try {
+    console.log("VIDEO URI:", video.uri)
+
+    // 🔥 STEP 1: COMPRESS
+    const compressedUri = await VideoCompressor.compress(video.uri, {
+      compressionMethod: "auto",
+    })
+
+    console.log("COMPRESSED VIDEO:", compressedUri)
+
+    // 🔥 STEP 2: GET FILE INFO
+    const fileInfo = await FileSystem.getInfoAsync(compressedUri)
+
+    if (!fileInfo.exists) {
+      throw new Error("Compressed video not found")
+    }
+
+    if (fileInfo.size && fileInfo.size > 20000000) {
+      Alert.alert(
+        "Video too large",
+        "Please use a shorter or lower quality video."
+      )
+      setSubmitting(false)
+      return
+    }
+
+    // 🔥 STEP 3: READ FILE AS BASE64
+    const base64 = await FileSystem.readAsStringAsync(compressedUri, {
+      encoding: "base64",
+    })
+
+    // 🔥 STEP 4: CONVERT TO ARRAY BUFFER
+    const byteCharacters = atob(base64)
+    const byteNumbers = new Array(byteCharacters.length)
+
+    for (let i = 0; i < byteCharacters.length; i++) {
+      byteNumbers[i] = byteCharacters.charCodeAt(i)
+    }
+
+    const byteArray = new Uint8Array(byteNumbers)
+
+    const fileName = `${session.user.id}/${Date.now()}-video.mp4`
+
+    // 🔥 STEP 5: UPLOAD
+    const { error: uploadError } = await supabase.storage
+      .from("listing-videos")
+      .upload(fileName, byteArray, {
+        contentType: "video/mp4",
+        upsert: false,
+      })
+
+    if (uploadError) {
+      console.log("UPLOAD ERROR:", uploadError)
+      throw uploadError
+    }
+
+    // 🔥 STEP 6: GET URL
+    const { data } = supabase.storage
+      .from("listing-videos")
+      .getPublicUrl(fileName)
+
+    videoUrl = data.publicUrl
+
+    console.log("VIDEO UPDATED:", videoUrl)
+  } catch (err) {
+    console.warn("Video upload failed:", err)
+  }
+}
+
+// 🔥 CASE 2: USER REMOVED VIDEO
+if (!video && !existingVideoUrl) {
+  videoUrl = null
+}
+
+/* HANDLE REMOVAL */
+if (!video && !existingVideoUrl) {
+  videoUrl = null
+}
+
       const updatePayload = {
         title: title.trim(),
         description: description.trim() || null,
@@ -416,6 +507,7 @@ setSize(data.size || null)
         shipping_type: shippingType,
         shipping_price: parsedShippingPrice,
         image_urls: uploadedImageUrls,
+        video_url: videoUrl,
         quantity: safeQuantity,
         quantity_available: safeQuantity,
         boost_locked:
@@ -522,10 +614,12 @@ setSize(data.size || null)
           contentContainerStyle={styles.content}
         >
           <ImageUpload
-            images={images}
-            setImages={setImages}
-            max={5}
-          />
+  images={images}
+  setImages={setImages}
+  video={video || (existingVideoUrl ? { uri: existingVideoUrl } : null)}
+  setVideo={setVideo}
+  max={5}
+/>
 
           <CreateListingDetails
             title={title}

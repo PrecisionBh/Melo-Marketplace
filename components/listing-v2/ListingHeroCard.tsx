@@ -1,10 +1,12 @@
 import { Ionicons } from "@expo/vector-icons"
 import {
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native"
+
+import ShareListingButton from "@/components/listing-v2/ShareListingButton"
 
 export default function ListingHeroCard({
   title,
@@ -16,6 +18,7 @@ export default function ListingHeroCard({
   allowOffers,
   quantityAvailable,
   onToggleWatch,
+  listingId,
 }: {
   title: string
   price: number
@@ -26,37 +29,41 @@ export default function ListingHeroCard({
   allowOffers: boolean
   quantityAvailable: number
   onToggleWatch: () => void
+  listingId: string
 }) {
   return (
     <View style={styles.wrap}>
       <View style={styles.row}>
         <View style={{ flex: 1 }}>
-          <Text style={styles.title}>
-            {title}
-          </Text>
+          <Text style={styles.title}>{title}</Text>
 
           <Text style={styles.price}>
             ${price.toLocaleString()}
           </Text>
         </View>
 
-        <TouchableOpacity
-          style={styles.watchBtn}
-          onPress={onToggleWatch}
-        >
-          <Ionicons
-            name={liked ? "heart" : "heart-outline"}
-            size={19}
-            color={liked ? "#DC2626" : "#444"}
-          />
-        </TouchableOpacity>
+        {/* 🔥 ACTION ICONS */}
+        <View style={styles.actions}>
+          <ShareListingButton listingId={listingId} />
+
+          <TouchableOpacity
+            onPress={onToggleWatch}
+            activeOpacity={0.6}
+          >
+            <Ionicons
+              name={liked ? "heart" : "heart-outline"}
+              size={22}
+              color={liked ? "#D97732" : "#6B7280"}
+            />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={styles.badges}>
         <Pill text={`${quantityAvailable} Available`} />
 
         {shippingType === "free" ? (
-          <Pill text="Free Shipping" green />
+          <Pill text="Free Shipping" highlight />
         ) : (
           <Pill
             text={`Shipping $${(
@@ -66,41 +73,37 @@ export default function ListingHeroCard({
         )}
 
         {allowOffers && (
-          <Pill text="Offers Accepted" orange />
+          <Pill text="Offers Accepted" highlight />
         )}
       </View>
 
       {likesCount > 0 && (
-  <Text style={styles.likes}>
-    {likesCount} {likesCount === 1 ? "Like" : "Likes"}
-  </Text>
-)}
+        <Text style={styles.likes}>
+          {likesCount} {likesCount === 1 ? "Like" : "Likes"}
+        </Text>
+      )}
     </View>
   )
 }
 
 function Pill({
   text,
-  green,
-  orange,
+  highlight,
 }: {
   text: string
-  green?: boolean
-  orange?: boolean
+  highlight?: boolean
 }) {
   return (
     <View
       style={[
         styles.pill,
-        green && styles.greenPill,
-        orange && styles.orangePill,
+        highlight && styles.orangePill,
       ]}
     >
       <Text
         style={[
           styles.pillText,
-          green && styles.greenText,
-          orange && styles.orangeText,
+          highlight && styles.orangeText,
         ]}
       >
         {text}
@@ -122,6 +125,12 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
   },
 
+  actions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+  },
+
   title: {
     fontSize: 19,
     fontWeight: "700",
@@ -134,18 +143,6 @@ const styles = StyleSheet.create({
     fontSize: 26,
     fontWeight: "800",
     color: "#D97732",
-  },
-
-  watchBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 14,
-    backgroundColor: "#fff",
-    borderWidth: 1,
-    borderColor: "#ECECEC",
-    alignItems: "center",
-    justifyContent: "center",
-    marginLeft: 12,
   },
 
   badges: {
@@ -168,16 +165,8 @@ const styles = StyleSheet.create({
     color: "#555",
   },
 
-  greenPill: {
-    backgroundColor: "#DCFCE7",
-  },
-
-  greenText: {
-    color: "#15803D",
-  },
-
   orangePill: {
-    backgroundColor: "#FFF7ED",
+    backgroundColor: "#FFF4ED",
   },
 
   orangeText: {

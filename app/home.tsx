@@ -43,6 +43,7 @@ type ListingRow = {
   price: number
   category: string
   image_urls: string[] | null
+  video_url?: string | null
   shipping_type?: "seller_pays" | "buyer_pays" | null
   user_id?: string
   is_boosted?: boolean | null
@@ -184,8 +185,8 @@ useEffect(() => {
       const { data, error } = await supabase
         .from("listings")
         .select(
-          "id,title,price,category,image_urls,shipping_type,user_id,is_boosted,is_mega_boost,created_at"
-        )
+  "id,title,price,category,image_urls,video_url,shipping_type,user_id,is_boosted,is_mega_boost,created_at"
+)
         .eq("status", "active")
         .eq("is_sold", false)
         .eq("is_removed", false)
@@ -313,6 +314,7 @@ const normalizedMegaBoosts: Listing[] = activeMegaBoostRows.map((l) => ({
   price: Number(l.price),
   category: l.category ?? "",
   image_url: l.image_urls?.[0] ?? null,
+  video_url: l.video_url ?? null, // 🔥 ONLY HERE
   allow_offers: false,
   shipping_type: l.shipping_type ?? null,
 }))
