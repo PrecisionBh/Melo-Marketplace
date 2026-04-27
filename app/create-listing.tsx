@@ -20,7 +20,7 @@ import { useAuth } from "@/context/AuthContext"
 import { handleAppError } from "@/lib/errors/appError"
 import { supabase } from "@/lib/supabase"
 
-import { useFocusEffect, useRouter } from "expo-router"
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router"
 import { useCallback, useEffect, useState } from "react"
 
 
@@ -80,7 +80,18 @@ const CONDITIONS: SelectorOption[] = [
   { label: "Poor", value: "poor", subtext: "Heavy wear, damage, or needs repair." },
 ]
 
+
+
 export default function CreateListingScreen() {
+
+  const [sizes, setSizes] = useState([
+  { size: "XS", qty: "0" },
+  { size: "S", qty: "0" },
+  { size: "M", qty: "0" },
+  { size: "L", qty: "0" },
+  { size: "XL", qty: "0" },
+])
+
   const { session } = useAuth()
   const router = useRouter()
 
@@ -127,14 +138,68 @@ const [height, setHeight] = useState("")
   const [checkingPro, setCheckingPro] = useState(true)
   const [isPro, setIsPro] = useState<boolean>(false)
   const [showLimitModal, setShowLimitModal] = useState(false)
+  const { duplicate, data } = useLocalSearchParams()
+
+  useEffect(() => {
+  if (duplicate && data) {
+    try {
+      const parsed = JSON.parse(data as string)
+
+      setTitle(parsed.title || "")
+      setDescription(parsed.description || "")
+      setCategory(parsed.category || null)
+      setCondition(parsed.condition || null)
+
+      setPrice(
+        parsed.price ? String(parsed.price) : ""
+      )
+
+      setImages(parsed.image_urls || [])
+      setVideo(parsed.video_url || null) // ✅ FIXED (was setVideoUrl)
+
+      setShippingType(
+        parsed.shipping_type || "buyer_pays"
+      )
+
+      setShippingPrice(
+        parsed.shipping_price
+          ? String(parsed.shipping_price)
+          : ""
+      )
+
+      setAllowOffers(parsed.allow_offers || false)
+
+      // 👕 sizes
+      if (Array.isArray(parsed.sizes)) {
+  const baseSizes = ["XS", "S", "M", "L", "XL"]
+
+  setSizes(
+    baseSizes.map((size) => {
+      const found = parsed.sizes.find(
+        (s: any) => s.size === size
+      )
+
+      return {
+        size,
+        qty: found ? String(found.qty) : "",
+      }
+    })
+  )
+}
+
+      // 📦 quantity
+      setQuantity(
+        parsed.quantity_available
+          ? String(parsed.quantity_available)
+          : "1"
+      )
+    } catch (err) {
+      console.log("❌ Duplicate parse error:", err)
+    }
+  }
+}, [duplicate, data])
 
 /* ---------------- RESET CATEGORY + BRAND WHEN SPORT CHANGES ---------------- */
-
-useEffect(() => {
-  if (category !== "clothing_apparel") {
-    setSize(null)
-  }
-}, [category])
 
 const handleCreateListing = async () => {
   if (!session?.user) return
@@ -182,9 +247,13 @@ const handleCreateListing = async () => {
   return
 }
 
-if (category === "clothing_apparel" && !size) {
-  Alert.alert("Select Size", "Please select a size.")
-  return
+if (category === "clothing_apparel") {
+  const hasQty = sizes.some(s => parseInt(s.qty) > 0)
+
+  if (!hasQty) {
+    Alert.alert("Missing Sizes", "Enter quantity for at least one size.")
+    return
+  }
 }
 
     if (isNaN(parsedPrice)) {
@@ -311,30 +380,54 @@ if (video) {
 }
     /* ---------------- INSERT LISTING ---------------- */
 
-    const { data, error } = await supabase
-      .from("listings")
-      .insert({
-  user_id: session.user.id,
-  title: title.trim(),
-  description: description.trim() || null,
-brand: null,
-  category: category,
-  size: category === "clothing_apparel" ? size : null,
-  condition: condition,
-  price: parsedPrice,
-  allow_offers: allowOffers,
-  min_offer: allowOffers ? parsedMinOffer : null,
-  shipping_type: shippingType,
-  shipping_price: parsedShippingPrice,
-  image_urls: uploadedImageUrls,
-  video_url: videoUrl,
-  quantity: safeQuantity,
-  quantity_available: safeQuantity,
-})
-      .select("id")
-      .single()
+const filteredSizes = sizes.filter(s => parseInt(s.qty) > 0)
 
-    if (error) throw error
+const totalQty = filteredSizes.reduce(
+  (sum, s) => sum + parseInt(s.qty),
+  0
+)
+
+const { data, error } = await supabase
+  .from("listings")
+  .insert({
+    user_id: session.user.id,
+    title: title.trim(),
+    description: description.trim() || null,
+    brand: null,
+    category: category,
+
+    // 🔥 SIZE SYSTEM (NEW)
+    sizes: category === "clothing_apparel" ? filteredSizes : null,
+
+    // 🔥 KEEP FOR BACKWARD COMPAT (optional but safe)
+    size: category === "clothing_apparel" ? null : size,
+
+    condition: condition,
+    price: parsedPrice,
+    allow_offers: allowOffers,
+    min_offer: allowOffers ? parsedMinOffer : null,
+
+    shipping_type: shippingType,
+    shipping_price: parsedShippingPrice,
+
+    image_urls: uploadedImageUrls,
+    video_url: videoUrl,
+
+    // 🔥 QUANTITY LOGIC
+    quantity:
+      category === "clothing_apparel"
+        ? totalQty
+        : safeQuantity,
+
+    quantity_available:
+      category === "clothing_apparel"
+        ? totalQty
+        : safeQuantity,
+  })
+  .select("id")
+  .single()
+
+if (error) throw error
 
    /* ---------------- BOOST LOGIC ---------------- */
 
@@ -431,102 +524,102 @@ setMegaBoostsRemaining(profile?.mega_boosts_remaining ?? 0)
 }, [session?.user?.id])
 )
 
-if (checkingAddress) {
-  return (
-    <View style={styles.screen}>
-      <GlobalHeader />
-      <View style={styles.loaderWrap}>
-        <ActivityIndicator size="large" color="#D97732" />
-      </View>
-    </View>
-  )
-}
+const showLoading = checkingAddress
 
 return (
   <View style={styles.screen}>
-    <GlobalHeader />
+  <GlobalHeader />
 
-    {hasReturnAddress && (
-      <ScrollView contentContainerStyle={styles.content}>
-        <ImageUpload
-  images={images}
-  setImages={setImages}
-  video={video}
-  setVideo={setVideo}
-  max={5}
-/>
-
-        <CreateListingDetails
-          title={title}
-          setTitle={setTitle}
-          price={price}
-          setPrice={setPrice}
-          quantity={quantity}
-          setQuantity={setQuantity}
-          description={description}
-          setDescription={setDescription}
-        />
-
-        <CreateListingSelectors
-  category={category}
-  condition={condition}
-  conditionSubtext={
-    CONDITIONS.find((c) => c.value === condition)?.subtext || ""
-  }
-  onPressCategory={() => setShowCategoryModal(true)}
-  onPressCondition={() => setShowConditionModal(true)}
-
-  size={size}
-  setSize={setSize}
-
-  quantity={quantity}
-  setQuantity={setQuantity}
-  isPro={isPro}
-/>
-
-        <CreateListingShipping
-          shippingType={
-            shippingType === "seller_pays" ? "free" : "buyer_pays"
-          }
-          setShippingType={(val) =>
-            setShippingType(val === "free" ? "seller_pays" : "buyer_pays")
-          }
-          weight={weight}
-          setWeight={setWeight}
-          zipCode={zipCode}
-          setZipCode={setZipCode}
-          length={length}
-          setLength={setLength}
-          width={width}
-          setWidth={setWidth}
-          height={height}
-          setHeight={setHeight}
-        />
-
-        <CreateListingOffers
-  allowOffers={allowOffers}
-  setAllowOffers={setAllowOffers}
-  minOffer={minOffer}
-  setMinOffer={setMinOffer}
-/>
-
-        <CreateListingBoost
-          selectedBoost={
-            isMegaBoosted ? "mega" : isBoosted ? "boost" : "none"
-          }
-          setSelectedBoost={(val) => {
-            setIsBoosted(val === "boost")
-            setIsMegaBoosted(val === "mega")
-          }}
-          boostCredits={boostsRemaining}
-          megaCredits={megaBoostsRemaining}
-          onBuyCredits={() => router.push("/boostcredits")}
-          onPublish={handleCreateListing}
-        />
-      </ScrollView>
+  <View style={{ flex: 1 }}>
+    
+    {/* 🔥 LOADING OVERLAY (does NOT replace tree) */}
+    {showLoading && (
+      <View style={styles.loaderWrap}>
+        <ActivityIndicator size="large" color="#D97732" />
+      </View>
     )}
 
-    <GlobalFooter />
+    {/* 🔥 ALWAYS MOUNT SCROLLVIEW */}
+    <ScrollView contentContainerStyle={styles.content}>
+      
+      {!hasReturnAddress ? (
+        <Text>Checking address...</Text>
+      ) : (
+        <>
+          <ImageUpload
+            images={images}
+            setImages={setImages}
+            video={video}
+            setVideo={setVideo}
+            max={5}
+          />
+
+          <CreateListingDetails
+            title={title}
+            setTitle={setTitle}
+            price={price}
+            setPrice={setPrice}
+            quantity={quantity}
+            setQuantity={setQuantity}
+            description={description}
+            setDescription={setDescription}
+          />
+
+          <CreateListingSelectors
+            category={category}
+            condition={condition}
+            conditionSubtext={
+              CONDITIONS.find((c) => c.value === condition)?.subtext || ""
+            }
+            onPressCategory={() => setShowCategoryModal(true)}
+            onPressCondition={() => setShowConditionModal(true)}
+            sizes={sizes}
+            setSizes={setSizes}
+            isPro={isPro}
+          />
+
+          <CreateListingShipping
+            shippingType={shippingType}
+            setShippingType={setShippingType}
+            weight={weight}
+            setWeight={setWeight}
+            zipCode={zipCode}
+            setZipCode={setZipCode}
+            length={length}
+            setLength={setLength}
+            width={width}
+            setWidth={setWidth}
+            height={height}
+            setHeight={setHeight}
+          />
+
+          <CreateListingOffers
+            allowOffers={allowOffers}
+            setAllowOffers={setAllowOffers}
+            minOffer={minOffer}
+            setMinOffer={setMinOffer}
+          />
+
+          <CreateListingBoost
+            selectedBoost={
+              isMegaBoosted ? "mega" : isBoosted ? "boost" : "none"
+            }
+            setSelectedBoost={(val) => {
+              setIsBoosted(val === "boost")
+              setIsMegaBoosted(val === "mega")
+            }}
+            boostCredits={boostsRemaining}
+            megaCredits={megaBoostsRemaining}
+            onBuyCredits={() => router.push("/boostcredits")}
+            onPublish={handleCreateListing}
+          />
+        </>
+      )}
+
+    </ScrollView>
+  </View>
+
+  <GlobalFooter />
 
     <FullScreenSelector
       visible={showCategoryModal}
@@ -576,12 +669,8 @@ return (
             </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            onPress={() => setShowLimitModal(false)}
-          >
-            <Text style={styles.laterText}>
-              Maybe Later
-            </Text>
+          <TouchableOpacity onPress={() => setShowLimitModal(false)}>
+            <Text style={styles.laterText}>Maybe Later</Text>
           </TouchableOpacity>
         </View>
       </View>

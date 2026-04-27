@@ -71,9 +71,7 @@ export default function OrderSummaryCard({
   order: any
 }) {
   const derivedStatus = (() => {
-    // 🔥 ALWAYS FIRST
     if (order.status === "cancelled") return "cancelled"
-
     if (order.is_disputed) return "disputed"
 
     if (
@@ -114,6 +112,12 @@ export default function OrderSummaryCard({
 
   const quantity = order.quantity ?? 1
 
+  // 🔥 SMART SIZE HANDLING
+  const size =
+    order.size ??
+    order.listing_snapshot?.size ??
+    null
+
   const total =
     (order.amount_cents ?? 0) / 100
 
@@ -144,9 +148,7 @@ export default function OrderSummaryCard({
 
           <Text style={styles.meta}>
             Qty: {quantity}
-            {order.listing_snapshot?.size
-              ? ` • Size: ${order.listing_snapshot.size}`
-              : ""}
+            {size ? ` • Size: ${size}` : ""}
           </Text>
 
           <Text style={styles.price}>

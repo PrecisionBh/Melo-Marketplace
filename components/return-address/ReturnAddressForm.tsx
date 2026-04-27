@@ -92,7 +92,7 @@ export default function ReturnAddressForm({ onSaved, showTitle = true }: Props) 
             updated_at: new Date().toISOString(),
           },
           {
-            onConflict: "user_id", // 🔥 CRITICAL FIX FOR 23505
+            onConflict: "user_id",
           }
         )
 
@@ -109,8 +109,6 @@ export default function ReturnAddressForm({ onSaved, showTitle = true }: Props) 
       setSaving(false)
     }
   }
-
-  
 
   if (loading) {
     return <ActivityIndicator style={{ marginTop: 20 }} />
@@ -135,7 +133,11 @@ export default function ReturnAddressForm({ onSaved, showTitle = true }: Props) 
       />
       <Field label="Country" value={country} onChange={setCountry} />
 
-      <TouchableOpacity style={styles.saveBtn} onPress={saveAddress} disabled={saving}>
+      <TouchableOpacity
+        style={styles.saveBtn}
+        onPress={saveAddress}
+        disabled={saving}
+      >
         <Text style={styles.saveText}>
           {saving ? "Saving..." : "Save Address"}
         </Text>
@@ -163,7 +165,8 @@ function Field({
         onChangeText={onChange}
         keyboardType={keyboardType}
         style={styles.input}
-        placeholderTextColor="#9BB7AA"
+        placeholder="Enter..."
+        placeholderTextColor="#666" // ✅ FIXED for iPhone
       />
     </View>
   )
@@ -171,25 +174,31 @@ function Field({
 
 const styles = StyleSheet.create({
   container: { marginTop: 10 },
+
   title: {
     fontSize: 16,
     fontWeight: "800",
     color: "#2E5F4F",
     marginBottom: 12,
   },
+
   label: {
     fontWeight: "700",
     marginBottom: 6,
     color: "#2E5F4F",
   },
+
   input: {
     backgroundColor: "#fff",
     borderRadius: 12,
     padding: 12,
     borderWidth: 1,
     borderColor: "#D6E6DE",
-    color: "#1F3D33",
+
+    // 🔥 CRITICAL FIXES FOR iPHONE
+    color: "#000",              // Always readable
   },
+
   saveBtn: {
     marginTop: 10,
     backgroundColor: "#0F1E17",
@@ -198,5 +207,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+
   saveText: { color: "#fff", fontWeight: "900" },
 })

@@ -2,6 +2,7 @@ import GlobalFooter from "@/components/global/globalfooter"
 import GlobalHeader from "@/components/global/globalheader"
 
 import AddTrackingModal from "@/components/orders/AddTrackingModal"
+import BuyerActions from "@/components/orders/BuyerActions"
 import OrderStepIndicator from "@/components/orders/OrderStepIndicator"
 import OrderSummaryCard from "@/components/orders/OrderSummaryCard"
 import ReturnActions from "@/components/orders/ReturnActions"
@@ -715,6 +716,16 @@ return (
           <SellerShippingActions order={order} />
         </>
       )}
+      
+      {/* 🔥 BUYER ACTIONS */}
+{isBuyer && !isReturnFlow && (
+  <BuyerActions
+    order={order}
+    refreshOrder={loadOrder}
+    onConfirmDelivery={() => setConfirmVisible(true)}
+    onStartReturn={() => setShowReturnForm(true)}
+  />
+)}
 
       {/* 🔥 BUYER RETURN ACTIONS (FIXED LOCATION) */}
       {isReturnFlow && isBuyer && (

@@ -26,6 +26,7 @@ type CartItem = {
   image_url: string | null
   quantity: number
   shipping_price: number
+  size?: string | null 
 }
 
 export default function CartScreen() {
@@ -275,13 +276,15 @@ setLoading(false)
                         {item.title}
                       </Text>
 
-                      <Text
-                        style={
-                          styles.itemMeta
-                        }
-                      >
-                        Qty: {item.quantity}
-                      </Text>
+                      <Text style={styles.itemMeta}>
+  Qty: {item.quantity}
+</Text>
+
+{item.size && (
+  <Text style={styles.itemMeta}>
+    Size: {item.size}
+  </Text>
+)}
 
                       <Text
                         style={styles.price}

@@ -58,6 +58,7 @@ type ListingRow = {
   is_boosted: boolean | null
   is_mega_boost: boolean | null
   size: string | null
+sizes: { size: string; qty: number | string }[] | null
 }
 
 const MARKETPLACE_CATEGORIES: SelectorOption[] = [
@@ -159,6 +160,15 @@ const [existingVideoUrl, setExistingVideoUrl] = useState<string | null>(null)
 
   const [quantity, setQuantity] = useState("1")
   const [size, setSize] = useState<string | null>(null)
+  const [sizes, setSizes] = useState<
+  { size: string; qty: string }[]
+>([
+  { size: "XS", qty: "0" },
+  { size: "S", qty: "0" },
+  { size: "M", qty: "0" },
+  { size: "L", qty: "0" },
+  { size: "XL", qty: "0" },
+])
   const [boostsRemaining, setBoostsRemaining] =
     useState<number>(0)
   const [megaBoostsRemaining, setMegaBoostsRemaining] =
@@ -274,6 +284,16 @@ setCategory(safeCategory ?? null)
 setCondition(data.condition ?? null)
 setSize(data.size || null)
 
+if (safeCategory === "clothing_apparel" && Array.isArray(data.sizes)) {
+  setSizes([
+    { size: "XS", qty: String(data.sizes.find((s: any) => s.size === "XS")?.qty ?? "") },
+    { size: "S", qty: String(data.sizes.find((s: any) => s.size === "S")?.qty ?? "") },
+    { size: "M", qty: String(data.sizes.find((s: any) => s.size === "M")?.qty ?? "") },
+    { size: "L", qty: String(data.sizes.find((s: any) => s.size === "L")?.qty ?? "") },
+    { size: "XL", qty: String(data.sizes.find((s: any) => s.size === "XL")?.qty ?? "") },
+  ])
+}
+
       setPrice(
         typeof data.price === "number"
           ? String(data.price)
@@ -349,17 +369,32 @@ setSize(data.size || null)
         : 1
 
       if (
-        !title.trim() ||
-        !category ||
-        !condition ||
-        images.length === 0
-      ) {
-        Alert.alert(
-          "Missing Details",
-          "Please complete all required fields."
-        )
-        return
-      }
+  !title.trim() ||
+  !category ||
+  !condition ||
+  images.length === 0
+) {
+  Alert.alert(
+    "Missing Details",
+    "Please complete all required fields."
+  )
+  return
+}
+
+// 👕 SIZE VALIDATION (MATCH CREATE LISTING)
+if (category === "clothing_apparel") {
+  const hasQty = sizes.some(
+    (s) => parseInt(String(s.qty), 10) > 0
+  )
+
+  if (!hasQty) {
+    Alert.alert(
+      "Missing Sizes",
+      "Enter quantity for at least one size."
+    )
+    return
+  }
+}
 
       if (isNaN(parsedPrice)) {
         Alert.alert(
@@ -492,13 +527,31 @@ if (!video && !existingVideoUrl) {
   videoUrl = null
 }
 
+// 🔥 ADD THIS RIGHT BEFORE updatePayload
+let filteredSizes: { size: string; qty: number }[] = []
+let totalQty = 0
+
+if (category === "clothing_apparel") {
+  filteredSizes = sizes
+    .map((s) => ({
+      size: s.size,
+      qty: parseInt(s.qty, 10) || 0,
+    }))
+    .filter((s) => s.qty > 0)
+
+  totalQty = filteredSizes.reduce(
+    (sum, s) => sum + s.qty,
+    0
+  )
+}
       const updatePayload = {
         title: title.trim(),
         description: description.trim() || null,
         brand: null,
         category,
         condition,
-        size: category === "clothing_apparel" ? size : null,
+        sizes: category === "clothing_apparel" ? filteredSizes : null,
+size: category === "clothing_apparel" ? null : size,
         price: parsedPrice,
         allow_offers: allowOffers,
         min_offer: allowOffers
@@ -508,8 +561,15 @@ if (!video && !existingVideoUrl) {
         shipping_price: parsedShippingPrice,
         image_urls: uploadedImageUrls,
         video_url: videoUrl,
-        quantity: safeQuantity,
-        quantity_available: safeQuantity,
+        quantity:
+  category === "clothing_apparel"
+    ? totalQty
+    : safeQuantity,
+
+quantity_available:
+  category === "clothing_apparel"
+    ? totalQty
+    : safeQuantity,
         boost_locked:
           isBoosted || isMegaBoosted ? false : true,
       }
@@ -647,38 +707,25 @@ if (!video && !existingVideoUrl) {
     setShowConditionModal(true)
   }
 
-  size={size}
-  setSize={setSize}
-
-  quantity={quantity}
-  setQuantity={setQuantity}
-  isPro={isPro}
+  sizes={sizes}
+setSizes={setSizes}
+isPro={isPro}
 />
 
           <CreateListingShipping
-            shippingType={
-              shippingType === "seller_pays"
-                ? "free"
-                : "buyer_pays"
-            }
-            setShippingType={(val) =>
-              setShippingType(
-                val === "free"
-                  ? "seller_pays"
-                  : "buyer_pays"
-              )
-            }
-            weight={weight}
-            setWeight={setWeight}
-            zipCode={zipCode}
-            setZipCode={setZipCode}
-            length={length}
-            setLength={setLength}
-            width={width}
-            setWidth={setWidth}
-            height={height}
-            setHeight={setHeight}
-          />
+  shippingType={shippingType}
+  setShippingType={setShippingType}
+  weight={weight}
+  setWeight={setWeight}
+  zipCode={zipCode}
+  setZipCode={setZipCode}
+  length={length}
+  setLength={setLength}
+  width={width}
+  setWidth={setWidth}
+  height={height}
+  setHeight={setHeight}
+/>
 
           <CreateListingOffers
             allowOffers={allowOffers}

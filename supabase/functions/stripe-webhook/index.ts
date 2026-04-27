@@ -60,29 +60,33 @@ async function markOrderPaid(params: {
       paid_at,
       escrow_funded_at,
       wallet_credited,
-      quantity
+      quantity,
+      size
     `)
     .eq("id", orderId)
     .single()
 
   if (error || !order) {
     console.error("❌ Order not found:", orderId, error)
-    return json(404, { error: "Order not found" })
+    throw new Error("Order not found")
   }
 
   if (order.wallet_credited && order.status === "paid") {
     console.log("⚠️ Order already paid:", orderId)
-    return json(200, { received: true })
+    return
   }
 
-  if (typeof amountTotal === "number" && amountTotal !== order.amount_cents) {
-    console.error("❌ Amount mismatch", {
+  // Only validate for single-order checkouts
+if (!Array.isArray(params) && typeof amountTotal === "number") {
+  if (amountTotal < order.amount_cents) {
+    console.error("❌ Amount too low", {
       orderId,
       stripe: amountTotal,
       db: order.amount_cents,
     })
-    return new Response("Amount mismatch", { status: 400 })
+    throw new Error("Amount mismatch")
   }
+}
 
   const now = new Date().toISOString()
 
@@ -96,9 +100,9 @@ async function markOrderPaid(params: {
       .single()
 
     if (offerErr || !offer?.listing_id) {
-      console.error("❌ Failed to resolve listing from offer", offerErr)
-      return json(500, { error: "Offer listing resolution failed" })
-    }
+  console.error("❌ Failed to resolve listing from offer", offerErr)
+  throw new Error("Offer listing resolution failed")
+}
 
     resolvedListingId = offer.listing_id
 
@@ -109,9 +113,9 @@ async function markOrderPaid(params: {
   }
 
   if (!order.item_price_cents) {
-    console.error("❌ Missing item_price_cents for escrow", orderId)
-    return json(500, { error: "Missing item price for escrow" })
-  }
+  console.error("❌ Missing item_price_cents for escrow", orderId)
+  throw new Error("Missing item price for escrow")
+}
 
   const escrowAmountCents =
     order.item_price_cents + (order.shipping_amount_cents ?? 0)
@@ -125,11 +129,11 @@ const { data: sellerProfile, error: sellerErr } = await supabase
 
 if (sellerErr) {
   console.error("❌ Failed to fetch seller profile for fee calc:", sellerErr)
-  return json(500, { error: "Seller profile fetch failed" })
+  throw new Error("Seller profile fetch failed")
 }
 
 // 🎯 Dynamic Melo seller fee
-// Pro = 3.5%
+// Pro = 1%
 // Free = 5%
 // (Fee applies to item + shipping as per your architecture)
 const isProSeller = sellerProfile?.is_pro === true
@@ -177,7 +181,7 @@ console.log("💰 Dynamic seller fee applied", {
 
   if (updateErr) {
     console.error("❌ Order update failed:", orderId, updateErr)
-    return json(500, { error: "Order update failed" })
+    throw new Error("Order update failed")
   }
 
   console.log("✅ Order PAID + escrow funded:", orderId)
@@ -193,7 +197,7 @@ console.log("💰 Dynamic seller fee applied", {
 
     if (walletErr) {
       console.error("❌ Wallet pending credit failed", walletErr)
-      return json(500, { error: "Wallet credit failed" })
+      throw new Error("Wallet credit failed")
     }
 
     await supabase
@@ -203,11 +207,28 @@ console.log("💰 Dynamic seller fee applied", {
   }
 
   if (resolvedListingId) {
-    const purchasedQty =
-      typeof (order as any).quantity === "number" && (order as any).quantity > 0
-        ? (order as any).quantity
-        : 1
+  const purchasedQty =
+    typeof (order as any).quantity === "number" && (order as any).quantity > 0
+      ? (order as any).quantity
+      : 0
 
+  // 👕 NEW: SIZE-BASED INVENTORY (ONLY IF SIZE EXISTS)
+  if (order.size && order.size !== "") {
+    console.log("👕 Decrementing SIZE inventory", {
+      listing: resolvedListingId,
+      size: (order as any).size,
+      qty: purchasedQty,
+    })
+
+    await supabase.rpc("decrement_listing_size", {
+      p_listing_id: resolvedListingId,
+      p_size: (order as any).size,
+      p_qty: purchasedQty,
+    })
+  }
+
+  // 📦 EXISTING LOGIC (ONLY IF NO SIZE)
+  if (!(order as any).size) {
     const { data: listing, error: listingErr } = await supabase
       .from("listings")
       .select("id, quantity_available")
@@ -220,7 +241,7 @@ console.log("💰 Dynamic seller fee applied", {
         resolvedListingId,
         listingErr,
       })
-      return json(200, { received: true })
+return
     }
 
     const currentQty =
@@ -241,6 +262,7 @@ console.log("💰 Dynamic seller fee applied", {
       })
       .eq("id", resolvedListingId)
   }
+}
 
  if (resolvedListingId) {
   // 🛒 Remove purchased item from buyer cart after successful payment
@@ -343,7 +365,7 @@ try {
   console.error("❌ Notification failed:", notifErr)
 }
 
-return json(200, { received: true })
+return
 }
 
 async function activateMeloPro(params: {
@@ -529,33 +551,37 @@ serve(async (req) => {
       })
     }
 
-    // 🔹 MULTI ORDER CART
-    if (orderIdsRaw) {
+   // 🔹 MULTI ORDER CART
+if (orderIdsRaw) {
+  try {
+    const orderIds: string[] = JSON.parse(orderIdsRaw)
+
+    for (const id of orderIds) {
       try {
-        const orderIds: string[] = JSON.parse(orderIdsRaw)
-
-        for (const id of orderIds) {
-          await markOrderPaid({
-            orderId: id,
-            sessionId: session.id,
-            paymentIntentId:
-              session.payment_intent as string | null,
-          })
-        }
-
-        return json(200, { received: true })
+        await markOrderPaid({
+          orderId: id,
+          sessionId: session.id,
+          paymentIntentId:
+            session.payment_intent as string | null,
+        })
       } catch (err) {
-        console.error("❌ Failed parsing order_ids:", err)
-        return json(400, { error: "Invalid order_ids metadata" })
+        console.error("❌ Failed processing order:", id, err)
       }
     }
 
     return json(200, { received: true })
+  } catch (err) {
+    console.error("❌ Failed parsing order_ids:", err)
+    return json(400, { error: "Invalid order_ids metadata" })
   }
+}
 
-  // ================================
-  // 💸 PAYOUT
-  // ================================
+return json(200, { received: true })
+}
+
+// ================================
+// 💸 PAYOUT
+// ================================
   if (event.type === "payout.paid") {
     const payout = event.data.object as Stripe.Payout
 

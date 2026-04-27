@@ -52,14 +52,14 @@ export default function SearchBar({
           <Ionicons
             name="search"
             size={18}
-            color="#888"
+            color="#1e1e1e"
           />
 
           <TextInput
             value={value}
             onChangeText={onChange}
             placeholder={placeholder}
-            placeholderTextColor="#888"
+            placeholderTextColor="#1b1b1b"
             style={styles.searchInput}
           />
 

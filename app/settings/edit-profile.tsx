@@ -85,7 +85,12 @@ export default function ReturnAddressScreen() {
         }
       )
 
-      return await res.json()
+      try {
+  const json = await res.json()
+  return json
+} catch {
+  return { fallback: true }
+}
     } catch {
       return { fallback: true }
     }
@@ -158,9 +163,22 @@ export default function ReturnAddressScreen() {
       }
 
       if (!verifyData?.verifications?.delivery?.success) {
-        Alert.alert("Invalid Address", "Enter a valid address.")
-        return
-      }
+  Alert.alert(
+    "Couldn’t Verify Address",
+    "We couldn’t verify this address. You can still continue.",
+    [
+      {
+        text: "Continue Anyway",
+        onPress: async () => {
+          if (removingAddress) await deactivateUserListings()
+          await saveWithAddress({})
+        },
+      },
+      { text: "Cancel", style: "cancel" },
+    ]
+  )
+  return
+}
 
       const verified = verifyData
 
@@ -204,12 +222,53 @@ export default function ReturnAddressScreen() {
               This address is required for selling and shipping.
             </Text>
 
-            <TextInput value={fullName} onChangeText={setFullName} placeholder="Full Name" style={styles.input} />
-            <TextInput value={line1} onChangeText={setLine1} placeholder="Address Line 1" style={styles.input} />
-            <TextInput value={line2} onChangeText={setLine2} placeholder="Address Line 2 (Optional)" style={styles.input} />
-            <TextInput value={city} onChangeText={setCity} placeholder="City" style={styles.input} />
-            <TextInput value={state} onChangeText={setState} placeholder="State" style={styles.input} />
-            <TextInput value={zip} onChangeText={setZip} placeholder="ZIP Code" style={styles.input} />
+            <TextInput
+  value={fullName}
+  onChangeText={setFullName}
+  placeholder="Full Name"
+  placeholderTextColor="#1b1b1b"
+  style={styles.input}
+/>
+
+<TextInput
+  value={line1}
+  onChangeText={setLine1}
+  placeholder="Address Line 1"
+  placeholderTextColor="#1b1b1b"
+  style={styles.input}
+/>
+
+<TextInput
+  value={line2}
+  onChangeText={setLine2}
+  placeholder="Address Line 2 (Optional)"
+  placeholderTextColor="#1b1b1b"
+  style={styles.input}
+/>
+
+<TextInput
+  value={city}
+  onChangeText={setCity}
+  placeholder="City"
+  placeholderTextColor="#1b1b1b"
+  style={styles.input}
+/>
+
+<TextInput
+  value={state}
+  onChangeText={setState}
+  placeholder="State"
+  placeholderTextColor="#1b1b1b"
+  style={styles.input}
+/>
+
+<TextInput
+  value={zip}
+  onChangeText={setZip}
+  placeholder="ZIP Code"
+  placeholderTextColor="#1b1b1b"
+  style={styles.input}
+/>
           </View>
 
           <TouchableOpacity
@@ -266,6 +325,30 @@ export default function ReturnAddressScreen() {
             >
               <Text style={styles.primaryText}>Use Verified</Text>
             </TouchableOpacity>
+
+            <TouchableOpacity
+  style={[styles.primaryBtn, { backgroundColor: "#E5E7EB", marginTop: 10 }]}
+  onPress={() => {
+    setShowVerifyModal(false)
+    saveWithAddress({})
+  }}
+>
+  <Text style={{ fontWeight: "800", color: "#111" }}>
+    Keep My Address
+  </Text>
+</TouchableOpacity>
+
+<Text
+  style={{
+    fontSize: 12,
+    color: "#6B7280",
+    marginTop: 12,
+    textAlign: "center",
+  }}
+>
+  By using an unverified address, you accept responsibility for delivery issues.
+  Melo is not liable for returns sent to an incorrect address.
+</Text>
           </View>
         </View>
       )}
@@ -295,7 +378,7 @@ const styles = StyleSheet.create({
   helper: {
     fontSize: 13,
     marginBottom: 16,
-    color: "#6B7280",
+    color: "#000000",
   },
 
   input: {

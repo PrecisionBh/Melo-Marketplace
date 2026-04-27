@@ -1,8 +1,8 @@
 import {
-    StyleSheet,
-    Text,
-    TextInput,
-    View,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from "react-native"
 
 type Props = {
@@ -34,7 +34,7 @@ export default function CreateListingDetails({
           value={title}
           onChangeText={setTitle}
           placeholder="What are you selling?"
-          placeholderTextColor="#9A9A9A"
+          placeholderTextColor="#1b1b1b"
           style={styles.input}
         />
       </View>
@@ -43,15 +43,24 @@ export default function CreateListingDetails({
         <View style={styles.leftHalf}>
           <Text style={styles.label}>Price</Text>
           <TextInput
-            value={price}
-            onChangeText={(val) =>
-              setPrice(val.replace(/[^0-9.]/g, ""))
-            }
-            placeholder="0.00"
-            placeholderTextColor="#9A9A9A"
-            style={styles.input}
-            keyboardType="decimal-pad"
-          />
+  value={price}
+  onChangeText={(val) =>
+    setPrice(val.replace(/[^0-9.]/g, ""))
+  }
+  onBlur={() => {
+    if (!price) return
+
+    const num = parseFloat(price)
+
+    if (!isNaN(num)) {
+      setPrice(num.toFixed(2))
+    }
+  }}
+  placeholder="0.00"
+  placeholderTextColor="#1b1b1b"
+  style={styles.input}
+  keyboardType="decimal-pad"
+/>
         </View>
 
         <View style={styles.rightHalf}>
@@ -62,7 +71,7 @@ export default function CreateListingDetails({
               setQuantity(val.replace(/[^0-9]/g, ""))
             }
             placeholder="1"
-            placeholderTextColor="#9A9A9A"
+            placeholderTextColor="#1b1b1b"
             style={styles.input}
             keyboardType="number-pad"
           />
@@ -75,7 +84,7 @@ export default function CreateListingDetails({
           value={description}
           onChangeText={setDescription}
           placeholder="Describe your item..."
-          placeholderTextColor="#9A9A9A"
+          placeholderTextColor="#1b1b1b"
           style={styles.textArea}
           multiline
           textAlignVertical="top"

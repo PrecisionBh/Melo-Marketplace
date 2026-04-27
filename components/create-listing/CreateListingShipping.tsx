@@ -1,14 +1,16 @@
 import {
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native"
 
 type Props = {
-  shippingType: "free" | "buyer_pays"
-  setShippingType: (val: "free" | "buyer_pays") => void
+  // 🔥 FIXED TYPES (match your app)
+  shippingType: "seller_pays" | "buyer_pays"
+  setShippingType: (val: "seller_pays" | "buyer_pays") => void
+
   weight: string
   setWeight: (val: string) => void
   zipCode: string
@@ -43,9 +45,9 @@ export default function CreateListingShipping({
         <TouchableOpacity
           style={[
             styles.option,
-            shippingType === "free" && styles.activeOption,
+            shippingType === "seller_pays" && styles.activeOption,
           ]}
-          onPress={() => setShippingType("free")}
+          onPress={() => setShippingType("seller_pays")}
         >
           <Text style={styles.optionTitle}>🚚 Free Shipping</Text>
           <Text style={styles.optionSub}>You cover shipping</Text>
@@ -64,52 +66,57 @@ export default function CreateListingShipping({
       </View>
 
       {shippingType === "buyer_pays" && (
-        <View style={styles.packageCard}>
-          <Text style={styles.packageHeader}>Package Details</Text>
+  <View style={styles.packageCard}>
+    <Text style={styles.packageHeader}>Package Details</Text>
 
-          <TextInput
-            value={weight}
-            onChangeText={setWeight}
-            placeholder="Package Weight (lbs)"
-            style={styles.input}
-            keyboardType="decimal-pad"
-          />
+    <TextInput
+      value={weight}
+      onChangeText={setWeight}
+      placeholder="Package Weight (lbs)"
+      placeholderTextColor="#1b1b1b"
+      style={styles.input}
+      keyboardType="decimal-pad"
+    />
 
-          <TextInput
-            value={zipCode}
-            onChangeText={setZipCode}
-            placeholder="Shipping ZIP Code"
-            style={styles.input}
-            keyboardType="number-pad"
-          />
+    <TextInput
+      value={zipCode}
+      onChangeText={setZipCode}
+      placeholder="Shipping ZIP Code"
+      placeholderTextColor="#1b1b1b"
+      style={styles.input}
+      keyboardType="number-pad"
+    />
 
-          <View style={styles.dimensionRow}>
-            <TextInput
-              value={length}
-              onChangeText={setLength}
-              placeholder="Length"
-              style={[styles.input, styles.dimension]}
-              keyboardType="decimal-pad"
-            />
+    <View style={styles.dimensionRow}>
+      <TextInput
+        value={length}
+        onChangeText={setLength}
+        placeholder="Length"
+        placeholderTextColor="#1b1b1b"
+        style={[styles.input, styles.dimension]}
+        keyboardType="decimal-pad"
+      />
 
-            <TextInput
-              value={width}
-              onChangeText={setWidth}
-              placeholder="Width"
-              style={[styles.input, styles.dimension]}
-              keyboardType="decimal-pad"
-            />
+      <TextInput
+        value={width}
+        onChangeText={setWidth}
+        placeholder="Width"
+        placeholderTextColor="#1b1b1b"
+        style={[styles.input, styles.dimension]}
+        keyboardType="decimal-pad"
+      />
 
-            <TextInput
-              value={height}
-              onChangeText={setHeight}
-              placeholder="Height"
-              style={[styles.input, styles.dimension]}
-              keyboardType="decimal-pad"
-            />
-          </View>
-        </View>
-      )}
+      <TextInput
+        value={height}
+        onChangeText={setHeight}
+        placeholder="Height"
+        placeholderTextColor="#1b1b1b"
+        style={[styles.input, styles.dimension]}
+        keyboardType="decimal-pad"
+      />
+    </View>
+  </View>
+)}
     </View>
   )
 }
@@ -153,7 +160,7 @@ const styles = StyleSheet.create({
 
   optionSub: {
     fontSize: 13,
-    color: "#666",
+    color: "#000000",
     marginTop: 4,
   },
 

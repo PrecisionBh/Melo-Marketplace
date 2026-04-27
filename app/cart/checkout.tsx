@@ -31,6 +31,7 @@ type CartItem = {
   price: number
   image_url: string | null
   quantity: number
+  size?: string | null
   shipping_price: number
   shipping_cents?: number
   shipping_type: "buyer_pays" | "seller_pays"
@@ -105,7 +106,7 @@ export default function CartCheckoutScreen() {
   } = await supabase
     .from("listings")
     .select(
-      "id, is_sold, status, quantity_available"
+      "id, is_sold, status, quantity_available, sizes, category"
     )
     .in("id", listingIds)
 
@@ -133,11 +134,27 @@ export default function CartCheckoutScreen() {
         return false
       }
 
-      const unavailable =
-        listing.is_sold === true ||
-        listing.status !== "active" ||
-        (listing.quantity_available ?? 0) <
-          item.quantity
+      const isApparel = listing.category === "clothing_apparel"
+
+let unavailable = false
+
+if (listing.is_sold === true || listing.status !== "active") {
+  unavailable = true
+} else if (isApparel) {
+  const sizeData = listing.sizes?.find(
+    (s: any) => s.size === item.size
+  )
+
+  const sizeQty = Number(sizeData?.qty ?? 0)
+
+  if (sizeQty < item.quantity) {
+    unavailable = true
+  }
+} else {
+  if ((listing.quantity_available ?? 0) < item.quantity) {
+    unavailable = true
+  }
+}
 
       if (unavailable) {
         invalidCartItemIds.push(item.id)
@@ -476,95 +493,83 @@ const handleCheckout = async () => {
     console.log("🚀 Creating orders...")
 
     /* 🔥 STEP 1 — CREATE ORDERS */
-    const createdOrderIds: string[] = []
+const createdOrderIds: string[] = []
 
-    for (const item of cart) {
-      const itemPriceCents =
-        Math.round(item.price * 100) * item.quantity
+for (const item of cart) {
+  const shippingCents = item.shipping_cents || 0
 
-      const shippingCents = item.shipping_cents || 0
+  const itemPriceCents =
+    Math.round(item.price * 100) * item.quantity
 
-      const escrowCents =
-        itemPriceCents + shippingCents
+  const escrowCents =
+    itemPriceCents + shippingCents
 
-      const { data: order, error } =
-  await supabase
-    .from("orders")
-    .insert({
-      buyer_id: session.user.id,
-      seller_id: item.seller_id,
-      listing_id: item.listing_id,
-
-      status: "pending_payment",
-      quantity: item.quantity,
-
-      image_url: item.image_url,
-
-      amount_cents: escrowCents,
-      currency: "usd",
-
-      item_price_cents: itemPriceCents,
-      shipping_amount_cents: shippingCents,
-
-      buyer_fee_cents: 0,
-      tax_cents: 0,
-      escrow_amount_cents: escrowCents,
-
-      // 🔥 THIS IS WHAT WAS MISSING
-      listing_snapshot: {
+  const { data: order, error } =
+    await supabase
+      .from("orders")
+      .insert({
+        buyer_id: session.user.id,
+        seller_id: item.seller_id,
         listing_id: item.listing_id,
-        title: item.title,
-        image_url: item.image_url,
-        price: item.price,
+
+        status: "pending_payment",
+
         quantity: item.quantity,
-        shipping_type: item.shipping_type,
-        shipping_price: item.shipping_cents || 0,
+        size: item.size ?? null,
+
+        image_url: item.image_url,
+
+        amount_cents: escrowCents,
+        currency: "usd",
+
+        item_price_cents: itemPriceCents,
+        shipping_amount_cents: shippingCents,
+
+        buyer_fee_cents: 0,
+        tax_cents: 0,
+        escrow_amount_cents: escrowCents,
+
+        listing_snapshot: {
+          title: item.title,
+          image_url: item.image_url,
+          price: item.price,
+          quantity: item.quantity,
+          size: item.size ?? null,
+        },
+      })
+      .select("id")
+      .single()
+
+  if (error || !order) {
+    console.error("❌ Order insert failed:", error)
+    throw new Error("Failed to create order")
+  }
+
+  createdOrderIds.push(order.id)
+}
+
+/* 🔥 STEP 2 — CALL STRIPE FUNCTION */
+const { data, error } =
+  await supabase.functions.invoke(
+    "create-cart-checkout-session",
+    {
+      body: {
+        order_ids: createdOrderIds,
+        amount: totalCents,
+        email: session.user.email,
       },
-
-      shipping_name: name.trim(),
-      shipping_line1: line1.trim(),
-      shipping_line2: line2.trim() || null,
-      shipping_city: city.trim(),
-      shipping_state: state.trim(),
-      shipping_postal_code: postal.trim(),
-      shipping_country: "US",
-      shipping_phone: phone.trim() || null,
-    })
-    .select("id")
-    .single()
-
-      if (error || !order) {
-        console.error("❌ Order insert failed:", error)
-        throw new Error("Failed to create order")
-      }
-
-      createdOrderIds.push(order.id)
     }
+  )
 
-    console.log("🧾 Created order IDs:", createdOrderIds)
+console.log("🧪 Checkout response:", data)
 
-    /* 🔥 STEP 2 — CALL STRIPE FUNCTION */
-    const { data, error } =
-      await supabase.functions.invoke(
-        "create-cart-checkout-session",
-        {
-          body: {
-            order_ids: createdOrderIds,
-            amount: totalCents,
-            email: session.user.email,
-          },
-        }
-      )
+if (error || !data?.url) {
+  console.error("❌ Stripe session error:", error)
+  throw new Error("Failed to create checkout session")
+}
 
-    console.log("🧪 Checkout response:", data)
-
-    if (error || !data?.url) {
-      console.error("❌ Stripe session error:", error)
-      throw new Error("Failed to create checkout session")
-    }
-
-    /* 🔥 STEP 3 — REDIRECT TO STRIPE */
-    await Linking.openURL(data.url)
+/* 🔥 STEP 3 — REDIRECT TO STRIPE */
+await Linking.openURL(data.url)
 
   } catch (err) {
     console.error("❌ Checkout failed:", err)

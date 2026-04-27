@@ -26,6 +26,11 @@ import { useAuth } from "../../context/AuthContext"
 import { handleAppError } from "../../lib/errors/appError"
 import { supabase } from "../../lib/supabase"
 
+type ListingSize = {
+  size: string
+  qty: number | string
+}
+
 type Listing = {
   id: string
   user_id: string
@@ -40,6 +45,7 @@ type Listing = {
   allow_offers: boolean
   shipping_type: "free" | "buyer_pays"
   shipping_price: number | null
+  sizes: ListingSize[] | null
   quantity_available: number
   status: string
 }
@@ -72,8 +78,9 @@ const [isSellerPro, setIsSellerPro] =
   const [likesCount, setLikesCount] = useState(0)
   const { refreshCartCount } = useCart()
 
-  const [quantity, setQuantity] = useState(1)
-  const [following, setFollowing] = useState(false)
+ const [quantity, setQuantity] = useState(1)
+const [selectedSize, setSelectedSize] = useState<string | null>(null)
+const [following, setFollowing] = useState(false)
 
 const [offerAmount, setOfferAmount] =
   useState("")
@@ -103,9 +110,16 @@ const [offerMessage, setOfferMessage] =
   }, [listing?.user_id])
 
   useEffect(() => {
-    if (!listing) return
-    setQuantity(1)
-  }, [listing?.id])
+  if (!listing) return
+
+  setQuantity(1)
+
+  if (Array.isArray(listing.sizes) && listing.sizes.length > 0) {
+    setSelectedSize(listing.sizes[0].size)
+  } else {
+    setSelectedSize(null)
+  }
+}, [listing?.id])
 
   const images = useMemo(() => {
     return Array.isArray(listing?.image_urls)
@@ -137,6 +151,7 @@ const [offerMessage, setOfferMessage] =
           shipping_type,
           shipping_price,
           quantity_available,
+          sizes,
           status
         `
         )
@@ -419,7 +434,10 @@ setIsSellerPro(!!data?.is_pro)
   const handleBuyNow = () => {
   requireAuth(async () => {
     if (!listing || !session?.user?.id) return
-
+    if (isApparel && !selectedSize) {
+  Alert.alert("Select Size", "Please choose a size.")
+  return
+}
     try {
       const userId = session.user.id
 
@@ -430,6 +448,7 @@ setIsSellerPro(!!data?.is_pro)
           .select("id, quantity")
           .eq("user_id", userId)
           .eq("listing_id", listing.id)
+          .eq("size", selectedSize)
           .maybeSingle()
 
       if (existingError) throw existingError
@@ -437,9 +456,9 @@ setIsSellerPro(!!data?.is_pro)
       if (existing) {
         // 🔁 Update quantity instead of duplicating
         const nextQty = Math.min(
-          (existing.quantity ?? 0) + quantity,
-          listing.quantity_available ?? quantity
-        )
+  (existing.quantity ?? 0) + quantity,
+  isApparel ? selectedSizeQty : listing.quantity_available
+)
 
         const { error: updateError } =
           await supabase
@@ -461,6 +480,7 @@ setIsSellerPro(!!data?.is_pro)
               listing_id: listing.id,
               seller_id: listing.user_id,
               quantity: quantity,
+              size: selectedSize,
               title: listing.title,
               price: listing.price,
               image_url: listing.image_urls?.[0] ?? null,
@@ -596,19 +616,27 @@ setIsSellerPro(!!data?.is_pro)
   requireAuth(async () => {
     try {
       if (!listing || !session?.user?.id) return
+      if (isApparel && !selectedSize) {
+  Alert.alert("Select Size", "Please choose a size.")
+  return
+}
 
-      if (listing.quantity_available <= 0) {
-        Alert.alert(
-          "Unavailable",
-          "This listing is out of stock."
-        )
-        return
-      }
+      if (
+  isApparel
+    ? selectedSizeQty <= 0
+    : listing.quantity_available <= 0
+) {
+  Alert.alert(
+    "Unavailable",
+    "This listing is out of stock."
+  )
+  return
+}
 
       const safeQty = Math.min(
-        Math.max(1, quantity),
-        listing.quantity_available
-      )
+  Math.max(1, quantity),
+  isApparel ? selectedSizeQty : listing.quantity_available
+)
 
       const { data: existing, error: existingError } =
         await supabase
@@ -616,15 +644,16 @@ setIsSellerPro(!!data?.is_pro)
           .select("id, quantity")
           .eq("user_id", session.user.id)
           .eq("listing_id", listing.id)
+          .eq("size", selectedSize)
           .maybeSingle()
 
       if (existingError) throw existingError
 
       if (existing) {
         const nextQty = Math.min(
-          (existing.quantity ?? 0) + safeQty,
-          listing.quantity_available
-        )
+  (existing.quantity ?? 0) + safeQty,
+  isApparel ? selectedSizeQty : listing.quantity_available
+)
 
         const { error: updateError } =
           await supabase
@@ -646,6 +675,7 @@ setIsSellerPro(!!data?.is_pro)
               listing_id: listing.id,
               seller_id: listing.user_id,
               quantity: safeQty,
+              size: selectedSize,
               title: listing.title,
               price: listing.price,
               image_url:
@@ -676,19 +706,24 @@ setIsSellerPro(!!data?.is_pro)
   })
 }
 
-  const toggleListingActive = async () => {
+ const toggleListingActive = async () => {
   if (!listing) return
 
   try {
-    const nextStatus =
+    const isCurrentlyActive =
       listing.status === "active"
-        ? "inactive"
-        : "active"
+
+    const nextStatus = isCurrentlyActive
+      ? "inactive"
+      : "active"
 
     const { error } = await supabase
       .from("listings")
       .update({
         status: nextStatus,
+        is_sold: isCurrentlyActive
+          ? true
+          : false,
       })
       .eq("id", listing.id)
 
@@ -699,6 +734,9 @@ setIsSellerPro(!!data?.is_pro)
         ? {
             ...prev,
             status: nextStatus,
+            is_sold: !isCurrentlyActive
+              ? false
+              : true,
           }
         : prev
     )
@@ -710,79 +748,16 @@ setIsSellerPro(!!data?.is_pro)
   }
 }
 
-const duplicateListing = async () => {
-  if (!listing || !session?.user) return
+const duplicateListing = () => {
+  if (!listing) return
 
-  try {
-    const newQuantity =
-      listing.quantity_available || 1
-
-    const { data: newListing, error } =
-      await supabase
-        .from("listings")
-        .insert({
-          user_id: session.user.id,
-
-          title: listing.title,
-          description:
-            listing.description || null,
-
-          // ✅ optional brand
-          ...(listing.brand && {
-            brand: listing.brand,
-          }),
-
-          category:
-            listing.category || null,
-
-          condition:
-            listing.condition || null,
-
-          price: listing.price,
-
-          allow_offers:
-            listing.allow_offers,
-
-          shipping_type:
-            listing.shipping_type,
-
-          shipping_price:
-            listing.shipping_price || 0,
-
-          image_urls:
-            listing.image_urls || [],
-
-          status: "active",
-          is_sold: false,
-
-          is_boosted: false,
-          boost_expires_at: null,
-          is_mega_boost: false,
-          mega_boost_expires_at: null,
-
-          quantity: newQuantity,
-          quantity_available:
-            newQuantity,
-
-          created_at:
-            new Date().toISOString(),
-        })
-        .select()
-        .single()
-
-    if (error) throw error
-
-    console.log("✅ Listing duplicated:", newListing.id)
-
-    router.push(`/edit-listing/${newListing.id}`)
-  } catch (err) {
-    console.error("❌ Duplicate failed:", err)
-
-    handleAppError(err, {
-      fallbackMessage:
-        "Failed to duplicate listing.",
-    })
-  }
+  router.push({
+    pathname: "/create-listing",
+    params: {
+      duplicate: "true",
+      data: JSON.stringify(listing),
+    },
+  })
 }
 
 const deleteListing = () => {
@@ -821,6 +796,22 @@ const deleteListing = () => {
     ]
   )
 }
+// 🔥 SAFE CALCULATIONS (MUST BE ABOVE RETURNS)
+const isSeller =
+  session?.user?.id === listing?.user_id
+
+const isApparel =
+  listing?.category === "clothing_apparel"
+
+const selectedSizeQty = isApparel
+  ? Number(
+      listing?.sizes?.find((s) => s.size === selectedSize)?.qty ?? 0
+    )
+  : listing?.quantity_available ?? 0
+
+const maxPurchaseQuantity = isApparel
+  ? Math.max(1, selectedSizeQty || 0)
+  : Math.max(1, listing?.quantity_available || 1)
 
   if (loading) {
     return (
@@ -837,10 +828,6 @@ const deleteListing = () => {
       </View>
     )
   }
-  
-
-  const isSeller =
-    session?.user?.id === listing.user_id
 
   return (
     <View style={styles.screen}>
@@ -919,10 +906,13 @@ const deleteListing = () => {
     allowOffers={listing.allow_offers}
     quantity={quantity}
     setQuantity={setQuantity}
-    maxQuantity={Math.max(
-      1,
-      listing.quantity_available ?? 1
-    )}
+    maxQuantity={maxPurchaseQuantity}
+sizes={Array.isArray(listing.sizes) ? listing.sizes : []}
+selectedSize={selectedSize}
+setSelectedSize={(val) => {
+  setSelectedSize(val)
+  setQuantity(1)
+}}
     following={following}
     onToggleFollow={toggleFollow}
     offerAmount={offerAmount}

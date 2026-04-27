@@ -1,9 +1,9 @@
 import {
-    Image,
-    ScrollView,
-    StyleSheet,
-    Text,
-    View,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from "react-native"
 
 type CartItem = {
@@ -12,6 +12,7 @@ type CartItem = {
   image_url: string | null
   price: number
   quantity: number
+  size?: string | null // 👈 ADD THIS
 }
 
 export default function CartPreviewCarousel({
@@ -59,9 +60,18 @@ export default function CartPreviewCarousel({
               {item.title}
             </Text>
 
-            <Text style={styles.meta}>
-              Qty: {item.quantity}
-            </Text>
+            {/* 🔥 UPDATED META BLOCK */}
+            <View style={styles.metaWrap}>
+              {item.size && (
+                <Text style={styles.meta}>
+                  Size: {item.size}
+                </Text>
+              )}
+
+              <Text style={styles.meta}>
+                Qty: {item.quantity}
+              </Text>
+            </View>
 
             <Text style={styles.price}>
               $
@@ -124,8 +134,11 @@ const styles = StyleSheet.create({
     minHeight: 34,
   },
 
-  meta: {
+  metaWrap: {
     marginTop: 6,
+  },
+
+  meta: {
     fontSize: 12,
     color: "#6B7280",
   },

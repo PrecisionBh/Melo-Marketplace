@@ -7,6 +7,11 @@ import {
   View,
 } from "react-native"
 
+type SizeItem = {
+  size: string
+  qty: string
+}
+
 type Props = {
   category: string | null
   condition: string | null
@@ -14,12 +19,10 @@ type Props = {
   onPressCategory: () => void
   onPressCondition: () => void
 
-  // 👇 NEW
-  size?: string | null
-  setSize?: (val: string) => void
+  // 🔥 NEW SIZE SYSTEM
+  sizes: SizeItem[]
+  setSizes: (val: SizeItem[]) => void
 
-  quantity?: string
-  setQuantity?: (val: string) => void
   isPro?: boolean
 }
 
@@ -50,8 +53,6 @@ const CONDITION_LABEL_MAP: Record<string, string> = {
   poor: "Poor",
 }
 
-const SIZES = ["XS","S","M","L","XL","2XL","3XL","4XL","5XL"]
-
 function formatCategory(value: string | null) {
   if (!value) return "Select category"
   return CATEGORY_LABEL_MAP[value] || value
@@ -68,10 +69,8 @@ export default function CreateListingSelectors({
   conditionSubtext,
   onPressCategory,
   onPressCondition,
-  size,
-  setSize,
-  quantity,
-  setQuantity,
+  sizes,
+  setSizes,
   isPro,
 }: Props) {
   return (
@@ -91,54 +90,46 @@ export default function CreateListingSelectors({
         onPress={onPressCondition}
       />
 
-      {/* 👕 SIZE (ONLY FOR APPAREL) */}
+      {/* 👕 SIZE + QTY SYSTEM */}
       {category === "clothing_apparel" && (
         <View style={styles.section}>
-          <Text style={styles.label}>Size</Text>
+          <Text style={styles.label}>Sizes & Quantity *</Text>
 
-          <View style={styles.sizeWrap}>
-            {SIZES.map((s) => (
-              <TouchableOpacity
-                key={s}
-                onPress={() => setSize?.(s)}
-                style={[
-                  styles.sizePill,
-                  size === s && styles.sizePillActive,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.sizeText,
-                    size === s && styles.sizeTextActive,
-                  ]}
-                >
-                  {s}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-      )}
+          {sizes.map((item, index) => (
+            <View key={item.size} style={styles.sizeRow}>
+              {/* SIZE LABEL */}
+              <Text style={styles.sizeLabel}>{item.size}</Text>
 
-      {/* 📦 QUANTITY (PRO ONLY) */}
-      {isPro && (
-        <View style={styles.section}>
-          <Text style={styles.label}>Quantity</Text>
+              {/* QTY INPUT */}
+              <TextInput
+  style={styles.qtyInput}
+  value={item.qty}
+  onChangeText={(val) => {
+    const updated = sizes.map((item, i) =>
+      i === index
+        ? { ...item, qty: val }
+        : item
+    )
 
-          <TextInput
-            value={quantity}
-            onChangeText={setQuantity}
-            keyboardType="numeric"
-            style={styles.input}
-            placeholder="Enter quantity"
-          />
+    setSizes(updated)
+  }}
+  keyboardType="number-pad"
+  placeholder="0"
+  placeholderTextColor="#000"
+/>
+            </View>
+          ))}
+
+          <Text style={styles.helper}>
+            Enter quantity for each size you want to sell
+          </Text>
         </View>
       )}
 
       {/* 🔒 FREE USER NOTICE */}
       {!isPro && (
         <Text style={styles.lockedText}>
-          Quantity limited to 1 on free plan
+          Quantity controlled per size
         </Text>
       )}
     </View>
@@ -179,6 +170,7 @@ function SelectorField({
 const styles = StyleSheet.create({
   wrap: {
     marginTop: 18,
+    marginBottom: 18, // 🔥 added
     gap: 12,
   },
 
@@ -213,8 +205,6 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
 
-  /* 👕 SIZE */
-
   section: {
     backgroundColor: "#fff",
     borderRadius: 18,
@@ -223,42 +213,34 @@ const styles = StyleSheet.create({
     padding: 16,
   },
 
-  sizeWrap: {
+  sizeRow: {
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
+    alignItems: "center",
+    marginBottom: 10,
   },
 
-  sizePill: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: "#eee",
+  sizeLabel: {
+    width: 40,
+    fontWeight: "700",
+    color: "#000",
   },
 
-  sizePillActive: {
-    backgroundColor: "#D97732",
-  },
-
-  sizeText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#111",
-  },
-
-  sizeTextActive: {
-    color: "#fff",
-  },
-
-  /* 📦 QUANTITY */
-
-  input: {
+  qtyInput: {
+    flex: 1,
+    height: 44,
     borderWidth: 1,
-    borderColor: "#E8E8E8",
+    borderColor: "#ddd",
     borderRadius: 10,
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    backgroundColor: "#fff",
+    color: "#000", // 🔥 iPHONE FIX
     fontSize: 14,
+  },
+
+  helper: {
+    fontSize: 12,
+    color: "#666",
+    marginTop: 6,
   },
 
   lockedText: {
