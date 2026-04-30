@@ -33,41 +33,63 @@ export default function ProfileListingsTab() {
 
   const [loading, setLoading] = useState(true)
   const [listings, setListings] = useState<Listing[]>([])
+  const [page, setPage] = useState(0)
+const [loadingMore, setLoadingMore] = useState(false)
+const PAGE_SIZE = 6
 
   useEffect(() => {
     if (session?.user?.id) {
-      loadListings()
+      loadListings(0)
     } else {
       setLoading(false)
     }
   }, [session?.user?.id])
 
-  const loadListings = async () => {
-    if (!session?.user?.id) return
+  const loadListings = async (pageOverride = 0) => {
+  if (!session?.user?.id) return
 
-    try {
-      setLoading(true)
+  try {
+    if (pageOverride === 0) setLoading(true)
+    else setLoadingMore(true)
 
-      const { data, error } = await supabase
-        .from("listings")
-        .select(
-          "id,title,price,image_urls,status,is_boosted,boost_expires_at,is_mega_boost,mega_boost_expires_at"
-        )
-        .eq("user_id", session.user.id)
-        .order("created_at", { ascending: false })
+    const { data, error } = await supabase
+      .from("listings")
+      .select(
+        "id,title,price,image_urls,status,is_boosted,boost_expires_at,is_mega_boost,mega_boost_expires_at"
+      )
+      .eq("user_id", session.user.id)
+      .order("created_at", { ascending: false })
+      .range(
+        pageOverride * PAGE_SIZE,
+        pageOverride * PAGE_SIZE + PAGE_SIZE - 1
+      )
 
-      if (error) throw error
+    if (error) throw error
 
-      setListings((data as Listing[]) ?? [])
-    } catch (err) {
-      handleAppError(err, {
-        context: "profile_listings_load",
-        fallbackMessage: "Failed to load listings.",
-      })
-    } finally {
-      setLoading(false)
+    const newData = (data as Listing[]) ?? []
+
+    if (pageOverride === 0) {
+      setListings(newData)
+    } else {
+      setListings(prev => [...prev, ...newData])
     }
+
+  } catch (err) {
+    handleAppError(err, {
+      context: "profile_listings_load",
+      fallbackMessage: "Failed to load listings.",
+    })
+  } finally {
+    setLoading(false)
+    setLoadingMore(false)
   }
+}
+
+const loadMore = () => {
+  const nextPage = page + 1
+  setPage(nextPage)
+  loadListings(nextPage)
+}
 
   const visibleListings = useMemo(() => {
     return listings
@@ -117,14 +139,39 @@ export default function ProfileListingsTab() {
 
   return (
     <FlatList
+
+    ListFooterComponent={
+  <TouchableOpacity
+    onPress={loadMore}
+    style={{
+      marginTop: 10,
+      marginBottom: 20,
+      alignSelf: "center",
+      backgroundColor: "#D97732",
+      paddingHorizontal: 20,
+      paddingVertical: 12,
+      borderRadius: 12,
+    }}
+  >
+    {loadingMore ? (
+      <ActivityIndicator color="#fff" />
+    ) : (
+      <Text style={{ color: "#fff", fontWeight: "700" }}>
+        Load More
+      </Text>
+    )}
+  </TouchableOpacity>
+}
       data={visibleListings}
       keyExtractor={(item) => item.id}
-      numColumns={2}
-      scrollEnabled={false}
+      numColumns={3}
+      scrollEnabled={false} // ✅ KEEP THIS (prevents nested scroll crash)
       columnWrapperStyle={styles.columnWrap}
       contentContainerStyle={styles.listContent}
       renderItem={({ item }) => {
         const image = item.image_urls?.[0] ?? null
+
+        
 
         return (
           <View style={styles.card}>
@@ -150,7 +197,6 @@ export default function ProfileListingsTab() {
                   </View>
                 )}
 
-                {/* STATUS BADGE */}
                 <View
                   style={[
                     styles.statusBadge,
@@ -173,14 +219,12 @@ export default function ProfileListingsTab() {
                   </Text>
                 </View>
 
-                {/* EDIT BUTTON */}
                 <TouchableOpacity
                   activeOpacity={0.9}
                   style={styles.editBtn}
                   onPress={() =>
                     router.push({
-                      pathname:
-                        "/edit-listing/[id]" as any,
+                      pathname: "/edit-listing/[id]" as any,
                       params: { id: item.id },
                     } as any)
                   }
@@ -193,18 +237,12 @@ export default function ProfileListingsTab() {
                 </TouchableOpacity>
               </View>
 
-              <Text
-                numberOfLines={1}
-                style={styles.title}
-              >
+              <Text numberOfLines={1} style={styles.title}>
                 {item.title}
               </Text>
 
               <Text style={styles.price}>
-                $
-                {Number(
-                  item.price ?? 0
-                ).toLocaleString()}
+                ${Number(item.price ?? 0).toLocaleString()}
               </Text>
             </TouchableOpacity>
           </View>
@@ -216,7 +254,7 @@ export default function ProfileListingsTab() {
 
 const styles = StyleSheet.create({
   loadingWrap: {
-    paddingTop: 28,
+    paddingTop: 50,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -253,25 +291,29 @@ const styles = StyleSheet.create({
     color: "#111827",
   },
 
+  /* 🔥 MATCH TOP CARD PADDING */
   listContent: {
     marginTop: 16,
-    paddingHorizontal: 20,
+    paddingHorizontal: 16, // ← THIS matches your UI above
     paddingBottom: 10,
   },
 
+  /* 🔥 CLEAN ROW SPACING */
   columnWrap: {
     justifyContent: "space-between",
-    marginBottom: 18,
+    marginBottom: 14,
   },
 
+  /* 🔥 FLEX GRID (NO % WIDTH ANYMORE) */
   card: {
-    width: "48.5%",
+    flex: 1,
+    marginHorizontal: 4, // ← spacing BETWEEN cards
   },
 
   imageWrap: {
     width: "100%",
     aspectRatio: 1,
-    borderRadius: 24,
+    borderRadius: 14,
     overflow: "hidden",
     backgroundColor: "#F3F4F6",
     position: "relative",
@@ -290,10 +332,10 @@ const styles = StyleSheet.create({
 
   statusBadge: {
     position: "absolute",
-    top: 12,
-    left: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    top: 6,
+    left: 6,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
     borderRadius: 999,
     zIndex: 2,
   },
@@ -307,7 +349,7 @@ const styles = StyleSheet.create({
   },
 
   statusBadgeText: {
-    fontSize: 11,
+    fontSize: 8,
     fontWeight: "700",
   },
 
@@ -321,11 +363,11 @@ const styles = StyleSheet.create({
 
   editBtn: {
     position: "absolute",
-    top: 12,
-    right: 12,
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    top: 6,
+    right: 6,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     backgroundColor: "#F3F4F6",
     alignItems: "center",
     justifyContent: "center",
@@ -334,15 +376,15 @@ const styles = StyleSheet.create({
   },
 
   title: {
-    marginTop: 12,
-    fontSize: 16,
+    marginTop: 6,
+    fontSize: 12,
     fontWeight: "500",
     color: "#111827",
   },
 
   price: {
-    marginTop: 8,
-    fontSize: 22,
+    marginTop: 2,
+    fontSize: 13,
     fontWeight: "800",
     color: "#111827",
   },

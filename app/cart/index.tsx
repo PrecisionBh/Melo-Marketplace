@@ -27,6 +27,7 @@ type CartItem = {
   quantity: number
   shipping_price: number
   size?: string | null 
+  subcategory?: string | null
 }
 
 export default function CartScreen() {
@@ -51,7 +52,8 @@ export default function CartScreen() {
   .select(`
   *,
   listings (
-    user_id
+    user_id,
+    subcategory
   )
 `)
   .eq("user_id", session.user.id)
@@ -65,6 +67,7 @@ export default function CartScreen() {
   const cartItems = (data ?? []).map((item) => ({
   ...item,
   seller_id: item.listings?.user_id,
+  subcategory: item.listings?.subcategory ?? null, // ✅ ADD THIS
 }))
 
   if (cartItems.length === 0) {
@@ -283,6 +286,12 @@ setLoading(false)
 {item.size && (
   <Text style={styles.itemMeta}>
     Size: {item.size}
+  </Text>
+)}
+
+{item.subcategory && (
+  <Text style={styles.itemMeta}>
+    {item.subcategory.replace(/_/g, " ")}
   </Text>
 )}
 

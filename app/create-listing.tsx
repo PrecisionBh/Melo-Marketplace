@@ -47,13 +47,13 @@ type SelectorOption = {
   subtext?: string
 }
 
-/* ---------------- SELECTOR DATA ---------------- */
 
 /* ---------------- SELECTOR DATA ---------------- */
 
 const MARKETPLACE_CATEGORIES: SelectorOption[] = [
   { label: "Electronics", value: "electronics" },
   { label: "Clothing / Apparel", value: "clothing_apparel" },
+  { label: "Jewelry & Watches", value: "jewelry_watches" },
   { label: "Home & Garden", value: "home_garden" },
   { label: "Sports & Outdoors", value: "sports_outdoors" },
   { label: "Collectibles", value: "collectibles" },
@@ -80,17 +80,33 @@ const CONDITIONS: SelectorOption[] = [
   { label: "Poor", value: "poor", subtext: "Heavy wear, damage, or needs repair." },
 ]
 
+const APPAREL_TYPES: SelectorOption[] = [
+  { label: "Tops", value: "tops" },
+  { label: "Bottoms", value: "bottoms" },
+  { label: "Dresses", value: "dresses" },
+  { label: "Shoes", value: "shoes" },
+  { label: "Accessories", value: "accessories" },
+]
+
+const JEWELRY_TYPES: SelectorOption[] = [
+  { label: "Watches", value: "watches" },
+  { label: "Rings", value: "rings" },
+  { label: "Necklaces", value: "necklaces" },
+  { label: "Bracelets", value: "bracelets" },
+  { label: "Earrings", value: "earrings" },
+]
+
+const SIZE_MAP: Record<string, string[]> = {
+  tops: ["XS", "S", "M", "L", "XL"],
+  bottoms: ["30x30", "32x30", "32x32", "34x32", "36x32"],
+  dresses: ["0", "2", "4", "6", "8", "10"],
+  shoes: ["7", "8", "9", "10", "11", "12"],
+}
 
 
 export default function CreateListingScreen() {
 
-  const [sizes, setSizes] = useState([
-  { size: "XS", qty: "0" },
-  { size: "S", qty: "0" },
-  { size: "M", qty: "0" },
-  { size: "L", qty: "0" },
-  { size: "XL", qty: "0" },
-])
+  const [sizes, setSizes] = useState<{ size: string; qty: string }[]>([])
 
   const { session } = useAuth()
   const router = useRouter()
@@ -100,6 +116,26 @@ export default function CreateListingScreen() {
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
   const [category, setCategory] = useState<string | null>(null)
+  const [subcategory, setSubcategory] = useState<string | null>(null)
+const [showSubcategoryModal, setShowSubcategoryModal] = useState(false)
+
+useEffect(() => {
+  if (!subcategory) return
+
+  const baseSizes = SIZE_MAP[subcategory]
+
+  if (!baseSizes) {
+    setSizes([])
+    return
+  }
+
+  setSizes(
+    baseSizes.map((size) => ({
+      size,
+      qty: "",
+    }))
+  )
+}, [subcategory])
   const [condition, setCondition] = useState<string | null>(null)
 
   const [showCategoryModal, setShowCategoryModal] = useState(false)
@@ -223,7 +259,7 @@ const handleCreateListing = async () => {
 
       if (countError) throw countError
 
-      if ((count ?? 0) >= 8) {
+      if ((count ?? 0) >= 50) {
         setShowLimitModal(true)
         setSubmitting(false)
         return
@@ -395,6 +431,7 @@ const { data, error } = await supabase
     description: description.trim() || null,
     brand: null,
     category: category,
+    subcategory: subcategory,
 
     // 🔥 SIZE SYSTEM (NEW)
     sizes: category === "clothing_apparel" ? filteredSizes : null,
@@ -566,17 +603,19 @@ return (
           />
 
           <CreateListingSelectors
-            category={category}
-            condition={condition}
-            conditionSubtext={
-              CONDITIONS.find((c) => c.value === condition)?.subtext || ""
-            }
-            onPressCategory={() => setShowCategoryModal(true)}
-            onPressCondition={() => setShowConditionModal(true)}
-            sizes={sizes}
-            setSizes={setSizes}
-            isPro={isPro}
-          />
+  category={category}
+  subcategory={subcategory} // ✅ ADD
+  condition={condition}
+  conditionSubtext={
+    CONDITIONS.find((c) => c.value === condition)?.subtext || ""
+  }
+  onPressCategory={() => setShowCategoryModal(true)}
+  onPressSubcategory={() => setShowSubcategoryModal(true)} // ✅ ADD
+  onPressCondition={() => setShowConditionModal(true)}
+  sizes={sizes}
+  setSizes={setSizes}
+  isPro={isPro}
+/>
 
           <CreateListingShipping
             shippingType={shippingType}
@@ -645,6 +684,22 @@ return (
       onClose={() => setShowConditionModal(false)}
     />
 
+    <FullScreenSelector
+  visible={showSubcategoryModal}
+  title="Select Type"
+  options={
+    category === "clothing_apparel"
+      ? APPAREL_TYPES
+      : JEWELRY_TYPES
+  }
+  selectedValue={subcategory ?? undefined}
+  onSelect={(value) => {
+    setSubcategory(value)
+    setShowSubcategoryModal(false)
+  }}
+  onClose={() => setShowSubcategoryModal(false)}
+/>
+
     <Modal visible={showLimitModal} transparent animationType="fade">
       <View style={styles.modalOverlay}>
         <View style={styles.modalCard}>
@@ -653,7 +708,7 @@ return (
           </Text>
 
           <Text style={styles.modalText}>
-            Free accounts can only have 5 active listings.
+            Free accounts can have up to 50 active listings.
             Upgrade to Melo Pro to unlock unlimited listings and more Pro features.
           </Text>
 

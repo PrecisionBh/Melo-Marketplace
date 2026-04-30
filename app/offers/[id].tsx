@@ -67,15 +67,17 @@ export default function OfferDetailScreen() {
       setLoading(true)
 
       const { data, error } = await supabase
-        .from("offers")
-        .select(
-          `
-          *,
-          listings (
-            *
-          )
-        `
-        )
+  .from("offers")
+  .select(
+    `
+    *,
+    size,
+    listing_snapshot,
+    listings (
+      *
+    )
+  `
+  )
         .eq("id", id)
         .single()
 
@@ -373,29 +375,36 @@ const canRespond =
       }
 
       const { error } = await supabase
-        .from("offers")
-        .update({
-          status: "accepted",
-          last_actor: "seller",
-          accepted_price:
-            offer.current_amount,
-          accepted_title:
-            offer.listings.title,
-          accepted_image_url:
-            offer.listings
-              .image_urls?.[0] ?? null,
-          accepted_shipping_type:
-            offer.listings
-              .shipping_type,
-          accepted_shipping_price:
-            offer.listings
-              .shipping_type === "buyer_pays"
-                ? offer.listings
-                    .shipping_price ?? 0
-                : 0,
-          updated_at:
-            new Date().toISOString(),
-        })
+  .from("offers")
+  .update({
+    status: "accepted",
+    last_actor: "seller",
+
+    accepted_price: offer.current_amount,
+
+    accepted_title:
+      offer.listing_snapshot?.title ??
+      offer.listings.title,
+
+    accepted_image_url:
+      offer.listing_snapshot?.image_url ??
+      offer.listings.image_urls?.[0] ??
+      null,
+
+    accepted_shipping_type:
+      offer.listing_snapshot?.shipping_type ??
+      offer.listings.shipping_type,
+
+    accepted_shipping_price:
+      offer.listing_snapshot?.shipping_type === "buyer_pays"
+        ? offer.listings.shipping_price ?? 0
+        : 0,
+
+    // 🔥 ADD THIS (YOU WERE MISSING IT)
+    size: offer.size ?? null,
+
+    updated_at: new Date().toISOString(),
+  })
         .eq("id", offer.id)
 
       if (error) throw error

@@ -1,6 +1,6 @@
+import { ResizeMode, Video } from "expo-av"
 import { useRouter } from "expo-router"
 import { StyleSheet, View } from "react-native"
-import { Video, ResizeMode } from "expo-av"
 
 import ListingCard, { Listing } from "./ListingCard"
 
@@ -11,7 +11,6 @@ type Props = {
 export default function MegaBoostBlock({ listings }: Props) {
   const router = useRouter()
 
-  // Safety guard
   if (!Array.isArray(listings) || listings.length === 0) {
     return null
   }
@@ -24,32 +23,36 @@ export default function MegaBoostBlock({ listings }: Props) {
 
   return (
     <View style={styles.container}>
-      <View style={styles.heroCardWrap}>
-        <View style={styles.mediaWrapper}>
+      {/* 🔥 OUTER WRAPPER (GLOW LIVES HERE) */}
+      <View style={styles.glowWrap}>
+        <View style={styles.heroCardWrap}>
           
-          {/* 🔥 VIDEO BACKGROUND (only if exists) */}
-          {hasVideo && (
-            <Video
-              source={{ uri: megaListing.video_url! }}
-              style={styles.video}
-              resizeMode={ResizeMode.COVER}
-              isMuted
-              isLooping
-              shouldPlay
-            />
-          )}
+          {/* 🔥 INNER WRAPPER (CLIPPING HERE ONLY) */}
+          <View style={styles.mediaWrapper}>
+            
+            {hasVideo && (
+              <Video
+                source={{ uri: megaListing.video_url! }}
+                style={styles.video}
+                resizeMode={ResizeMode.COVER}
+                isMuted
+                isLooping
+                shouldPlay
+              />
+            )}
 
-          {/* 👇 YOUR ORIGINAL CARD (UNCHANGED) */}
-          <View style={styles.overlay}>
-            <ListingCard
-              listing={megaListing}
-              isMegaBoost={true}
-              megaHero={true}
-              onPress={() =>
-                router.push(`/listing/${megaListing.id}`)
-              }
-            />
+            <View style={styles.overlay}>
+              <ListingCard
+                listing={megaListing}
+                isMegaBoost={true}
+                megaHero={true}
+                onPress={() =>
+                  router.push(`/listing/${megaListing.id}`)
+                }
+              />
+            </View>
           </View>
+
         </View>
       </View>
     </View>
@@ -63,29 +66,40 @@ const styles = StyleSheet.create({
     marginVertical: 10,
   },
 
+  /* 🔥 GLOW WRAPPER (NO CLIPPING HERE) */
+  glowWrap: {
+    borderRadius: 30,
+    shadowColor: "#D97732", // Melo orange
+    shadowOpacity: 0.95,
+    shadowRadius: 26,
+    shadowOffset: { width: 0, height: 20 },
+
+    // Android glow
+    elevation: 20,
+    backgroundColor: "transparent",
+  },
+
   heroCardWrap: {
     width: "100%",
     minHeight: 360,
     transform: [{ scale: 1.02 }],
   },
 
-  /* 🔥 NEW WRAPPER (does NOT affect image logic) */
+  /* 🔥 CLIPPING MOVED HERE */
   mediaWrapper: {
     width: "100%",
     height: "100%",
     borderRadius: 18,
-    overflow: "hidden",
+    overflow: "hidden", // ✅ ONLY HERE NOW
     position: "relative",
   },
 
-  /* 🔥 VIDEO BACKGROUND */
   video: {
     position: "absolute",
     width: "100%",
     height: "100%",
   },
 
-  /* 👇 CARD SITS ON TOP */
   overlay: {
     position: "relative",
     width: "100%",

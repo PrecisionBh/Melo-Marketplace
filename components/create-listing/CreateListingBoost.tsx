@@ -1,8 +1,9 @@
 import {
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native"
 
 type BoostType = "none" | "boost" | "mega"
@@ -14,6 +15,7 @@ type Props = {
   megaCredits: number
   onBuyCredits: () => void
   onPublish: () => void
+  submitting?: boolean
 }
 
 export default function CreateListingBoost({
@@ -23,6 +25,8 @@ export default function CreateListingBoost({
   megaCredits,
   onBuyCredits,
   onPublish,
+  submitting,
+
 }: Props) {
   return (
     <View style={styles.wrap}>
@@ -94,13 +98,19 @@ export default function CreateListingBoost({
       </View>
 
       <TouchableOpacity
-        style={styles.publishBtn}
-        onPress={onPublish}
-      >
-        <Text style={styles.publishText}>
-          Publish Listing
-        </Text>
-      </TouchableOpacity>
+  onPress={onPublish}
+  disabled={submitting}
+  style={[
+  styles.publishBtn, // ✅ correct name
+  submitting && { opacity: 0.6 }
+]}
+>
+  {submitting ? (
+    <ActivityIndicator color="#fff" />
+  ) : (
+    <Text style={styles.publishText}>Publish</Text>
+  )}
+</TouchableOpacity>
     </View>
   )
 }

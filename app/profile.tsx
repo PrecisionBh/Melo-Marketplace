@@ -10,11 +10,7 @@ import ProfileSentOffersTab from "@/components/profile/ProfileSentOffersTab"
 import ProfileTabs from "@/components/profile/ProfileTabs"
 import ProfileWalletCard from "@/components/profile/ProfileWalletCard"
 import { useState } from "react"
-import {
-  ScrollView,
-  StyleSheet,
-  View,
-} from "react-native"
+import { FlatList, StyleSheet, View } from "react-native"
 
 export default function ProfileScreen() {
   const [activeTab, setActiveTab] = useState<
@@ -25,39 +21,46 @@ export default function ProfileScreen() {
     <View style={styles.screen}>
       <GlobalHeader />
 
-      <ScrollView
-        contentContainerStyle={styles.content}
+      {/* 🔥 SINGLE SCROLL OWNER */}
+      <FlatList
+        data={[{ id: "content" }]}
+        keyExtractor={(item) => item.id}
         showsVerticalScrollIndicator={false}
-      >
-        <ProfileHeaderCard />
+        contentContainerStyle={styles.content}
 
-        <ProfileWalletCard />
+        ListHeaderComponent={
+          <>
+            <ProfileHeaderCard />
+            <ProfileWalletCard />
+            <ProfileQuickActions />
+            <ProfilePublicProfileButton />
+            <ProfileTabs
+              activeTab={activeTab}
+              onChange={setActiveTab}
+            />
+          </>
+        }
 
-        <ProfileQuickActions />
+        renderItem={() => {
+          if (activeTab === "listings") {
+            return <ProfileListingsTab />
+          }
 
-        <ProfilePublicProfileButton />
+          if (activeTab === "sent") {
+            return <ProfileSentOffersTab />
+          }
 
-        <ProfileTabs
-          activeTab={activeTab}
-          onChange={setActiveTab}
-        />
+          if (activeTab === "received") {
+            return <ProfileReceivedOffersTab />
+          }
 
-        {activeTab === "listings" && (
-          <ProfileListingsTab />
-        )}
+          if (activeTab === "reviews") {
+            return <ProfileReviewsTab />
+          }
 
-        {activeTab === "sent" && (
-          <ProfileSentOffersTab />
-        )}
-
-        {activeTab === "received" && (
-          <ProfileReceivedOffersTab />
-        )}
-
-        {activeTab === "reviews" && (
-          <ProfileReviewsTab />
-        )}
-      </ScrollView>
+          return null
+        }}
+      />
 
       <GlobalFooter />
     </View>
@@ -69,7 +72,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#F8F8F8",
   },
-
   content: {
     paddingBottom: 120,
   },

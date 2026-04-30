@@ -220,6 +220,24 @@ Deno.serve(async (req) => {
 
     console.log("💼 Wallet updated")
 
+    // 🔔 SEND WITHDRAWAL NOTIFICATION
+try {
+  await supabase.functions.invoke("send-notification", {
+    body: {
+      userId: user_id,
+      type: "withdrawal_initiated",
+      title: "Payout Sent 💸",
+      body: "Your money is on the way!",
+      data: {
+        route: "/wallet",
+      },
+      email: true,
+    },
+  })
+} catch (notifErr) {
+  console.log("⚠️ payout notif failed", notifErr)
+}
+
     return new Response(
       JSON.stringify({
         success: true,

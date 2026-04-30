@@ -46,7 +46,8 @@ type ListingRow = {
   description: string | null
   price: number | null
   category: string | null
-  condition: string | null
+subcategory: string | null
+condition: string | null
   image_urls: string[] | null
   video_url?: string | null
   allow_offers: boolean | null
@@ -64,6 +65,7 @@ sizes: { size: string; qty: number | string }[] | null
 const MARKETPLACE_CATEGORIES: SelectorOption[] = [
   { label: "Electronics", value: "electronics" },
   { label: "Clothing / Apparel", value: "clothing_apparel" },
+  { label: "Jewelry & Watches", value: "jewelry_watches" },
   { label: "Home & Garden", value: "home_garden" },
   { label: "Sports & Outdoors", value: "sports_outdoors" },
   { label: "Collectibles", value: "collectibles" },
@@ -113,6 +115,29 @@ const CONDITIONS: SelectorOption[] = [
   },
 ]
 
+const APPAREL_TYPES: SelectorOption[] = [
+  { label: "Tops", value: "tops" },
+  { label: "Bottoms", value: "bottoms" },
+  { label: "Dresses", value: "dresses" },
+  { label: "Shoes", value: "shoes" },
+  { label: "Accessories", value: "accessories" },
+]
+
+const JEWELRY_TYPES: SelectorOption[] = [
+  { label: "Watches", value: "watches" },
+  { label: "Rings", value: "rings" },
+  { label: "Necklaces", value: "necklaces" },
+  { label: "Bracelets", value: "bracelets" },
+  { label: "Earrings", value: "earrings" },
+]
+
+const SIZE_MAP: Record<string, string[]> = {
+  tops: ["XS", "S", "M", "L", "XL"],
+  bottoms: ["30x30", "32x30", "32x32", "34x32", "36x32"],
+  dresses: ["0", "2", "4", "6", "8", "10"],
+  shoes: ["7", "8", "9", "10", "11", "12"],
+}
+
 export default function EditListingScreen() {
   const { session } = useAuth()
   const router = useRouter()
@@ -138,6 +163,31 @@ const [existingVideoUrl, setExistingVideoUrl] = useState<string | null>(null)
   const [category, setCategory] = useState<
     string | null
   >(null)
+  const [subcategory, setSubcategory] = useState<string | null>(null)
+const [showSubcategoryModal, setShowSubcategoryModal] = useState(false)
+
+useEffect(() => {
+  if (!subcategory) return
+
+  const baseSizes = SIZE_MAP[subcategory]
+
+  if (!baseSizes) {
+    setSizes([])
+    return
+  }
+
+  setSizes((prev) =>
+    baseSizes.map((size) => {
+      const existing = prev.find((s) => s.size === size)
+
+      return {
+        size,
+        qty: existing?.qty ?? "",
+      }
+    })
+  )
+}, [subcategory])
+
   const [condition, setCondition] = useState<
     string | null
   >(null)
@@ -160,15 +210,7 @@ const [existingVideoUrl, setExistingVideoUrl] = useState<string | null>(null)
 
   const [quantity, setQuantity] = useState("1")
   const [size, setSize] = useState<string | null>(null)
-  const [sizes, setSizes] = useState<
-  { size: string; qty: string }[]
->([
-  { size: "XS", qty: "0" },
-  { size: "S", qty: "0" },
-  { size: "M", qty: "0" },
-  { size: "L", qty: "0" },
-  { size: "XL", qty: "0" },
-])
+  const [sizes, setSizes] = useState<{ size: string; qty: string }[]>([])
   const [boostsRemaining, setBoostsRemaining] =
     useState<number>(0)
   const [megaBoostsRemaining, setMegaBoostsRemaining] =
@@ -274,24 +316,27 @@ const [existingVideoUrl, setExistingVideoUrl] = useState<string | null>(null)
       setTitle(data.title ?? "")
 setDescription(data.description ?? "")
 
-const safeCategory =
+const safeCategory: string | null =
   data.category === "fashion"
     ? "clothing_apparel"
-    : data.category
+    : data.category ?? null
 
-setCategory(safeCategory ?? null)
+setCategory(safeCategory)
+setSubcategory(data.subcategory || null)
 
 setCondition(data.condition ?? null)
 setSize(data.size || null)
 
-if (safeCategory === "clothing_apparel" && Array.isArray(data.sizes)) {
-  setSizes([
-    { size: "XS", qty: String(data.sizes.find((s: any) => s.size === "XS")?.qty ?? "") },
-    { size: "S", qty: String(data.sizes.find((s: any) => s.size === "S")?.qty ?? "") },
-    { size: "M", qty: String(data.sizes.find((s: any) => s.size === "M")?.qty ?? "") },
-    { size: "L", qty: String(data.sizes.find((s: any) => s.size === "L")?.qty ?? "") },
-    { size: "XL", qty: String(data.sizes.find((s: any) => s.size === "XL")?.qty ?? "") },
-  ])
+if (
+  safeCategory === "clothing_apparel" &&
+  Array.isArray(data.sizes)
+) {
+  setSizes(
+    data.sizes.map((s: any) => ({
+      size: String(s.size),
+      qty: String(s.qty ?? ""),
+    }))
+  )
 }
 
       setPrice(
@@ -549,7 +594,8 @@ if (category === "clothing_apparel") {
         description: description.trim() || null,
         brand: null,
         category,
-        condition,
+subcategory,
+condition,
         sizes: category === "clothing_apparel" ? filteredSizes : null,
 size: category === "clothing_apparel" ? null : size,
         price: parsedPrice,
@@ -694,6 +740,7 @@ quantity_available:
 
           <CreateListingSelectors
   category={category}
+  subcategory={subcategory}
   condition={condition}
   conditionSubtext={
     CONDITIONS.find(
@@ -703,13 +750,15 @@ quantity_available:
   onPressCategory={() =>
     setShowCategoryModal(true)
   }
+  onPressSubcategory={() =>
+    setShowSubcategoryModal(true)
+  }
   onPressCondition={() =>
     setShowConditionModal(true)
   }
-
   sizes={sizes}
-setSizes={setSizes}
-isPro={isPro}
+  setSizes={setSizes}
+  isPro={isPro}
 />
 
           <CreateListingShipping
@@ -793,6 +842,24 @@ isPro={isPro}
           setShowConditionModal(false)
         }
       />
+
+      <FullScreenSelector
+  visible={showSubcategoryModal}
+  title="Select Type"
+  options={
+    category === "clothing_apparel"
+      ? APPAREL_TYPES
+      : JEWELRY_TYPES
+  }
+  selectedValue={subcategory ?? undefined}
+  onSelect={(value) => {
+    setSubcategory(value)
+    setShowSubcategoryModal(false)
+  }}
+  onClose={() =>
+    setShowSubcategoryModal(false)
+  }
+/>
 
       <ReturnAddressRequiredModal
         visible={showAddressModal}

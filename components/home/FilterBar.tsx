@@ -22,15 +22,21 @@ const DEFAULT_FILTERS: FilterOption[] = [
 
   { key: "electronics", label: "Electronics" },
   { key: "clothing_apparel", label: "Clothing" },
-  { key: "home_garden", label: "Home" },
+
+  // 🔥 NEW
+  { key: "jewelry_watches", label: "Jewelry" },
+
   { key: "sports_outdoors", label: "Sports" },
   { key: "automotive", label: "Auto" },
   { key: "collectibles", label: "Collectibles" },
 
+  // 🔥 moved HOME to end
+  { key: "home_garden", label: "Home" },
+
   // 🔥 collapsed groups
-  { key: "hobbies", label: "Hobbies" },       // toys, music, books
-  { key: "lifestyle", label: "Lifestyle" },   // baby, beauty, pets
-  { key: "tools", label: "Tools" },           // tools + office
+  { key: "hobbies", label: "Hobbies" },
+  { key: "lifestyle", label: "Lifestyle" },
+  { key: "tools", label: "Tools" },
   { key: "other", label: "Other" },
 ]
 

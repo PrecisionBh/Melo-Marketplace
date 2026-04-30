@@ -45,6 +45,9 @@ type OfferCheckoutData = {
     shipping_price: number | null
     price: number | null
   } | null
+
+  size?: string | null
+listing_snapshot?: any
 }
 
 export default function OfferCheckoutScreen() {
@@ -139,6 +142,8 @@ const verifyCheckoutAddress = async () => {
           accepted_image_url,
           accepted_shipping_type,
           accepted_shipping_price,
+          size,
+          listing_snapshot,
           listings (
             id,
             title,
@@ -212,6 +217,9 @@ const verifyCheckoutAddress = async () => {
               price: typed.listings.price ?? null,
             }
           : null,
+
+          size: typed.size ?? null,
+          listing_snapshot: typed.listing_snapshot ?? null,
       })
     } catch (err) {
       handleAppError(err, {
@@ -275,6 +283,7 @@ const previewItems = offer
         quantity,
         shipping_price: offer.accepted_shipping_price || 0,
         shipping_type: offer.accepted_shipping_type,
+        size: offer.size ?? null,
       },
     ]
   : []
@@ -516,20 +525,25 @@ const calculateShipping = async () => {
     }
 
     if (!orderIdToUse) {
-      const listingSnapshot = {
-        ...(offer.listings ?? {}),
-        accepted_offer: true,
-        accepted_price:
-          offer.accepted_price,
-        accepted_quantity:
-          offer.quantity,
-        accepted_shipping_type:
-          offer.accepted_shipping_type,
-        accepted_shipping_price:
-          offer.accepted_shipping_price,
-        accepted_title: title,
-        accepted_image_url: image,
-      }
+      const listingSnapshot =
+  offer.listing_snapshot ?? {
+    title: title,
+    image_url: image,
+    price: offer.accepted_price,
+
+    quantity: offer.quantity,
+    size: offer.size ?? null,
+
+    category: null,
+    subcategory: null,
+
+    shipping_type: offer.accepted_shipping_type,
+
+    metadata: {
+      captured_at: new Date().toISOString(),
+      source: "offer_fallback",
+    },
+  }
 
       const escrowCents =
         subtotalCents + shippingCents
@@ -545,6 +559,7 @@ const calculateShipping = async () => {
 
             status: "pending_payment",
             quantity: offer.quantity,
+            size: offer.size ?? null,
 
             image_url: image,
 

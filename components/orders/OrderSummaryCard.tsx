@@ -118,6 +118,9 @@ export default function OrderSummaryCard({
     order.listing_snapshot?.size ??
     null
 
+    const subcategory =
+  order.listing_snapshot?.subcategory ?? null
+
   const total =
     (order.amount_cents ?? 0) / 100
 
@@ -147,9 +150,12 @@ export default function OrderSummaryCard({
           </Text>
 
           <Text style={styles.meta}>
-            Qty: {quantity}
-            {size ? ` • Size: ${size}` : ""}
-          </Text>
+  Qty: {quantity}
+  {size ? ` • Size: ${size}` : ""}
+  {subcategory
+    ? ` • ${subcategory.replace(/_/g, " ")}`
+    : ""}
+</Text>
 
           <Text style={styles.price}>
             ${total.toFixed(2)}

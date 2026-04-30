@@ -13,8 +13,6 @@ import UpgradeToProCard from "../pro/UpgradeToProCard"
 import ListingCard, { Listing } from "./ListingCard"
 import MegaBoostBlock from "./MegaBoostBlock"
 
-/* ---------------- TYPES ---------------- */
-
 type Props = {
   listings: Listing[]
   refreshing: boolean
@@ -30,20 +28,14 @@ type GridRowItem =
   | { type: "upgrade_row"; id: string }
   | { type: "mega_boost"; id: string; listings: Listing[] }
 
-/* ---------------- HELPERS ---------------- */
-
 function shuffleArray<T>(array: T[]): T[] {
   const copy = [...array]
-
   for (let i = copy.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1))
     ;[copy[i], copy[j]] = [copy[j], copy[i]]
   }
-
   return copy
 }
-
-/* ---------------- COMPONENT ---------------- */
 
 export default function ListingsGrid({
   listings,
@@ -62,20 +54,14 @@ export default function ListingsGrid({
   const NUM_COLUMNS = 3
   const MEGA_BOOST_FREQUENCY = 9
 
-  /* 🧠 SHUFFLE MEGA BOOSTS (ONLY ONCE) */
-
   const shuffledMegaBoosts = useMemo(() => {
     return shuffleArray(megaBoostListings)
   }, [])
-
-  /* 🧠 STABLE FILTERED LISTINGS (FIXES FLASH) */
 
   const filteredListings = useMemo(() => {
     const megaIds = new Set(megaBoostListings.map((l) => l.id))
     return listings.filter((l) => !megaIds.has(l.id))
   }, [listings, megaBoostListings])
-
-  /* 🧠 BUILD + INJECT ROWS (MEMOIZED) */
 
   const rows: GridRowItem[] = useMemo(() => {
     const baseRows: GridRowItem[] = []
@@ -102,12 +88,10 @@ export default function ListingsGrid({
         (index + 1) % MEGA_BOOST_FREQUENCY === 0
 
       if (shouldInsertMega && megaIndex < shuffledMegaBoosts.length) {
-        const megaSlice = shuffledMegaBoosts.slice(megaIndex, megaIndex + 1)
-
         builtRows.push({
           type: "mega_boost",
           id: `mega-boost-${index}`,
-          listings: megaSlice,
+          listings: shuffledMegaBoosts.slice(megaIndex, megaIndex + 1),
         })
 
         megaIndex++
@@ -115,18 +99,15 @@ export default function ListingsGrid({
     })
 
     while (megaIndex < shuffledMegaBoosts.length) {
-      const megaSlice = shuffledMegaBoosts.slice(megaIndex, megaIndex + 1)
-
       builtRows.push({
         type: "mega_boost",
         id: `mega-boost-fallback-${megaIndex}`,
-        listings: megaSlice,
+        listings: shuffledMegaBoosts.slice(megaIndex, megaIndex + 1),
       })
-
       megaIndex++
     }
 
-    if (showUpgradeRow && builtRows.length >10 ) {
+    if (showUpgradeRow && builtRows.length > 10) {
       builtRows.splice(10, 0, {
         type: "upgrade_row",
         id: "upgrade-row",
@@ -135,8 +116,6 @@ export default function ListingsGrid({
 
     return builtRows
   }, [filteredListings, shuffledMegaBoosts, showUpgradeRow])
-
-  /* 🧠 RESTORE SCROLL POSITION */
 
   useEffect(() => {
     if (!flatListRef.current) return
@@ -162,12 +141,10 @@ export default function ListingsGrid({
       keyExtractor={(item) => item.id}
       contentContainerStyle={styles.grid}
       showsVerticalScrollIndicator={false}
-
       initialNumToRender={12}
       maxToRenderPerBatch={12}
       windowSize={10}
       removeClippedSubviews={false}
-
       scrollEventThrottle={16}
       onScroll={(e: NativeSyntheticEvent<NativeScrollEvent>) => {
         const y = e.nativeEvent.contentOffset.y
@@ -184,7 +161,7 @@ export default function ListingsGrid({
         try {
           if (item.type === "mega_boost") {
             return (
-              <View style={styles.fullRow}>
+              <View style={styles.megaWrapper}>
                 <MegaBoostBlock listings={item.listings} />
               </View>
             )
@@ -219,18 +196,7 @@ export default function ListingsGrid({
                 ? Array.from({
                     length: NUM_COLUMNS - item.listings.length,
                   }).map((_, idx) => (
-                    <View
-                      key={`spacer-${item.id}-${idx}`}
-                      style={[
-                        styles.cardWrap,
-                        {
-                          marginRight:
-                            idx !== NUM_COLUMNS - item.listings.length - 1
-                              ? 4
-                              : 0,
-                        },
-                      ]}
-                    />
+                    <View key={idx} style={styles.cardWrap} />
                   ))
                 : null}
             </View>
@@ -243,25 +209,33 @@ export default function ListingsGrid({
   )
 }
 
-/* ---------------- STYLES ---------------- */
-
 const styles = StyleSheet.create({
   grid: {
     paddingHorizontal: 3,
     paddingTop: 4,
     paddingBottom: 140,
   },
+
   row: {
     flexDirection: "row",
     width: "100%",
     marginBottom: 4,
   },
+
   cardWrap: {
     flex: 1,
   },
+
+  /* 🔥 CLEAN FIX */
+  megaWrapper: {
+  width: "100%",
+  height: 360,
+  marginBottom: 26, // 🔥 increase bottom spacing
+},
+
   fullRow: {
     width: "100%",
     paddingHorizontal: 3,
-    marginVertical: 6,
+    marginVertical: 4,
   },
 })

@@ -35,6 +35,8 @@ type CartItem = {
   shipping_price: number
   shipping_cents?: number
   shipping_type: "buyer_pays" | "seller_pays"
+  subcategory?: string | null
+category?: string | null
 }
 
 export default function CartCheckoutScreen() {
@@ -76,8 +78,10 @@ export default function CartCheckoutScreen() {
   .select(`
     *,
     listings (
-      user_id
-    )
+  user_id,
+  subcategory,
+  category
+)
   `)
   .eq("user_id", session.user.id)
 
@@ -89,6 +93,8 @@ export default function CartCheckoutScreen() {
   const cartItems = (data ?? []).map((item) => ({
   ...item,
   seller_id: item.listings?.user_id,
+  subcategory: item.listings?.subcategory ?? null,
+  category: item.listings?.category ?? null,
 }))
 
   if (cartItems.length === 0) {
@@ -530,12 +536,23 @@ for (const item of cart) {
         escrow_amount_cents: escrowCents,
 
         listing_snapshot: {
-          title: item.title,
-          image_url: item.image_url,
-          price: item.price,
-          quantity: item.quantity,
-          size: item.size ?? null,
-        },
+  title: item.title,
+  image_url: item.image_url,
+  price: item.price,
+
+  quantity: item.quantity,
+  size: item.size ?? null,
+
+  category: item.category ?? null,
+  subcategory: item.subcategory ?? null,
+
+  shipping_type: item.shipping_type,
+
+  // 🔥 future-safe structure
+  metadata: {
+    captured_at: new Date().toISOString(),
+  },
+},
       })
       .select("id")
       .single()

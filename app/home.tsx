@@ -86,7 +86,7 @@ const [draftMaxPrice, setDraftMaxPrice] = useState("")
   const [isPro, setIsPro] = useState(false)
   const [megaBoostListings, setMegaBoostListings] = useState<Listing[]>([])
   const [page, setPage] = useState(0)
-const PAGE_SIZE = 500
+const PAGE_SIZE = 30
 const [hasMore, setHasMore] = useState(true)
 const [loadingMore, setLoadingMore] = useState(false)
 
@@ -107,20 +107,9 @@ useEffect(() => {
     action?.()
   }
 
-  /* ---------------- CATEGORY OPTIONS BY SPORT ---------------- */
+ 
 
-  const categoryOptions = useMemo(() => {
-  return [
-    { key: "all" as any, label: "All" },
-    { key: "electronics" as any, label: "Electronics" },
-    { key: "clothing_apparel" as any, label: "Clothing" },
-    { key: "home_garden" as any, label: "Home" },
-    { key: "sports_outdoors" as any, label: "Sports" },
-    { key: "collectibles" as any, label: "Collectibles" },
-    { key: "automotive" as any, label: "Automotive" },
-    { key: "other" as any, label: "Other" },
-  ]
-}, [])
+
 
   /* ---------------- LOAD DATA ---------------- */
 
@@ -566,7 +555,6 @@ onMessagesPress={() =>
   <FilterBar
   active={activeCategory as any}
   onChange={(key) => setActiveCategory(key)}
-  options={categoryOptions as any}
 />
 </View>
 

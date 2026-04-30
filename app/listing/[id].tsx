@@ -48,6 +48,7 @@ type Listing = {
   sizes: ListingSize[] | null
   quantity_available: number
   status: string
+  subcategory?: string | null
 }
 
 export default function ListingDetailScreen() {
@@ -152,6 +153,7 @@ const [offerMessage, setOfferMessage] =
           shipping_price,
           quantity_available,
           sizes,
+          subcategory,
           status
         `
         )
@@ -534,6 +536,9 @@ setIsSellerPro(!!data?.is_pro)
             current_amount: parsed,
 
             quantity: quantity,
+            size: selectedSize ?? null,
+            subcategory: listing.subcategory ?? null,
+
             counter_count: 0,
             last_actor: "buyer",
 
@@ -553,18 +558,38 @@ setIsSellerPro(!!data?.is_pro)
               ).toFixed(2)
             ),
 
-            message:
-              offerMessage.trim() || null,
+            message: offerMessage.trim() || null,
+
+            // 🔥 SNAPSHOT (CRITICAL)
+            listing_snapshot: {
+              title: listing.title,
+              image_url: listing.image_urls?.[0] ?? null,
+              price: listing.price,
+
+              quantity: quantity,
+              size: selectedSize ?? null,
+              
+
+              category: listing.category ?? null,
+              subcategory: listing.subcategory ?? null,
+
+              shipping_type: listing.shipping_type,
+
+              metadata: {
+                captured_at: new Date().toISOString(),
+                source: "offer_created",
+              },
+            },
 
             status: "pending",
             expires_at: new Date(
-            Date.now() + 24 * 60 * 60 * 1000
+              Date.now() + 24 * 60 * 60 * 1000
             ).toISOString(),
-            })
-            .select("id, seller_id")
-            .single()
+          })
+          .select("id, seller_id")
+          .single()
 
-            console.log("CREATE OFFER:", { newOffer, error })
+      console.log("CREATE OFFER:", { newOffer, error })
 
       if (error) throw error
 
