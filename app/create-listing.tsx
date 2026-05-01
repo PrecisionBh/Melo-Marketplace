@@ -111,13 +111,16 @@ export default function CreateListingScreen() {
   const { session } = useAuth()
   const router = useRouter()
 
-  const [images, setImages] = useState<string[]>([])
+  
+
+const [images, setImages] = useState<string[]>([])
   const [video, setVideo] = useState<any>(null)
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
   const [category, setCategory] = useState<string | null>(null)
   const [subcategory, setSubcategory] = useState<string | null>(null)
 const [showSubcategoryModal, setShowSubcategoryModal] = useState(false)
+
 
 useEffect(() => {
   if (!subcategory) return
@@ -137,6 +140,31 @@ useEffect(() => {
   )
 }, [subcategory])
   const [condition, setCondition] = useState<string | null>(null)
+  const [aiLoading, setAiLoading] = useState(false)
+
+  useEffect(() => {
+  if (!images || images.length === 0) return
+  if (aiLoading) return
+
+  const first = images[0]
+
+  let uri: string | null = null
+
+  if (typeof first === "string") {
+    uri = first
+  } else {
+    uri = (first as any)?.uri ?? null
+  }
+
+  console.log("🖼 FINAL IMAGE STATE:", images)
+  console.log("🖼 AI INPUT URI:", uri)
+
+  if (uri) {
+    runAI(uri)
+  } else {
+    console.log("❌ No valid URI for AI")
+  }
+}, [images])
 
   const [showCategoryModal, setShowCategoryModal] = useState(false)
   const [showConditionModal, setShowConditionModal] = useState(false)
@@ -149,8 +177,7 @@ useEffect(() => {
   const [boostsRemaining, setBoostsRemaining] = useState<number>(0)
   const [megaBoostsRemaining, setMegaBoostsRemaining] = useState<number>(0)
 
-const [shippingType, setShippingType] =
-  useState<"seller_pays" | "buyer_pays">("buyer_pays")
+const [shippingType, setShippingType] = useState<"seller_pays" | "buyer_pays">("seller_pays")
 const [weight, setWeight] = useState("")
 const [zipCode, setZipCode] = useState("")
 const [length, setLength] = useState("")
@@ -234,6 +261,188 @@ const [height, setHeight] = useState("")
     }
   }
 }, [duplicate, data])
+
+/* ---------------- AI Creation ---------------- */
+
+const getPublicImageUrl = async (localUri: string) => {
+  // 🔥 READ FILE AS BASE64 (WORKS ON MOBILE)
+  const base64 = await FileSystem.readAsStringAsync(localUri, {
+    encoding: "base64",
+  })
+
+  // 🔥 CONVERT BASE64 → BINARY
+  const byteCharacters = atob(base64)
+  const byteNumbers = new Array(byteCharacters.length)
+
+  for (let i = 0; i < byteCharacters.length; i++) {
+    byteNumbers[i] = byteCharacters.charCodeAt(i)
+  }
+
+  const byteArray = new Uint8Array(byteNumbers)
+
+  const fileExtMatch = localUri.match(/\.(\w+)$/)
+  const fileExt = fileExtMatch ? fileExtMatch[1] : "jpg"
+
+  const fileName = `ai-temp/${Date.now()}-${Math.random()
+    .toString(36)
+    .substring(2, 9)}.${fileExt}`
+
+  const { error: uploadError } = await supabase.storage
+    .from("listing-images")
+    .upload(fileName, byteArray, {
+      contentType: `image/${fileExt}`,
+      upsert: false,
+    })
+
+  if (uploadError) {
+    console.log("❌ AI TEMP UPLOAD ERROR:", uploadError)
+    throw uploadError
+  }
+
+  const { data } = supabase.storage
+    .from("listing-images")
+    .getPublicUrl(fileName)
+
+  return data.publicUrl
+}
+
+const normalizeCondition = (cond?: string) => {
+  if (!cond) return "good"
+
+  const c = cond.toLowerCase()
+
+  if (c.includes("new")) return "new"
+  if (c.includes("like")) return "like_new"
+  if (c.includes("good")) return "good"
+  if (c.includes("fair")) return "fair"
+  if (c.includes("poor") || c.includes("damaged")) return "poor"
+
+  return "good"
+}
+
+const runAI = async (localUri: string) => {
+  try {
+    setAiLoading(true)
+
+    // 🔥 CONVERT LOCAL IMAGE → PUBLIC URL
+    const imageUrl = await getPublicImageUrl(localUri)
+
+    console.log("🌐 AI IMAGE URL:", imageUrl)
+
+    const { data, error } = await supabase.functions.invoke(
+      "ai-generate-listing",
+      {
+        body: { imageUrl },
+      }
+    )
+
+    if (error) {
+      console.log("❌ AI ERROR:", error)
+      return
+    }
+
+    console.log("🤖 AI RESULT:", data)
+
+    if (!data) return
+
+    // 🔥 ONLY FILL IF USER HASN’T TYPED
+    if (!title && data.title) setTitle(data.title)
+    if (!description && data.description) setDescription(data.description)
+
+    if (data.category) setCategory(data.category)
+    setCondition(normalizeCondition(data.condition))
+
+    // 🔥 SUBCATEGORY DETECTION (APPAREL)
+    if (data.category === "clothing_apparel") {
+      const text = `${data.title || ""} ${data.description || ""}`.toLowerCase()
+
+      let sub: string | null = null
+
+      if (
+        text.includes("shirt") ||
+        text.includes("tee") ||
+        text.includes("hoodie") ||
+        text.includes("jacket") ||
+        text.includes("sweater")
+      ) sub = "tops"
+
+      else if (
+        text.includes("jean") ||
+        text.includes("pants") ||
+        text.includes("shorts") ||
+        text.includes("jogger")
+      ) sub = "bottoms"
+
+      else if (text.includes("dress")) sub = "dresses"
+
+      else if (
+        text.includes("shoe") ||
+        text.includes("sneaker") ||
+        text.includes("boot") ||
+        text.includes("trainer")
+      ) sub = "shoes"
+
+      else if (
+        text.includes("hat") ||
+        text.includes("cap") ||
+        text.includes("belt") ||
+        text.includes("bag")
+      ) sub = "accessories"
+
+      if (sub) setSubcategory(sub)
+    }
+
+
+
+    // 🔥 SUBCATEGORY DETECTION (JEWELRY)
+    if (data.category === "jewelry_watches") {
+      const text = `${data.title || ""} ${data.description || ""}`.toLowerCase()
+
+      if (text.includes("watch")) setSubcategory("watches")
+      else if (text.includes("ring")) setSubcategory("rings")
+      else if (text.includes("necklace")) setSubcategory("necklaces")
+      else if (text.includes("bracelet")) setSubcategory("bracelets")
+      else if (text.includes("earring")) setSubcategory("earrings")
+    }
+
+    if (data.category === "clothing_apparel" && subcategory) {
+  if (subcategory === "tops") {
+    setSizes([{ size: "L", qty: "1" }])
+  } else if (subcategory === "bottoms") {
+    setSizes([{ size: "32x32", qty: "1" }])
+  } else if (subcategory === "shoes") {
+    setSizes([{ size: "10", qty: "1" }])
+  } else if (subcategory === "dresses") {
+    setSizes([{ size: "6", qty: "1" }])
+  }
+}
+
+    // 🔥 PRICE + OFFERS LOGIC
+    if (!price && data.price) {
+      const priceNum = Number(data.price)
+      setPrice(String(priceNum))
+
+      // turn on offers
+      setAllowOffers(true)
+
+      // smart min offer
+      let min
+
+      if (priceNum < 25) min = priceNum * 0.8
+      else if (priceNum < 100) min = priceNum * 0.7
+      else min = priceNum * 0.65
+
+      min = Math.round(min / 5) * 5
+
+      setMinOffer(String(min))
+    }
+
+  } catch (err) {
+    console.log("❌ AI FAIL:", err)
+  } finally {
+    setAiLoading(false)
+  }
+}
 
 /* ---------------- RESET CATEGORY + BRAND WHEN SPORT CHANGES ---------------- */
 
@@ -583,13 +792,30 @@ return (
         <Text>Checking address...</Text>
       ) : (
         <>
+
           <ImageUpload
             images={images}
-            setImages={setImages}
+            setImages={setImages} // ✅ CLEAN (no AI here)
             video={video}
             setVideo={setVideo}
             max={5}
           />
+
+          <Modal visible={aiLoading} transparent animationType="fade">
+  <View style={styles.aiModalOverlay}>
+    <View style={styles.aiModalCard}>
+      <ActivityIndicator size="large" color="#D97732" />
+
+      <Text style={styles.aiModalTitle}>
+        Melo AI is creating your listing!
+      </Text>
+
+      <Text style={styles.aiModalText}>
+        We sometimes make errors. Please look over the listing carefully and fix any mistakes.
+      </Text>
+    </View>
+  </View>
+</Modal>
 
           <CreateListingDetails
             title={title}
@@ -603,19 +829,19 @@ return (
           />
 
           <CreateListingSelectors
-  category={category}
-  subcategory={subcategory} // ✅ ADD
-  condition={condition}
-  conditionSubtext={
-    CONDITIONS.find((c) => c.value === condition)?.subtext || ""
-  }
-  onPressCategory={() => setShowCategoryModal(true)}
-  onPressSubcategory={() => setShowSubcategoryModal(true)} // ✅ ADD
-  onPressCondition={() => setShowConditionModal(true)}
-  sizes={sizes}
-  setSizes={setSizes}
-  isPro={isPro}
-/>
+            category={category}
+            subcategory={subcategory}
+            condition={condition}
+            conditionSubtext={
+              CONDITIONS.find((c) => c.value === condition)?.subtext || ""
+            }
+            onPressCategory={() => setShowCategoryModal(true)}
+            onPressSubcategory={() => setShowSubcategoryModal(true)}
+            onPressCondition={() => setShowConditionModal(true)}
+            sizes={sizes}
+            setSizes={setSizes}
+            isPro={isPro}
+          />
 
           <CreateListingShipping
             shippingType={shippingType}
@@ -661,82 +887,82 @@ return (
 
   <GlobalFooter />
 
-    <FullScreenSelector
-      visible={showCategoryModal}
-      title="Select Category"
-      options={MARKETPLACE_CATEGORIES}
-      selectedValue={category ?? undefined}
-      onSelect={(value) => {
-        setCategory(value)
-        setShowCategoryModal(false)
-      }}
-      onClose={() => setShowCategoryModal(false)}
-    />
+  <FullScreenSelector
+    visible={showCategoryModal}
+    title="Select Category"
+    options={MARKETPLACE_CATEGORIES}
+    selectedValue={category ?? undefined}
+    onSelect={(value) => {
+      setCategory(value)
+      setShowCategoryModal(false)
+    }}
+    onClose={() => setShowCategoryModal(false)}
+  />
 
-    <FullScreenSelector
-      visible={showConditionModal}
-      title="Select Condition"
-      options={CONDITIONS}
-      selectedValue={condition ?? undefined}
-      onSelect={(value) => {
-        setCondition(value)
-        setShowConditionModal(false)
-      }}
-      onClose={() => setShowConditionModal(false)}
-    />
+  <FullScreenSelector
+    visible={showConditionModal}
+    title="Select Condition"
+    options={CONDITIONS}
+    selectedValue={condition ?? undefined}
+    onSelect={(value) => {
+      setCondition(value)
+      setShowConditionModal(false)
+    }}
+    onClose={() => setShowConditionModal(false)}
+  />
 
-    <FullScreenSelector
-  visible={showSubcategoryModal}
-  title="Select Type"
-  options={
-    category === "clothing_apparel"
-      ? APPAREL_TYPES
-      : JEWELRY_TYPES
-  }
-  selectedValue={subcategory ?? undefined}
-  onSelect={(value) => {
-    setSubcategory(value)
-    setShowSubcategoryModal(false)
-  }}
-  onClose={() => setShowSubcategoryModal(false)}
-/>
+  <FullScreenSelector
+    visible={showSubcategoryModal}
+    title="Select Type"
+    options={
+      category === "clothing_apparel"
+        ? APPAREL_TYPES
+        : JEWELRY_TYPES
+    }
+    selectedValue={subcategory ?? undefined}
+    onSelect={(value) => {
+      setSubcategory(value)
+      setShowSubcategoryModal(false)
+    }}
+    onClose={() => setShowSubcategoryModal(false)}
+  />
 
-    <Modal visible={showLimitModal} transparent animationType="fade">
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalCard}>
-          <Text style={styles.modalTitle}>
-            You have reached your free plan limit
+  <Modal visible={showLimitModal} transparent animationType="fade">
+    <View style={styles.modalOverlay}>
+      <View style={styles.modalCard}>
+        <Text style={styles.modalTitle}>
+          You have reached your free plan limit
+        </Text>
+
+        <Text style={styles.modalText}>
+          Free accounts can have up to 50 active listings.
+          Upgrade to Melo Pro to unlock unlimited listings and more Pro features.
+        </Text>
+
+        <TouchableOpacity
+          style={styles.upgradeButton}
+          onPress={() => {
+            setShowLimitModal(false)
+            router.push("/melo-pro")
+          }}
+        >
+          <Text style={styles.upgradeButtonText}>
+            Upgrade to Pro
           </Text>
+        </TouchableOpacity>
 
-          <Text style={styles.modalText}>
-            Free accounts can have up to 50 active listings.
-            Upgrade to Melo Pro to unlock unlimited listings and more Pro features.
-          </Text>
-
-          <TouchableOpacity
-            style={styles.upgradeButton}
-            onPress={() => {
-              setShowLimitModal(false)
-              router.push("/melo-pro")
-            }}
-          >
-            <Text style={styles.upgradeButtonText}>
-              Upgrade to Pro
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity onPress={() => setShowLimitModal(false)}>
-            <Text style={styles.laterText}>Maybe Later</Text>
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity onPress={() => setShowLimitModal(false)}>
+          <Text style={styles.laterText}>Maybe Later</Text>
+        </TouchableOpacity>
       </View>
-    </Modal>
+    </View>
+  </Modal>
 
-    <ReturnAddressRequiredModal
-      visible={showAddressModal}
-      onClose={() => setShowAddressModal(false)}
-    />
-  </View>
+  <ReturnAddressRequiredModal
+    visible={showAddressModal}
+    onClose={() => setShowAddressModal(false)}
+  />
+</View>
 )
 }
 
@@ -882,5 +1108,37 @@ const styles = StyleSheet.create({
   backgroundColor: "#fff",
   borderRadius: 16,
   padding: 14,
+},
+
+aiModalOverlay: {
+  flex: 1,
+  backgroundColor: "rgba(0,0,0,0.55)",
+  justifyContent: "center",
+  alignItems: "center",
+  padding: 24,
+},
+
+aiModalCard: {
+  width: "100%",
+  backgroundColor: "#FFFFFF",
+  borderRadius: 20,
+  padding: 24,
+  alignItems: "center",
+},
+
+aiModalTitle: {
+  marginTop: 16,
+  fontSize: 18,
+  fontWeight: "900",
+  color: "#111827",
+  textAlign: "center",
+},
+
+aiModalText: {
+  marginTop: 10,
+  fontSize: 13,
+  lineHeight: 19,
+  color: "#6B7280",
+  textAlign: "center",
 },
 })
