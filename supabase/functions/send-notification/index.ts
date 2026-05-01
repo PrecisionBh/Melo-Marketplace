@@ -52,9 +52,17 @@ serve(async (req) => {
     }
 
     if ((error as any)?.code === "23505") {
-      console.log("🚫 duplicate notification blocked")
-      return new Response("Duplicate", { status: 200 })
-    }
+  // 🔥 Only block duplicates for NON-message types
+  if (type !== "message") {
+    console.log("🚫 duplicate blocked for type:", type)
+    return new Response("Duplicate", { status: 200 })
+  }
+
+  console.log("⚠️ message duplicate allowed to continue")
+} else if (error) {
+  console.log("❌ insert error:", error)
+  return new Response("Insert failed", { status: 500 })
+}
 
     console.log("✅ notification inserted")
 

@@ -147,11 +147,12 @@ export default function ListingCard({
 
       {/* TEXT BELOW IMAGE */}
       <View
-        style={[
-          styles.meta,
-          isHero && styles.metaHero,
-        ]}
-      >
+  style={[
+    styles.meta,
+    isHero && styles.metaHero,
+    isHero && styles.metaOverlay, // 👈 ADD THIS
+  ]}
+>
         <Text
           style={[
             styles.title,
@@ -331,9 +332,10 @@ const styles = StyleSheet.create({
   },
 
   titleHero: {
-    fontSize: 16,
-    fontWeight: "800",
-  },
+  fontSize: 16,
+  fontWeight: "800",
+  color: "#fff", // 👈 change this
+},
 
   price: {
     fontSize: 13,
@@ -342,7 +344,17 @@ const styles = StyleSheet.create({
   },
 
   priceHero: {
-    fontSize: 18,
-    fontWeight: "900",
-  },
+  fontSize: 18,
+  fontWeight: "900",
+  color: "#D97732", // Melo orange
+},
+
+  metaOverlay: {
+  position: "absolute",
+  bottom: 0,
+  left: 0,
+  width: "100%",
+  backgroundColor: "rgba(0,0,0,0.55)",
+  padding: 14,
+},
 })

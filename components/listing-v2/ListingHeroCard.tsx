@@ -19,6 +19,7 @@ export default function ListingHeroCard({
   quantityAvailable,
   onToggleWatch,
   listingId,
+  imageUrl, // 🔥 ADD THIS
 }: {
   title: string
   price: number
@@ -30,6 +31,7 @@ export default function ListingHeroCard({
   quantityAvailable: number
   onToggleWatch: () => void
   listingId: string
+  imageUrl?: string // 🔥 ADD THIS
 }) {
   return (
     <View style={styles.wrap}>
@@ -44,7 +46,12 @@ export default function ListingHeroCard({
 
         {/* 🔥 ACTION ICONS */}
         <View style={styles.actions}>
-          <ShareListingButton listingId={listingId} />
+          <ShareListingButton
+            listingId={listingId}
+            title={title}
+            price={price}
+            image={imageUrl} // 🔥 PASS IMAGE
+          />
 
           <TouchableOpacity
             onPress={onToggleWatch}

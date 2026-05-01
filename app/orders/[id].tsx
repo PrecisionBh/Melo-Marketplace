@@ -591,6 +591,7 @@ const submitBuyerDisputeResponse = async ({
   }
 
   if (!order) return null
+  console.log("🧾 SNAPSHOT:", order.listing_snapshot)
 
   const userId = session?.user?.id
 

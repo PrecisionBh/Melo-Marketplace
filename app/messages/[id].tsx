@@ -4,7 +4,7 @@ import * as ImagePicker from "expo-image-picker"
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { useEffect, useRef, useState } from "react"
 import {
-  Alert,
+  ActivityIndicator, Alert,
   FlatList,
   Image,
   KeyboardAvoidingView,
@@ -13,11 +13,12 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
 import GlobalHeader from "@/components/global/globalheader"
+import { containsBlockedContent, getBlockedReason } from "@/lib/contentFilter"
 import { useAuth } from "../../context/AuthContext"
 import { handleAppError } from "../../lib/errors/appError"
 import { supabase } from "../../lib/supabase"
@@ -44,8 +45,13 @@ export default function ChatScreen() {
   const router = useRouter()
   const insets = useSafeAreaInsets()
 
-  const { id: conversationId, listingId } =
-    useLocalSearchParams<{ id: string; listingId?: string }>()
+  const params = useLocalSearchParams<{ id?: string; listingId?: string }>()
+
+  const conversationId =
+    typeof params.id === "string" ? params.id : null
+
+  const listingId =
+    typeof params.listingId === "string" ? params.listingId : null
 
   const { session } = useAuth()
 
@@ -54,6 +60,7 @@ export default function ChatScreen() {
     useState<Record<string, ListingPreview>>({})
   const [text, setText] = useState("")
   const [loading, setLoading] = useState(true)
+
   const [sending, setSending] = useState(false)
   const [uploadingImage, setUploadingImage] = useState(false)
 
@@ -70,6 +77,15 @@ export default function ChatScreen() {
   const [otherUserId, setOtherUserId] = useState<string | null>(null)
 
   const flatListRef = useRef<FlatList>(null)
+
+  /* 🔥 ID GUARD + LOADING SPINNER (CORRECT PLACEMENT) */
+  const isInvalidId =
+    !conversationId || conversationId.includes("[id]")
+
+  if (isInvalidId) {
+  console.log("❌ INVALID ID:", params)
+  return <ActivityIndicator size="large" />
+}
 
   /* ---------------- CAPTURE LISTING ID ---------------- */
 
@@ -89,7 +105,7 @@ export default function ChatScreen() {
   /* ---------------- INITIAL LOAD + REALTIME ---------------- */
 
   useEffect(() => {
-    if (!conversationId) return
+  if (!conversationId || conversationId.includes("[id]")) return
 
     loadMessages()
     loadConversationUser()
@@ -135,7 +151,7 @@ export default function ChatScreen() {
 
   const loadMessages = async () => {
     try {
-      if (!conversationId) return
+      if (!conversationId || conversationId.includes("[id]")) return
 
       const { data, error } = await supabase
   .from("messages")
@@ -162,7 +178,7 @@ export default function ChatScreen() {
 
   const loadConversationUser = async () => {
     try {
-      if (!conversationId || !session?.user) return
+      if (!conversationId || conversationId.includes("[id]") || !session?.user) return
 
       const { data, error } = await supabase
         .from("conversations")
@@ -238,7 +254,7 @@ export default function ChatScreen() {
 
   const markAsRead = async () => {
     try {
-      if (!conversationId || !session?.user) return
+      if (!conversationId || conversationId.includes("[id]") || !session?.user) return
 
       const { error } = await supabase
         .from("messages")
@@ -260,16 +276,16 @@ export default function ChatScreen() {
 const subscribeToMessages = () => {
   console.log("🟢 subscribeToMessages INIT", conversationId)
 
-  if (!conversationId) {
+  if (!conversationId || conversationId.includes("[id]")) {
     console.log("❌ No conversationId — abort subscribe")
     return () => {}
   }
 
-  if (messageChannelRef.current) {
-    console.log("🧹 Removing existing message channel")
-    supabase.removeChannel(messageChannelRef.current)
-    messageChannelRef.current = null
-  }
+  // 🔥 PREVENT DOUBLE SUBSCRIBE CRASH
+if (messageChannelRef.current) {
+  console.log("⚠️ Channel already exists — skipping subscribe")
+  return () => {}
+}
 
   if (typingChannelRef.current) {
     console.log("🧹 Removing existing typing channel")
@@ -278,42 +294,80 @@ const subscribeToMessages = () => {
   }
 
   const messagesChannel = supabase
-    .channel(`messages-${conversationId}`)
-    .on(
-      "postgres_changes",
-      {
-        event: "INSERT",
-        schema: "public",
-        table: "messages",
-        filter: `conversation_id=eq.${conversationId}`,
-      },
-      (payload) => {
-        console.log("📩 REALTIME MESSAGE RECEIVED:", payload)
+  .channel(`messages-${conversationId}`)
 
-        const newMessage = payload.new as Message
+  // 🔥 INSERT (new messages)
+  .on(
+    "postgres_changes",
+    {
+      event: "INSERT",
+      schema: "public",
+      table: "messages",
+      filter: `conversation_id=eq.${conversationId}`,
+    },
+    (payload) => {
+      console.log("📩 REALTIME MESSAGE RECEIVED:", payload)
 
-        setMessages((prev) => {
-          const alreadyExists = prev.some((m) => m.id === newMessage.id)
-          if (alreadyExists) {
-            console.log("⚠️ Duplicate realtime message blocked")
-            return prev
-          }
-          return [...prev, newMessage]
+      const newMessage = payload.new as Message
+
+      setMessages((prev) => {
+        // Remove matching temp message once the real DB message arrives
+        const withoutTemp = prev.filter((m) => {
+          const isMatchingTemp =
+            m.id.startsWith("temp") &&
+            m.sender_id === newMessage.sender_id &&
+            (m.body ?? "") === (newMessage.body ?? "") &&
+            (m.image_url ?? "") === (newMessage.image_url ?? "")
+
+          return !isMatchingTemp
         })
 
-        console.log("👁 Marking as read after realtime")
-        markAsRead()
+        // Prevent duplicate real messages
+        const alreadyExists = withoutTemp.some(
+          (m) => m.id === newMessage.id
+        )
 
-        setTimeout(() => {
-          flatListRef.current?.scrollToEnd({ animated: true })
-        }, 50)
-      }
-    )
-    .subscribe((status) => {
-      console.log("📡 Message channel status:", status)
-    })
+        if (alreadyExists) return withoutTemp
 
-  messageChannelRef.current = messagesChannel
+        return [...withoutTemp, newMessage]
+      })
+
+      console.log("👁 Marking as read after realtime")
+      markAsRead()
+
+      requestAnimationFrame(() => {
+        flatListRef.current?.scrollToEnd({ animated: true })
+      })
+    }
+  )
+
+  // 🔥 UPDATE (seen / read receipts)
+  .on(
+    "postgres_changes",
+    {
+      event: "UPDATE",
+      schema: "public",
+      table: "messages",
+      filter: `conversation_id=eq.${conversationId}`,
+    },
+    (payload) => {
+      const updated = payload.new as Message
+
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === updated.id
+            ? { ...m, read_at: updated.read_at }
+            : m
+        )
+      )
+    }
+  )
+
+  .subscribe((status) => {
+    console.log("📡 Message channel status:", status)
+  })
+
+messageChannelRef.current = messagesChannel
 
   const typingChannel = supabase
     .channel(`typing-${conversationId}`)
@@ -322,15 +376,17 @@ const subscribeToMessages = () => {
 
       if (payload.payload?.userId === session?.user?.id) return
 
-      setIsOtherTyping(true)
+      // 🔥 smooth typing indicator (no flicker)
+setIsOtherTyping(true)
 
-      if (typingTimeoutRef.current) {
-        clearTimeout(typingTimeoutRef.current)
-      }
+if (typingTimeoutRef.current) {
+  clearTimeout(typingTimeoutRef.current)
+}
 
-      typingTimeoutRef.current = setTimeout(() => {
-        setIsOtherTyping(false)
-      }, 2000)
+// 👇 longer + smoother timeout
+typingTimeoutRef.current = setTimeout(() => {
+  setIsOtherTyping(false)
+}, 3000)
     })
     .subscribe((status) => {
       console.log("📡 Typing channel status:", status)
@@ -367,11 +423,19 @@ const sendMessage = async () => {
   if (sending) return
   if (!text.trim()) return
   if (!session?.user) return
-  if (!conversationId) return
+  if (!conversationId || conversationId.includes("[id]")) return
 
   setSending(true)
 
   const message = text.trim()
+  if (containsBlockedContent(message)) {
+  Alert.alert(
+    "Message Blocked",
+    getBlockedReason(message) || "This message is not allowed on Melo."
+  )
+  setSending(false)
+  return
+}
 
   const messageListingId =
     messages.length === 0 && initialListingId
@@ -418,38 +482,56 @@ const sendMessage = async () => {
       .select()
 
     if (error) throw error
-    if (!data?.length) return
+    console.log("📦 INSERT RESULT:", data)
 
-    const realMessageId = data[0].id
+if (!data?.length) {
+  console.log("❌ No message returned, stopping notification")
+  return
+}
 
-    const { data: convo } = await supabase
-      .from("conversations")
-      .select("user_one, user_two")
-      .eq("id", conversationId)
-      .single()
+const realMessageId = data[0].id
 
-    if (!convo) return
+// 🔥 GET RECIPIENT + SEND NOTIFICATION
+const { data: convo } = await supabase
+  .from("conversations")
+  .select("user_one, user_two")
+  .eq("id", conversationId)
+  .single()
 
-    const recipientId =
-      convo.user_one === session.user.id
-        ? convo.user_two
-        : convo.user_one
+if (!convo) return
 
-    if (!recipientId) return
+const recipientId =
+  convo.user_one === session.user.id
+    ? convo.user_two
+    : convo.user_one
 
-    await supabase.functions.invoke("send-notification", {
-      body: {
-        userId: recipientId,
-        type: "message",
-        title: "New message",
-        body: message,
-        data: {
-          route: "/messages/[id]",
-          params: { id: conversationId },
-        },
-        dedupeKey: realMessageId,
-      },
-    })
+if (!recipientId) return
+
+await supabase.functions.invoke("send-notification", {
+  body: {
+    userId: recipientId,
+    type: "message",
+    title: "New message",
+    body: message,
+    data: {
+      route: `/messages/${conversationId}`, // fallback route
+      conversationId, // 🔥 REQUIRED for proper routing
+      listingId: messageListingId ?? null, // 🔥 ADD THIS (important)
+      type: "message",
+    },
+    dedupeKey: realMessageId,
+  },
+})
+
+const realMessage = data[0]
+
+// 🔥 REPLACE TEMP MESSAGE WITH REAL MESSAGE
+setMessages((prev) =>
+  prev.map((m) =>
+    m.id === tempId ? realMessage : m
+  )
+)
+
   } catch (err) {
     handleAppError(err, {
       fallbackMessage: "Message failed to send.",
@@ -460,7 +542,7 @@ const sendMessage = async () => {
 }
 
 const broadcastTyping = async () => {
-  if (!conversationId || !session?.user) return
+  if (!conversationId || conversationId.includes("[id]") || !session?.user) return
   if (!typingChannelRef.current) return
 
   await typingChannelRef.current.send({
@@ -474,7 +556,9 @@ const broadcastTyping = async () => {
 
 const uploadChatImage = async (localUri: string) => {
   if (!session?.user) throw new Error("No session user")
-  if (!conversationId) throw new Error("No conversationId")
+if (!conversationId || conversationId.includes("[id]")) {
+  throw new Error("Invalid conversationId")
+}
 
   const response = await fetch(localUri)
   const arrayBuffer = await response.arrayBuffer()
@@ -510,7 +594,13 @@ const uploadChatImage = async (localUri: string) => {
 const sendImageMessage = async (localUri: string) => {
   if (sending || uploadingImage) return
   if (!session?.user) return
-  if (!conversationId) return
+  if (!conversationId || conversationId.includes("[id]")) return
+
+  // 🔥 NEW: warning before sending image
+  Alert.alert(
+    "Reminder",
+    "Do not share payment info, links, phone numbers, or emails in images. You may lose protection."
+  )
 
   setUploadingImage(true)
 
@@ -562,13 +652,13 @@ const sendImageMessage = async (localUri: string) => {
 
     const realMessageId = data[0].id
 
-   setMessages((prev) =>
-  prev.map((m) =>
-    m.id === tempId
-      ? data[0]
-      : m
-  )
-)
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === tempId
+          ? data[0]
+          : m
+      )
+    )
 
     const { data: convo } = await supabase
       .from("conversations")
@@ -587,18 +677,20 @@ const sendImageMessage = async (localUri: string) => {
 
     if (recipientId) {
       await supabase.functions.invoke("send-notification", {
-        body: {
-          userId: recipientId,
-          type: "message",
-          title: "New image",
-          body: "Sent you a photo",
-          data: {
-            route: "/messages/[id]",
-            params: { id: conversationId },
-          },
-          dedupeKey: realMessageId,
-        },
-      })
+  body: {
+    userId: recipientId,
+    type: "message",
+    title: "New image",
+    body: "Sent you a photo",
+    data: {
+      route: `/messages/${conversationId}`, // fallback
+      conversationId, // 🔥 REQUIRED (fixes spinner)
+      listingId: messageListingId ?? null, // 🔥 ADD THIS
+      type: "message",
+    },
+    dedupeKey: realMessageId,
+  },
+})
     }
   } catch (err) {
     handleAppError(err, {
@@ -719,6 +811,11 @@ const renderItem = ({
   const isMe = item.sender_id === session?.user?.id
 
   const prevMessage = messages[index - 1]
+  const isSameSenderAsPrev =
+  prevMessage &&
+  prevMessage.sender_id === item.sender_id &&
+  new Date(prevMessage.created_at).toDateString() ===
+    new Date(item.created_at).toDateString()
 
   const showDateHeader =
     !prevMessage ||
@@ -730,6 +827,8 @@ const renderItem = ({
     !messages
       .slice(0, index)
       .some((m) => m.listing_id === item.listing_id)
+
+      
 
   return (
     <View>
@@ -836,11 +935,11 @@ const renderItem = ({
     </Text>
   )}
 
-  {isMe && (
-    <Text style={styles.meta}>
-      {item.read_at ? "Seen" : "Sent"}
-    </Text>
-  )}
+  {isMe && index === messages.length - 1 && (
+  <Text style={styles.meta}>
+    {item.read_at ? "Seen" : "Delivered"}
+  </Text>
+)}
 </View>
     </View>
   )
@@ -927,9 +1026,17 @@ return (
   <TextInput
     value={text}
     onChangeText={(val) => {
-      setText(val)
-      broadcastTyping()
-    }}
+  setText(val)
+
+  if (containsBlockedContent(val)) {
+    Alert.alert(
+      "Warning",
+      "Sharing payment info, links, or contact details is not allowed."
+    )
+  }
+
+  broadcastTyping()
+}}
     placeholder={uploadingImage ? "Uploading image..." : "Message..."}
     style={styles.input}
     multiline
@@ -948,6 +1055,7 @@ return (
     </View>
   </KeyboardAvoidingView>
 )
+
 }
 
 const styles = StyleSheet.create({
@@ -1059,7 +1167,7 @@ imageBubble: {
   maxWidth: "80%",
   padding: 4,
   borderRadius: 16,
-  marginBottom: 10,
+  marginBottom: 1,
   overflow: "hidden",
   backgroundColor: "#FFFFFF",
   borderWidth: 1,

@@ -651,6 +651,7 @@ return (
             megaCredits={megaBoostsRemaining}
             onBuyCredits={() => router.push("/boostcredits")}
             onPublish={handleCreateListing}
+            submitting={submitting}
           />
         </>
       )}

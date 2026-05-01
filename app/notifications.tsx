@@ -37,12 +37,11 @@ export default function NotificationsScreen() {
         setLoading(true)
 
         const { data, error } = await supabase
-          .from("notifications")
-          .select("*")
-          .eq("user_id", userId)
-          .eq("cleared", false)
-          .eq("read", false)
-          .order("created_at", { ascending: false })
+  .from("notifications")
+  .select("*")
+  .eq("user_id", userId)
+  .eq("cleared", false) // 
+  .order("created_at", { ascending: false })
 
         if (error) throw error
 
@@ -81,12 +80,20 @@ export default function NotificationsScreen() {
         }
       }
 
-      if (n.data?.route) {
-        router.push({
-          pathname: n.data.route,
-          params: n.data.params ?? {},
-        })
-      }
+      // 🔥 HANDLE NEW URL-BASED SYSTEM
+if (n.data?.route) {
+  console.log("🚀 Opening notification route:", n.data.route)
+  router.push(n.data.route)
+  return
+}
+
+// 🔥 FALLBACK FOR OLD SYSTEM (KEEP THIS)
+if (n.data?.route) {
+  router.push({
+    pathname: n.data.route,
+    params: n.data.params ?? {},
+  })
+}
     } catch (err) {
       handleAppError(err, {
         context: "notifications_open",

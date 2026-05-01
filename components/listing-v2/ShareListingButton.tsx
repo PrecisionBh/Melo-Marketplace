@@ -2,39 +2,42 @@ import { Ionicons } from "@expo/vector-icons"
 import * as Clipboard from "expo-clipboard"
 import { useState } from "react"
 import {
-    Alert,
-    Modal,
-    Share,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Alert,
+  Modal,
+  Share,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native"
 
 type Props = {
   listingId: string
   title?: string
   price?: number
+  image?: string // 🔥 ADD THIS
 }
 
 export default function ShareListingButton({
   listingId,
   title = "Check out this listing",
   price,
+  image,
 }: Props) {
   const [open, setOpen] = useState(false)
 
-  // ✅ OPTION B (matches your app.json scheme)
+  // 🔥 DEEP LINK
   const appUrl = `melomp://listing/${listingId}`
-  const webUrl = `https://melomarketplace.app/l/${listingId}`
 
-  const shareMessage = `${title}${price ? `\n$${price}` : ""}
+  // 🔥 IMPORTANT → USE SHARE ROUTE
+  const webUrl = `https://melomarketplace.app/share/${listingId}`
 
-Open in Melo:
-${appUrl}
+  // 🔥 CLEAN SHARE MESSAGE (image included)
+  const shareMessage = `${title}${price ? ` - $${price}` : ""}
 
-Or view on web:
-${webUrl}`
+${webUrl}
+
+${image ? image : ""}`
 
   const handleCopy = async () => {
     await Clipboard.setStringAsync(webUrl)
@@ -101,12 +104,8 @@ ${webUrl}`
               </Text>
             </TouchableOpacity>
 
-            <TouchableOpacity
-              onPress={() => setOpen(false)}
-            >
-              <Text style={styles.cancel}>
-                Cancel
-              </Text>
+            <TouchableOpacity onPress={() => setOpen(false)}>
+              <Text style={styles.cancel}>Cancel</Text>
             </TouchableOpacity>
           </View>
         </View>
