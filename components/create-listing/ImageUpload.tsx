@@ -76,49 +76,87 @@ export default function ImageUpload({
   /* ---------------- LIBRARY ---------------- */
 
   const pickImage = async () => {
-    try {
-      setShowPicker(false)
+  try {
+    console.log("📸 STEP 1: pickImage START")
 
-      if (images.length >= max) {
-        Alert.alert("Limit reached", `You can upload up to ${max} photos.`)
-        return
-      }
+    // 🔥 STEP 1: request permission FIRST (before closing modal)
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync()
 
-      const remainingSlots = max - images.length
-
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ["images"],
-        quality: 0.35,
-        allowsMultipleSelection: true,
-        selectionLimit: remainingSlots,
-      })
-
-      if (!result.canceled && result.assets?.length > 0) {
-        const convertedUris = await Promise.all(
-          result.assets.map(async (asset) => {
-            const converted = await ImageManipulator.manipulateAsync(
-              asset.uri,
-              [{ resize: { width: 1200 } }],
-              {
-                compress: 0.25,
-                format: ImageManipulator.SaveFormat.JPEG,
-              }
-            )
-            return converted.uri
-          })
-        )
-
-        setImages((prev) => {
-          const combined = [...prev, ...convertedUris]
-          return combined.slice(0, max)
-        })
-      }
-    } catch (err) {
-      handleAppError(err, {
-        context: "image_upload_picker",
-      })
+    if (!permission.granted) {
+      Alert.alert(
+        "Permission required",
+        "Please allow photo library access in settings."
+      )
+      return
     }
+
+    console.log("📸 STEP 2: Permission granted")
+
+    // 🔥 STEP 2: now close modal
+    setShowPicker(false)
+    console.log("📸 STEP 3: Modal closing")
+
+    // 🔥 STEP 3: give iOS time to finish closing animation
+    await new Promise(resolve => setTimeout(resolve, 500))
+    console.log("📸 STEP 4: After delay, launching picker")
+
+    if (images.length >= max) {
+      console.log("📸 BLOCKED: Max images reached")
+      Alert.alert("Limit reached", `You can upload up to ${max} photos.`)
+      return
+    }
+
+    const remainingSlots = max - images.length
+    console.log("📸 Remaining slots:", remainingSlots)
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images, // 🔥 FIXED (iOS-safe)
+      quality: 0.35,
+      allowsMultipleSelection: true,
+      selectionLimit: remainingSlots,
+    })
+
+    console.log("📸 STEP 5: Picker returned result:", result)
+
+    if (!result.canceled && result.assets?.length > 0) {
+      console.log("📸 STEP 6: Assets found:", result.assets.length)
+
+      const convertedUris = await Promise.all(
+        result.assets.map(async (asset, index) => {
+          console.log(`📸 Converting image ${index}:`, asset.uri)
+
+          const converted = await ImageManipulator.manipulateAsync(
+            asset.uri,
+            [{ resize: { width: 1200 } }],
+            {
+              compress: 0.25,
+              format: ImageManipulator.SaveFormat.JPEG,
+            }
+          )
+
+          console.log(`📸 Converted image ${index}:`, converted.uri)
+
+          return converted.uri
+        })
+      )
+
+      console.log("📸 STEP 7: Setting images")
+
+      setImages((prev) => {
+        const combined = [...prev, ...convertedUris]
+        return combined.slice(0, max)
+      })
+    } else {
+      console.log("📸 STEP 6: No images selected or canceled")
+    }
+
+  } catch (err) {
+    console.log("❌ PICK IMAGE ERROR:", err)
+    handleAppError(err, {
+      context: "image_upload_picker",
+    })
   }
+}
 
   /* ---------------- CAMERA ---------------- */
 

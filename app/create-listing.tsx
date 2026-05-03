@@ -799,7 +799,7 @@ return (
     
     {/* 🔥 LOADING OVERLAY (does NOT replace tree) */}
     {showLoading && (
-  <View style={styles.loaderWrap} pointerEvents="auto">
+  <View style={styles.loaderWrap} pointerEvents="none">
     <ActivityIndicator size="large" color="#D97732" />
   </View>
 )}
