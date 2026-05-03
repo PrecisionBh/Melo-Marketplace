@@ -141,10 +141,12 @@ useEffect(() => {
 }, [subcategory])
   const [condition, setCondition] = useState<string | null>(null)
   const [aiLoading, setAiLoading] = useState(false)
+  const [aiHasRun, setAiHasRun] = useState(false)
 
   useEffect(() => {
   if (!images || images.length === 0) return
   if (aiLoading) return
+  if (aiHasRun) return // 🔥 ONLY RUN ONCE
 
   const first = images[0]
 
@@ -156,13 +158,22 @@ useEffect(() => {
     uri = (first as any)?.uri ?? null
   }
 
-  console.log("🖼 FINAL IMAGE STATE:", images)
-  console.log("🖼 AI INPUT URI:", uri)
+  console.log("🖼 FIRST IMAGE URI:", uri)
 
-  if (uri) {
+  if (!uri) return
+
+  // 🔥 LOCK BEFORE RUNNING (prevents race conditions)
+  setAiHasRun(true)
+
+  // 🔥 slight delay helps iOS not conflict with picker
+  setTimeout(() => {
     runAI(uri)
-  } else {
-    console.log("❌ No valid URI for AI")
+  }, 400)
+}, [images])
+
+useEffect(() => {
+  if (images.length === 0) {
+    setAiHasRun(false)
   }
 }, [images])
 
@@ -770,6 +781,14 @@ setMegaBoostsRemaining(profile?.mega_boosts_remaining ?? 0)
 }, [session?.user?.id])
 )
 
+useEffect(() => {
+  const timeout = setTimeout(() => {
+    setCheckingAddress(false)
+  }, 2000) // fallback safety
+
+  return () => clearTimeout(timeout)
+}, [])
+
 const showLoading = checkingAddress
 
 return (
@@ -780,10 +799,10 @@ return (
     
     {/* 🔥 LOADING OVERLAY (does NOT replace tree) */}
     {showLoading && (
-      <View style={styles.loaderWrap}>
-        <ActivityIndicator size="large" color="#D97732" />
-      </View>
-    )}
+  <View style={styles.loaderWrap} pointerEvents="auto">
+    <ActivityIndicator size="large" color="#D97732" />
+  </View>
+)}
 
     {/* 🔥 ALWAYS MOUNT SCROLLVIEW */}
     <ScrollView contentContainerStyle={styles.content}>
@@ -800,22 +819,6 @@ return (
             setVideo={setVideo}
             max={5}
           />
-
-          <Modal visible={aiLoading} transparent animationType="fade">
-  <View style={styles.aiModalOverlay}>
-    <View style={styles.aiModalCard}>
-      <ActivityIndicator size="large" color="#D97732" />
-
-      <Text style={styles.aiModalTitle}>
-        Melo AI is creating your listing!
-      </Text>
-
-      <Text style={styles.aiModalText}>
-        We sometimes make errors. Please look over the listing carefully and fix any mistakes.
-      </Text>
-    </View>
-  </View>
-</Modal>
 
           <CreateListingDetails
             title={title}
@@ -883,6 +886,23 @@ return (
       )}
 
     </ScrollView>
+
+    <Modal visible={aiLoading} transparent animationType="fade">
+  <View style={styles.aiModalOverlay}>
+    <View style={styles.aiModalCard}>
+      <ActivityIndicator size="large" color="#D97732" />
+
+      <Text style={styles.aiModalTitle}>
+        Melo AI is creating your listing!
+      </Text>
+
+      <Text style={styles.aiModalText}>
+        We sometimes make errors. Please look over the listing carefully and fix any mistakes.
+      </Text>
+    </View>
+  </View>
+</Modal>
+
   </View>
 
   <GlobalFooter />
@@ -970,10 +990,17 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#e8e8e8" },
 
   loaderWrap: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  position: "absolute",
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  zIndex: 999,
+  elevation: 999,
+  alignItems: "center",
+  justifyContent: "center",
+  backgroundColor: "rgba(232,232,232,0.8)",
+},
 
   content: {
     paddingHorizontal: 16,

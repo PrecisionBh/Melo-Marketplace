@@ -222,12 +222,18 @@ const boostedRows = validRows.filter(
 const nonBoostedRows = validRows.filter(
   (l) => !l.is_boosted
 )
+// 🔥 SHUFFLE NORMAL LISTINGS
+const shuffle = (array: ListingRow[]) => {
+  return [...array].sort(() => Math.random() - 0.5)
+}
 
-const followedRows = nonBoostedRows.filter((l) =>
+const shuffledNonBoosted = shuffle(nonBoostedRows)
+
+const followedRows = shuffledNonBoosted.filter((l) =>
   followedSellerIds.includes(l.user_id ?? "")
 )
 
-const newRows = nonBoostedRows.filter(
+const newRows = shuffledNonBoosted.filter(
   (l) => !followedSellerIds.includes(l.user_id ?? "")
 )
 
