@@ -500,7 +500,7 @@ setIsSellerPro(!!data?.is_pro)
   })
 }
 
-  const handleMakeOffer = async () => {
+ const handleMakeOffer = async () => {
   requireAuth(async () => {
     try {
       if (!listing) return
@@ -523,6 +523,30 @@ setIsSellerPro(!!data?.is_pro)
         return
       }
 
+      // 🔥 OPTIONAL (but important for apparel)
+      if (isApparel && !selectedSize) {
+        Alert.alert("Select Size", "Please choose a size.")
+        return
+      }
+
+      // 🔥 STANDARDIZED CALCULATIONS (UNIT-BASED SYSTEM)
+      const unitOffer = parsed
+
+      const totalItemPrice = unitOffer * quantity
+
+      const shippingCost =
+        listing.shipping_type === "buyer_pays"
+          ? (listing.shipping_price ?? 0)
+          : 0
+
+      const buyerFee = Number(
+        (totalItemPrice * 0.044 + 0.30).toFixed(2)
+      )
+
+      const totalDue = Number(
+        (totalItemPrice + shippingCost + buyerFee).toFixed(2)
+      )
+
       const { data: newOffer, error } =
         await supabase
           .from("offers")
@@ -531,9 +555,10 @@ setIsSellerPro(!!data?.is_pro)
             buyer_id: session!.user.id,
             seller_id: listing.user_id,
 
-            offer_amount: parsed,
-            original_offer: parsed,
-            current_amount: parsed,
+            // 🔥 UNIT PRICE (CRITICAL)
+            offer_amount: unitOffer,
+            original_offer: unitOffer,
+            current_amount: unitOffer,
 
             quantity: quantity,
             size: selectedSize ?? null,
@@ -542,25 +567,13 @@ setIsSellerPro(!!data?.is_pro)
             counter_count: 0,
             last_actor: "buyer",
 
-            buyer_fee: Number(
-              ((parsed * quantity) * 0.044 + 0.30).toFixed(2)
-            ),
-
-            total_due: Number(
-              (
-                (parsed * quantity) +
-                (
-                  listing.shipping_type === "buyer_pays"
-                    ? (listing.shipping_price ?? 0)
-                    : 0
-                ) +
-                ((parsed * quantity) * 0.044 + 0.30)
-              ).toFixed(2)
-            ),
+            // 🔥 CLEAN CALCULATIONS
+            buyer_fee: buyerFee,
+            total_due: totalDue,
 
             message: offerMessage.trim() || null,
 
-            // 🔥 SNAPSHOT (CRITICAL)
+            // 🔥 SNAPSHOT (aligned with checkout)
             listing_snapshot: {
               title: listing.title,
               image_url: listing.image_urls?.[0] ?? null,
@@ -568,7 +581,6 @@ setIsSellerPro(!!data?.is_pro)
 
               quantity: quantity,
               size: selectedSize ?? null,
-              
 
               category: listing.category ?? null,
               subcategory: listing.subcategory ?? null,
@@ -594,39 +606,40 @@ setIsSellerPro(!!data?.is_pro)
       if (error) throw error
 
       // 🔥 SEND NOTIFICATION TO SELLER
-      try {
-        await supabase.functions.invoke(
-          "send-notification",
-          {
-            body: {
-              userId: newOffer.seller_id,
-              type: "offer_received",
-              title: "New Offer Received 💰",
-              body: `You received a new offer on "${listing.title}"`,
-              data: {
-                route: "/offers/[id]",
-                params: {
-                  id: newOffer.id,
-                },
-              },
-              email: false,
+try {
+  console.log("📤 SENDING NEW OFFER NOTIFICATION")
+  console.log("➡️ seller_id:", newOffer?.seller_id)
+  console.log("➡️ offer_id:", newOffer?.id)
+  console.log("➡️ listing:", listing.title)
+
+  const { data: notifData, error: notifError } =
+    await supabase.functions.invoke(
+      "send-notification",
+      {
+        body: {
+          userId: newOffer.seller_id,
+          type: "offer_received",
+          title: "New Offer Received 💰",
+          body: `You received a new offer on "${listing.title}"`,
+          data: {
+            route: "/offers/[id]",
+            params: {
+              id: newOffer.id,
             },
-          }
-        )
-      } catch (notifErr) {
-        console.log(
-          "⚠️ Notification failed (non-blocking)",
-          notifErr
-        )
+          },
+          email: true,
+        },
       }
+    )
 
-      setOfferAmount("")
-      setOfferMessage("")
+  console.log("🔔 NOTIF RESPONSE:", {
+    notifData,
+    notifError,
+  })
 
-      router.push({
-        pathname: "/offers/[id]",
-        params: { id: String(newOffer.id) },
-      })
+} catch (notifErr) {
+  console.log("❌ Notification crashed:", notifErr)
+}
 
     } catch (err) {
       handleAppError(err, {

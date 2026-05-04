@@ -53,84 +53,81 @@ function AuthGate() {
   return null
 }
 
-export default function RootLayout() {
+function NotificationRouter() {
   const router = useRouter()
-  const segments = useSegments()
+  const { session, loading } = useAuth()
 
-  // 🔥 PREVENT INFINITE LOOP
-  const hasHandledInitialNotification = useRef(false)
+  const hasHandledInitial = useRef(false)
 
-  useEffect(() => {
-    const handleNotification = (response: any) => {
-      const data =
-        response?.notification?.request?.content?.data
+  const routeFromData = (data: any) => {
+    if (!data || typeof data !== "object") return
 
-      console.log("🔔 Notification tapped:", data)
+    console.log("🔔 Routing from notification:", data)
 
-      if (!data) return
-
-      // 🚫 PREVENT DUPLICATE NAVIGATION
-      if (
-        segments[0] === "messages" &&
-        segments[1] === data?.conversationId
-      ) {
-        return
-      }
-
-      // 🔥 NEW SYSTEM
-      if (data?.conversationId) {
-        router.push({
-          pathname: "/messages/[id]",
-          params: {
-            id: data.conversationId,
-            listingId: data.listingId ?? null,
-          },
-        })
-        return
-      }
-
-      // 🔥 LEGACY FIX
-      if (data?.params?.id) {
-        router.push({
-          pathname: "/messages/[id]",
-          params: {
-            id: data.params.id,
-          },
-        })
-        return
-      }
-
-      // ⚠️ fallback
-      if (data?.route) {
-        router.push(data.route)
-      }
+    if (data.conversationId) {
+      router.replace("/messages")
+      return
     }
 
-    // 🔥 FOREGROUND / BACKGROUND
+    if (data.route) {
+      router.replace(data.route)
+    }
+  }
+
+  // 🔥 FOREGROUND / BACKGROUND TAP HANDLING
+  useEffect(() => {
     const sub =
       Notifications.addNotificationResponseReceivedListener(
-        handleNotification
+        (response) => {
+          if (loading || !session) return
+
+          const data =
+            response?.notification?.request?.content?.data
+
+          routeFromData(data)
+        }
       )
 
-    // 🔥 APP CLOSED (RUN ONCE ONLY)
-    const checkInitial = async () => {
-      if (hasHandledInitialNotification.current) return
+    return () => sub.remove()
+  }, [loading, session])
 
+  // 🔥 COLD START HANDLING
+  useEffect(() => {
+    if (loading) return
+    if (!session) return
+    if (hasHandledInitial.current) return
+
+    hasHandledInitial.current = true
+
+    const run = async () => {
       const response =
         await Notifications.getLastNotificationResponseAsync()
 
-      if (response) {
-        console.log("📬 Opened from notification (initial)")
-        handleNotification(response)
-      }
+      const data =
+        response?.notification?.request?.content?.data
 
-      hasHandledInitialNotification.current = true
+      routeFromData(data)
     }
 
-    checkInitial()
+    run()
+  }, [loading, session])
 
-    return () => sub.remove()
-  }, [segments])
+  return null
+}
+
+export default function RootLayout() {
+
+  // 🔥 CORRECT NOTIFICATION HANDLER (NEW EXPO API)
+  useEffect(() => {
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowBanner: true,
+        shouldShowList: true,
+        shouldPlaySound: true,
+        shouldSetBadge: true,
+      }),
+    })
+  }, [])
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -142,6 +139,7 @@ export default function RootLayout() {
         <AuthProvider>
           <CartProvider>
             <AuthGate />
+            <NotificationRouter />
 
             <Stack
               screenOptions={{
@@ -155,8 +153,6 @@ export default function RootLayout() {
               <Stack.Screen name="verify-otp" />
               <Stack.Screen name="reset-password" />
               <Stack.Screen name="home" />
-
-              {/* 🔥 REQUIRED FOR DYNAMIC ROUTING */}
               <Stack.Screen name="messages/[id]" />
             </Stack>
           </CartProvider>

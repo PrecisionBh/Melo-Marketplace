@@ -282,16 +282,18 @@ const subscribeToMessages = () => {
   }
 
   // 🔥 PREVENT DOUBLE SUBSCRIBE CRASH
+// 🔥 ALWAYS CLEAN OLD CHANNELS FIRST (THIS IS THE REAL FIX)
 if (messageChannelRef.current) {
-  console.log("⚠️ Channel already exists — skipping subscribe")
-  return () => {}
+  console.log("🧹 Removing old message channel")
+  supabase.removeChannel(messageChannelRef.current)
+  messageChannelRef.current = null
 }
 
-  if (typingChannelRef.current) {
-    console.log("🧹 Removing existing typing channel")
-    supabase.removeChannel(typingChannelRef.current)
-    typingChannelRef.current = null
-  }
+if (typingChannelRef.current) {
+  console.log("🧹 Removing old typing channel")
+  supabase.removeChannel(typingChannelRef.current)
+  typingChannelRef.current = null
+}
 
   const messagesChannel = supabase
   .channel(`messages-${conversationId}`)
@@ -1054,6 +1056,7 @@ return (
 </View>
     </View>
   </KeyboardAvoidingView>
+  
 )
 
 }

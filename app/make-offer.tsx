@@ -216,7 +216,7 @@ try {
         params: { id: newOffer.id },
       },
       dedupeKey: `offer-${newOffer.id}`, // 🔥 CRITICAL
-      email: false,
+      email: true,
     },
   })
 } catch (err) {

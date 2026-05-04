@@ -129,7 +129,8 @@ if (!sellerError) {
 
   if (!offer) return null
 
-  const quantity = offer.quantity ?? 1
+  const quantity =
+  offer.accepted_quantity ?? offer.quantity ?? 1
   const unitPrice =
   offer.accepted_price ?? offer.current_amount ?? 0
   const itemTotal = unitPrice * quantity
@@ -270,7 +271,7 @@ const canBuyerRespond =
 const canRespond =
   canSellerRespond || canBuyerRespond
 
-  const submitCounter = async () => {
+ const submitCounter = async () => {
   const amount = Number(counterAmount)
 
   if (!amount || amount <= 0) return
@@ -282,19 +283,39 @@ const canRespond =
       Date.now() + 24 * 60 * 60 * 1000
     ).toISOString()
 
+    // 🔥 CALCULATIONS (FIXED)
+    const unitOffer = amount
+    const quantity = offer.quantity ?? 1
+
+    const totalItemPrice = unitOffer * quantity
+
+    const shippingCost =
+      offer.listings?.shipping_type === "buyer_pays"
+        ? offer.listings?.shipping_price ?? 0
+        : 0
+
+    const buyerFee = Number(
+      (totalItemPrice * 0.044 + 0.30).toFixed(2)
+    )
+
+    const totalDue = Number(
+      (totalItemPrice + shippingCost + buyerFee).toFixed(2)
+    )
+
     const { error } = await supabase
       .from("offers")
       .update({
-        current_amount: amount,
-        counter_count:
-          offer.counter_count + 1,
-        last_actor: isBuyer
-          ? "buyer"
-          : "seller",
+        current_amount: unitOffer,
+
+        // 🔥 KEEP TOTALS IN SYNC (CRITICAL FIX)
+        buyer_fee: buyerFee,
+        total_due: totalDue,
+
+        counter_count: offer.counter_count + 1,
+        last_actor: isBuyer ? "buyer" : "seller",
         status: "countered",
         expires_at: newExpiresAt,
-        updated_at:
-          new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       })
       .eq("id", offer.id)
 
@@ -320,7 +341,7 @@ const canRespond =
               route: "/offers/[id]",
               params: { id: offer.id },
             },
-            email: false,
+            email: true,
           },
         }
       )
@@ -363,6 +384,7 @@ const canRespond =
     setSaving(true)
 
     if (isSeller) {
+      // 🔒 Check listing not already sold
       const { data: listingCheck } =
         await supabase
           .from("listings")
@@ -374,42 +396,49 @@ const canRespond =
         throw new Error("Item already sold.")
       }
 
+      // 🔥 ACCEPT OFFER (LOCK IN ALL DATA)
       const { error } = await supabase
-  .from("offers")
-  .update({
-    status: "accepted",
-    last_actor: "seller",
+        .from("offers")
+        .update({
+          status: "accepted",
+          last_actor: "seller",
 
-    accepted_price: offer.current_amount,
+          // 🔥 CORE ACCEPTED DATA (UNIT-BASED SYSTEM)
+          accepted_price: offer.current_amount,
+          accepted_quantity: offer.quantity ?? 1,
+          accepted_size: offer.size ?? null,
+          accepted_subcategory: offer.subcategory ?? null,
 
-    accepted_title:
-      offer.listing_snapshot?.title ??
-      offer.listings.title,
+          // 🔥 SNAPSHOT (LOCK VISUAL + TITLE)
+          accepted_title:
+            offer.listing_snapshot?.title ??
+            offer.listings.title,
 
-    accepted_image_url:
-      offer.listing_snapshot?.image_url ??
-      offer.listings.image_urls?.[0] ??
-      null,
+          accepted_image_url:
+            offer.listing_snapshot?.image_url ??
+            offer.listings.image_urls?.[0] ??
+            null,
 
-    accepted_shipping_type:
-      offer.listing_snapshot?.shipping_type ??
-      offer.listings.shipping_type,
+          // 🔥 SHIPPING (LOCK RULES)
+          accepted_shipping_type:
+            offer.listing_snapshot?.shipping_type ??
+            offer.listings.shipping_type,
 
-    accepted_shipping_price:
-      offer.listing_snapshot?.shipping_type === "buyer_pays"
-        ? offer.listings.shipping_price ?? 0
-        : 0,
+          accepted_shipping_price:
+            (
+              offer.listing_snapshot?.shipping_type ??
+              offer.listings.shipping_type
+            ) === "buyer_pays"
+              ? offer.listings.shipping_price ?? 0
+              : 0,
 
-    // 🔥 ADD THIS (YOU WERE MISSING IT)
-    size: offer.size ?? null,
-
-    updated_at: new Date().toISOString(),
-  })
+          updated_at: new Date().toISOString(),
+        })
         .eq("id", offer.id)
 
       if (error) throw error
 
-      // 🔔 NOTIFY BUYER (THIS IS THE NEW PART)
+      // 🔔 NOTIFY BUYER
       try {
         await supabase.functions.invoke(
           "send-notification",
@@ -435,6 +464,7 @@ const canRespond =
         )
       }
 
+      // ✅ UI FEEDBACK
       setResultModal({
         visible: true,
         title: "Offer Accepted",
@@ -449,6 +479,7 @@ const canRespond =
         },
       })
     } else {
+      // 💳 BUYER → GO TO CHECKOUT
       router.push({
         pathname: "/cart/[offerId]",
         params: { offerId: offer.id },
@@ -492,7 +523,7 @@ const canRespond =
               route: "/offers/[id]",
               params: { id: offer.id },
             },
-            email: false,
+            email: true,
           },
         }
       )
@@ -556,7 +587,7 @@ const canRespond =
               route: "/offers/[id]",
               params: { id: offer.id },
             },
-            email: false,
+            email: true,
           },
         }
       )

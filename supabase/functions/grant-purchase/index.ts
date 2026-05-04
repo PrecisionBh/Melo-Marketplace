@@ -79,7 +79,7 @@ async function fulfillBoostPack(userId: string, productId: string) {
       body: "Your boost credits have been added to your account.",
       data: { route: "/profile" },
       dedupeKey: `boost-${Date.now()}`,
-      email: false,
+      email: true,
     }
   })
 
