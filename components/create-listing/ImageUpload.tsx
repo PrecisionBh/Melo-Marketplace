@@ -77,9 +77,9 @@ export default function ImageUpload({
 
   const pickImage = async () => {
   try {
-    console.log("📸 STEP 1: pickImage START")
+    console.log("📸 pickImage START")
 
-    // 🔥 STEP 1: request permission FIRST (before closing modal)
+    // 🔥 Permission check
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync()
 
     if (!permission.granted) {
@@ -90,37 +90,23 @@ export default function ImageUpload({
       return
     }
 
-    console.log("📸 STEP 2: Permission granted")
-
-    // 🔥 STEP 2: now close modal
-    setShowPicker(false)
-    console.log("📸 STEP 3: Modal closing")
-
-    // 🔥 STEP 3: give iOS time to finish closing animation
-    await new Promise(resolve => setTimeout(resolve, 500))
-    console.log("📸 STEP 4: After delay, launching picker")
-
     if (images.length >= max) {
-      console.log("📸 BLOCKED: Max images reached")
       Alert.alert("Limit reached", `You can upload up to ${max} photos.`)
       return
     }
 
     const remainingSlots = max - images.length
-    console.log("📸 Remaining slots:", remainingSlots)
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images, // 🔥 FIXED (iOS-safe)
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
       quality: 0.35,
       allowsMultipleSelection: true,
       selectionLimit: remainingSlots,
     })
 
-    console.log("📸 STEP 5: Picker returned result:", result)
+    console.log("📸 Picker result:", result)
 
     if (!result.canceled && result.assets?.length > 0) {
-      console.log("📸 STEP 6: Assets found:", result.assets.length)
-
       const convertedUris = await Promise.all(
         result.assets.map(async (asset, index) => {
           console.log(`📸 Converting image ${index}:`, asset.uri)
@@ -134,20 +120,16 @@ export default function ImageUpload({
             }
           )
 
-          console.log(`📸 Converted image ${index}:`, converted.uri)
-
           return converted.uri
         })
       )
-
-      console.log("📸 STEP 7: Setting images")
 
       setImages((prev) => {
         const combined = [...prev, ...convertedUris]
         return combined.slice(0, max)
       })
     } else {
-      console.log("📸 STEP 6: No images selected or canceled")
+      console.log("📸 No images selected")
     }
 
   } catch (err) {
@@ -277,41 +259,65 @@ export default function ImageUpload({
       </View>
 
       {/* PICKER MODAL */}
-      <Modal
-        visible={showPicker}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowPicker(false)}
+<Modal
+  visible={showPicker}
+  transparent
+  animationType="fade"
+  onRequestClose={() => setShowPicker(false)}
+>
+  <Pressable style={styles.overlay} onPress={() => setShowPicker(false)}>
+    <View style={styles.modal}>
+      <TouchableOpacity
+        style={styles.option}
+        onPress={() => {
+          setShowPicker(false)
+          setTimeout(() => {
+            takePhoto()
+          }, 300)
+        }}
       >
-        <Pressable style={styles.overlay} onPress={() => setShowPicker(false)}>
-          <View style={styles.modal}>
-            <TouchableOpacity style={styles.option} onPress={takePhoto}>
-              <Ionicons name="camera" size={20} color="#111" />
-              <Text style={styles.optionText}>Take Photo</Text>
-            </TouchableOpacity>
+        <Ionicons name="camera" size={20} color="#111" />
+        <Text style={styles.optionText}>Take Photo</Text>
+      </TouchableOpacity>
 
-            <TouchableOpacity style={styles.option} onPress={pickImage}>
-              <Ionicons name="images" size={20} color="#111" />
-              <Text style={styles.optionText}>Choose from Library</Text>
-            </TouchableOpacity>
+      <TouchableOpacity
+        style={styles.option}
+        onPress={() => {
+          setShowPicker(false)
+          setTimeout(() => {
+            pickImage()
+          }, 300)
+        }}
+      >
+        <Ionicons name="images" size={20} color="#111" />
+        <Text style={styles.optionText}>Choose from Library</Text>
+      </TouchableOpacity>
 
-            {/* 🔥 VIDEO OPTION */}
-            <TouchableOpacity style={styles.option} onPress={pickVideo}>
-              <Ionicons name="videocam" size={20} color="#111" />
-              <Text style={styles.optionText}>Add Video</Text>
-            </TouchableOpacity>
+      {/* 🔥 VIDEO OPTION */}
+      <TouchableOpacity
+        style={styles.option}
+        onPress={() => {
+          setShowPicker(false)
+          setTimeout(() => {
+            pickVideo()
+          }, 300)
+        }}
+      >
+        <Ionicons name="videocam" size={20} color="#111" />
+        <Text style={styles.optionText}>Add Video</Text>
+      </TouchableOpacity>
 
-            <TouchableOpacity
-              style={[styles.option, styles.cancel]}
-              onPress={() => setShowPicker(false)}
-            >
-              <Text style={styles.cancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </Pressable>
-      </Modal>
+      <TouchableOpacity
+        style={[styles.option, styles.cancel]}
+        onPress={() => setShowPicker(false)}
+      >
+        <Text style={styles.cancelText}>Cancel</Text>
+      </TouchableOpacity>
     </View>
-  )
+  </Pressable>
+</Modal>
+</View>
+)
 }
 
 const styles = StyleSheet.create({

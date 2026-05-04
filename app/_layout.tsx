@@ -1,7 +1,7 @@
 import { StripeProvider } from "@stripe/stripe-react-native"
 import * as Notifications from "expo-notifications"
 import { Stack, useRouter, useSegments } from "expo-router"
-import { useEffect } from "react"
+import { useEffect, useRef } from "react"
 import {
   ActivityIndicator,
   I18nManager,
@@ -55,72 +55,88 @@ function AuthGate() {
 
 export default function RootLayout() {
   const router = useRouter()
+  const segments = useSegments()
 
-  /* 🔥 FIXED NOTIFICATION ROUTING */
+  // 🔥 PREVENT INFINITE LOOP
+  const hasHandledInitialNotification = useRef(false)
+
   useEffect(() => {
     const handleNotification = (response: any) => {
-  const data =
-    response?.notification?.request?.content?.data
+      const data =
+        response?.notification?.request?.content?.data
 
-  console.log("🔔 Notification tapped:", data)
+      console.log("🔔 Notification tapped:", data)
 
-  // 🔥 CASE 1: NEW SYSTEM (what we want)
-  if (data?.conversationId) {
-    router.push({
-      pathname: "/messages/[id]",
-      params: {
-        id: data.conversationId,
-        listingId: data.listingId ?? null,
-      },
-    })
-    return
-  }
+      if (!data) return
 
-  // 🔥 CASE 2: YOUR CURRENT BUGGED PAYLOAD
-  if (data?.params?.id) {
-    console.log("🛠 Fixing legacy params route")
+      // 🚫 PREVENT DUPLICATE NAVIGATION
+      if (
+        segments[0] === "messages" &&
+        segments[1] === data?.conversationId
+      ) {
+        return
+      }
 
-    router.push({
-      pathname: "/messages/[id]",
-      params: {
-        id: data.params.id,
-      },
-    })
-    return
-  }
+      // 🔥 NEW SYSTEM
+      if (data?.conversationId) {
+        router.push({
+          pathname: "/messages/[id]",
+          params: {
+            id: data.conversationId,
+            listingId: data.listingId ?? null,
+          },
+        })
+        return
+      }
 
-  // ⚠️ fallback (avoid if possible)
-  if (data?.route) {
-    console.log("⚠️ Fallback route used:", data.route)
-    router.push(data.route)
-  }
-}
+      // 🔥 LEGACY FIX
+      if (data?.params?.id) {
+        router.push({
+          pathname: "/messages/[id]",
+          params: {
+            id: data.params.id,
+          },
+        })
+        return
+      }
 
-    // 🔥 APP OPEN / BACKGROUND
+      // ⚠️ fallback
+      if (data?.route) {
+        router.push(data.route)
+      }
+    }
+
+    // 🔥 FOREGROUND / BACKGROUND
     const sub =
       Notifications.addNotificationResponseReceivedListener(
         handleNotification
       )
 
-    // 🔥 APP CLOSED
-    Notifications.getLastNotificationResponseAsync().then(
-      (response) => {
-        if (response) {
-          console.log("📬 Opened from notification")
-          handleNotification(response)
-        }
+    // 🔥 APP CLOSED (RUN ONCE ONLY)
+    const checkInitial = async () => {
+      if (hasHandledInitialNotification.current) return
+
+      const response =
+        await Notifications.getLastNotificationResponseAsync()
+
+      if (response) {
+        console.log("📬 Opened from notification (initial)")
+        handleNotification(response)
       }
-    )
+
+      hasHandledInitialNotification.current = true
+    }
+
+    checkInitial()
 
     return () => sub.remove()
-  }, [])
+  }, [segments])
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <StripeProvider
         publishableKey={
-          process.env
-            .EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY!
+          process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY!
         }
       >
         <AuthProvider>

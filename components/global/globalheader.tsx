@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context"
 type GlobalHeaderProps = {
   cartCount?: number
   notifCount?: number
+  messageCount?: number // 🔥 ADDED
   onNotificationsPress?: () => void
   onMessagesPress?: () => void
 }
@@ -19,6 +20,7 @@ type GlobalHeaderProps = {
 export default function GlobalHeader({
   cartCount = 0,
   notifCount = 0,
+  messageCount = 0, // 🔥 ADDED
   onNotificationsPress,
   onMessagesPress,
 }: GlobalHeaderProps) {
@@ -76,6 +78,7 @@ export default function GlobalHeader({
 
         {/* RIGHT ACTIONS */}
         <View style={styles.rightActions}>
+          {/* 🔔 NOTIFICATIONS */}
           <TouchableOpacity
             onPress={() => {
               if (onNotificationsPress)
@@ -95,14 +98,13 @@ export default function GlobalHeader({
             {notifCount > 0 && (
               <View style={styles.badge}>
                 <Text style={styles.badgeText}>
-                  {notifCount > 99
-                    ? "99+"
-                    : notifCount}
+                  {notifCount > 99 ? "99+" : notifCount}
                 </Text>
               </View>
             )}
           </TouchableOpacity>
 
+          {/* 💬 MESSAGES (UPDATED) */}
           <TouchableOpacity
             onPress={() => {
               if (onMessagesPress)
@@ -125,6 +127,15 @@ export default function GlobalHeader({
                   : "#0F172A"
               }
             />
+
+            {/* 🔥 MESSAGE BADGE */}
+            {messageCount > 0 && (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>
+                  {messageCount > 99 ? "99+" : messageCount}
+                </Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
       </View>

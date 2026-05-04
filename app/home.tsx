@@ -58,6 +58,7 @@ export default function HomeScreen() {
   const { session } = useAuth()
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [notifCount, setNotifCount] = useState(0)
+  const [messageCount, setMessageCount] = useState(0)
 
   const [listings, setListings] = useState<Listing[]>([])
   const [allListings, setAllListings] = useState<ListingRow[]>([])
@@ -374,27 +375,43 @@ const checkUnreadMessages = async () => {
     } = await supabase.auth.getUser()
 
     if (!user) {
-      setHasUnreadMessages(false)
+      setMessageCount(0)
       return
     }
 
-    const { data, error } = await supabase
-      .from("messages")
+    // 🔥 STEP 1: get conversations YOU are part of
+    const { data: conversations, error: convErr } = await supabase
+      .from("conversations")
       .select("id")
-      .neq("sender_id", user.id) // 🔥 not your messages
-      .is("read_at", null)       // 🔥 unread
-      .limit(1)
+      .or(`user_one.eq.${user.id},user_two.eq.${user.id}`)
+
+    if (convErr) throw convErr
+
+    const conversationIds = conversations?.map(c => c.id) || []
+
+    if (conversationIds.length === 0) {
+      setMessageCount(0)
+      return
+    }
+
+    // 🔥 STEP 2: count unread messages NOT sent by you
+    const { count, error } = await supabase
+      .from("messages")
+      .select("id", { count: "exact", head: true })
+      .in("conversation_id", conversationIds)
+      .neq("sender_id", user.id)
+      .is("read_at", null)
 
     if (error) throw error
 
-    setHasUnreadMessages((data ?? []).length > 0)
+    console.log("💬 REAL message count:", count)
+
+    setMessageCount(count ?? 0)
   } catch (err) {
-    handleAppError(err, {
-      context: "check_unread_messages",
-    })
-    setHasUnreadMessages(false)
+    console.log("❌ message count error:", err)
+    setMessageCount(0)
   }
-}  
+}
 
 
   const checkUnreadNotifications = async () => {
@@ -527,6 +544,7 @@ const hasResults = filteredListings.length > 0
         <View style={styles.headerBlock}>
   <GlobalHeader
     notifCount={notifCount}
+    messageCount={messageCount}
 onNotificationsPress={() =>
   requireAuth(() => router.push("/notifications"))
 }

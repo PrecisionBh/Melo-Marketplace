@@ -14,7 +14,10 @@
       "bundleIdentifier": "com.bhoffman4.MeloMP",
       "buildNumber": "19",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSPhotoLibraryUsageDescription": "Allow Melo to access your photos to upload listings.",
+        "NSCameraUsageDescription": "Allow Melo to take photos for listings.",
+        "NSPhotoLibraryAddUsageDescription": "Allow Melo to save photos."
       }
     },
 
