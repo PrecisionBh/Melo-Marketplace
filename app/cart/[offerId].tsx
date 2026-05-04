@@ -159,7 +159,17 @@ const verifyCheckoutAddress = async () => {
         .eq("id", offerId)
         .single()
 
-      if (error) throw error
+      if (!data) {
+  console.log("⏳ Offer not ready, retrying...")
+
+  setTimeout(() => {
+    loadOffer()
+  }, 700)
+
+  return
+}
+
+if (error) throw error
       if (!data) throw new Error("Offer not found.")
 
       const typed = data as any
