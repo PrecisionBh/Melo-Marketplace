@@ -25,7 +25,14 @@ import {
 } from "react-native"
 
 export default function OfferDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>()
+  const params = useLocalSearchParams()
+
+const offerId =
+  typeof params.id === "string"
+    ? params.id
+    : Array.isArray(params.id)
+    ? params.id[0]
+    : null
   const { session } = useAuth()
   const router = useRouter()
   
@@ -57,10 +64,9 @@ export default function OfferDetailScreen() {
     })
 
   useEffect(() => {
-    if (id && session?.user?.id) {
-      loadOffer()
-    }
-  }, [id, session?.user?.id])
+  if (!offerId || !session?.user?.id) return
+  loadOffer()
+}, [offerId, session?.user?.id])
 
   const loadOffer = async () => {
     try {
@@ -78,8 +84,8 @@ export default function OfferDetailScreen() {
     )
   `
   )
-        .eq("id", id)
-        .single()
+        .eq("id", offerId)
+.maybeSingle()
 
       if (error) throw error
 
@@ -118,6 +124,15 @@ if (!sellerError) {
       new Date(offer.expires_at).getTime()
     )
   }, [offer])
+
+  const isActiveOffer =
+  offer?.status === "pending" ||
+  offer?.status === "countered"
+
+const showTimer =
+  isActiveOffer &&
+  !isExpired &&
+  offer?.expires_at
 
   if (loading) {
     return (
@@ -630,12 +645,11 @@ const canRespond =
         isExpired={isExpired}
       />
 
-      {!isExpired &&
-        offer.expires_at && (
-          <OfferExpiryTimer
-            expiresAt={offer.expires_at}
-          />
-        )}
+      {showTimer && (
+  <OfferExpiryTimer
+    expiresAt={offer.expires_at}
+  />
+)}
 
       <OfferReceiptCard rows={receiptRows} />
 

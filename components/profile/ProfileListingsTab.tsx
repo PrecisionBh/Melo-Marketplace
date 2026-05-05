@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons"
 import { useRouter } from "expo-router"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 import {
   ActivityIndicator,
   FlatList,
@@ -31,228 +31,270 @@ export default function ProfileListingsTab() {
   const router = useRouter()
   const { session } = useAuth()
 
+  const [statusTab, setStatusTab] =
+    useState<"active" | "inactive">("active")
+
   const [loading, setLoading] = useState(true)
   const [listings, setListings] = useState<Listing[]>([])
   const [page, setPage] = useState(0)
-const [loadingMore, setLoadingMore] = useState(false)
-const PAGE_SIZE = 6
+  const [loadingMore, setLoadingMore] = useState(false)
+
+  const PAGE_SIZE = 6
 
   useEffect(() => {
     if (session?.user?.id) {
-      loadListings(0)
+      setPage(0)
+      loadListings(0, statusTab)
     } else {
       setLoading(false)
     }
-  }, [session?.user?.id])
+  }, [session?.user?.id, statusTab])
 
-  const loadListings = async (pageOverride = 0) => {
-  if (!session?.user?.id) return
+  const loadListings = async (
+    pageOverride = 0,
+    tabOverride: "active" | "inactive" = statusTab
+  ) => {
+    if (!session?.user?.id) return
 
-  try {
-    if (pageOverride === 0) setLoading(true)
-    else setLoadingMore(true)
+    try {
+      if (pageOverride === 0) setLoading(true)
+      else setLoadingMore(true)
 
-    const { data, error } = await supabase
-      .from("listings")
-      .select(
-        "id,title,price,image_urls,status,is_boosted,boost_expires_at,is_mega_boost,mega_boost_expires_at"
-      )
-      .eq("user_id", session.user.id)
-      .order("created_at", { ascending: false })
-      .range(
-        pageOverride * PAGE_SIZE,
-        pageOverride * PAGE_SIZE + PAGE_SIZE - 1
-      )
+      const { data, error } = await supabase
+        .from("listings")
+        .select(
+          "id,title,price,image_urls,status,is_boosted,boost_expires_at,is_mega_boost,mega_boost_expires_at"
+        )
+        .eq("user_id", session.user.id)
+        .eq("status", tabOverride)
+        .order("created_at", { ascending: false })
+        .range(
+          pageOverride * PAGE_SIZE,
+          pageOverride * PAGE_SIZE + PAGE_SIZE - 1
+        )
 
-    if (error) throw error
+      if (error) throw error
 
-    const newData = (data as Listing[]) ?? []
+      const newData = (data as Listing[]) ?? []
 
-    if (pageOverride === 0) {
-      setListings(newData)
-    } else {
-      setListings(prev => [...prev, ...newData])
+      if (pageOverride === 0) {
+        setListings(newData)
+      } else {
+        setListings((prev) => [...prev, ...newData])
+      }
+    } catch (err) {
+      handleAppError(err, {
+        context: "profile_listings_load",
+        fallbackMessage: "Failed to load listings.",
+      })
+    } finally {
+      setLoading(false)
+      setLoadingMore(false)
     }
-
-  } catch (err) {
-    handleAppError(err, {
-      context: "profile_listings_load",
-      fallbackMessage: "Failed to load listings.",
-    })
-  } finally {
-    setLoading(false)
-    setLoadingMore(false)
-  }
-}
-
-const loadMore = () => {
-  const nextPage = page + 1
-  setPage(nextPage)
-  loadListings(nextPage)
-}
-
-  const visibleListings = useMemo(() => {
-    return listings
-  }, [listings])
-
-  if (loading) {
-    return (
-      <View style={styles.loadingWrap}>
-        <ActivityIndicator size="large" color="#7FAF9B" />
-      </View>
-    )
   }
 
-  if (visibleListings.length === 0) {
-    return (
-      <View style={styles.emptyWrap}>
-        <Ionicons
-          name="cube-outline"
-          size={34}
-          color="#9CA3AF"
-          style={{ marginBottom: 10 }}
-        />
+  const loadMore = () => {
+    const nextPage = page + 1
+    setPage(nextPage)
+    loadListings(nextPage, statusTab)
+  }
 
-        <Text style={styles.emptyTitle}>
-          No listings yet
-        </Text>
-
-        <TouchableOpacity
-          style={styles.createBtn}
-          onPress={() =>
-            router.push("/create-listing")
-          }
-        >
-          <Ionicons
-            name="add-circle-outline"
-            size={16}
-            color="#111827"
-          />
-
-          <Text style={styles.createBtnText}>
-            Create Listing
-          </Text>
-        </TouchableOpacity>
-      </View>
-    )
+  const switchTab = (tab: "active" | "inactive") => {
+    if (tab === statusTab) return
+    setStatusTab(tab)
+    setPage(0)
+    setListings([])
   }
 
   return (
-    <FlatList
+    <View style={styles.wrapper}>
+      {/* 🔥 ACTIVE / INACTIVE TABS */}
+      <View style={styles.topTabsWrap}>
+        <TouchableOpacity
+          style={[
+            styles.topTab,
+            statusTab === "active" && styles.topTabActive,
+          ]}
+          onPress={() => switchTab("active")}
+          activeOpacity={0.85}
+        >
+          <Text
+            style={[
+              styles.topTabText,
+              statusTab === "active" && styles.topTabTextActive,
+            ]}
+          >
+            Active
+          </Text>
+        </TouchableOpacity>
 
-    ListFooterComponent={
-  <TouchableOpacity
-    onPress={loadMore}
-    style={{
-      marginTop: 10,
-      marginBottom: 20,
-      alignSelf: "center",
-      backgroundColor: "#D97732",
-      paddingHorizontal: 20,
-      paddingVertical: 12,
-      borderRadius: 12,
-    }}
-  >
-    {loadingMore ? (
-      <ActivityIndicator color="#fff" />
-    ) : (
-      <Text style={{ color: "#fff", fontWeight: "700" }}>
-        Load More
-      </Text>
-    )}
-  </TouchableOpacity>
-}
-      data={visibleListings}
-      keyExtractor={(item) => item.id}
-      numColumns={3}
-      scrollEnabled={false} // ✅ KEEP THIS (prevents nested scroll crash)
-      columnWrapperStyle={styles.columnWrap}
-      contentContainerStyle={styles.listContent}
-      renderItem={({ item }) => {
-        const image = item.image_urls?.[0] ?? null
+        <TouchableOpacity
+          style={[
+            styles.topTab,
+            statusTab === "inactive" && styles.topTabActive,
+          ]}
+          onPress={() => switchTab("inactive")}
+          activeOpacity={0.85}
+        >
+          <Text
+            style={[
+              styles.topTabText,
+              statusTab === "inactive" && styles.topTabTextActive,
+            ]}
+          >
+            Inactive
+          </Text>
+        </TouchableOpacity>
+      </View>
 
-        
+      {loading ? (
+        <View style={styles.loadingWrap}>
+          <ActivityIndicator size="large" color="#7FAF9B" />
+        </View>
+      ) : (
+        <FlatList
+          data={listings}
+          keyExtractor={(item) => item.id}
+          numColumns={3}
+          scrollEnabled={false}
+          columnWrapperStyle={styles.columnWrap}
+          contentContainerStyle={styles.listContent}
+          ListEmptyComponent={
+            <View style={styles.emptyWrap}>
+              <Ionicons
+                name="cube-outline"
+                size={34}
+                color="#9CA3AF"
+                style={{ marginBottom: 10 }}
+              />
 
-        return (
-          <View style={styles.card}>
-            <TouchableOpacity
-              activeOpacity={0.9}
-              onPress={() =>
-                router.push(`/listing/${item.id}`)
-              }
-            >
-              <View style={styles.imageWrap}>
-                {image ? (
-                  <Image
-                    source={{ uri: image }}
-                    style={styles.image}
-                  />
+              <Text style={styles.emptyTitle}>
+                {statusTab === "active"
+                  ? "No active listings"
+                  : "No inactive listings"}
+              </Text>
+
+              <TouchableOpacity
+                style={styles.createBtn}
+                onPress={() => router.push("/create-listing")}
+              >
+                <Ionicons
+                  name="add-circle-outline"
+                  size={16}
+                  color="#111827"
+                />
+
+                <Text style={styles.createBtnText}>
+                  Create Listing
+                </Text>
+              </TouchableOpacity>
+            </View>
+          }
+          ListFooterComponent={
+            listings.length > 0 ? (
+              <TouchableOpacity
+                onPress={loadMore}
+                style={styles.loadMoreBtn}
+              >
+                {loadingMore ? (
+                  <ActivityIndicator color="#fff" />
                 ) : (
-                  <View style={styles.imagePlaceholder}>
-                    <Ionicons
-                      name="image-outline"
-                      size={24}
-                      color="#9CA3AF"
-                    />
-                  </View>
-                )}
-
-                <View
-                  style={[
-                    styles.statusBadge,
-                    item.status === "active"
-                      ? styles.statusBadgeActive
-                      : styles.statusBadgeInactive,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.statusBadgeText,
-                      item.status === "active"
-                        ? styles.statusBadgeTextActive
-                        : styles.statusBadgeTextInactive,
-                    ]}
-                  >
-                    {item.status === "active"
-                      ? "Active"
-                      : "Inactive"}
+                  <Text style={styles.loadMoreText}>
+                    Load More
                   </Text>
-                </View>
+                )}
+              </TouchableOpacity>
+            ) : null
+          }
+          renderItem={({ item }) => {
+            const image = item.image_urls?.[0] ?? null
 
+            return (
+              <View style={styles.card}>
                 <TouchableOpacity
                   activeOpacity={0.9}
-                  style={styles.editBtn}
                   onPress={() =>
-                    router.push({
-                      pathname: "/edit-listing/[id]" as any,
-                      params: { id: item.id },
-                    } as any)
+                    router.push(`/listing/${item.id}`)
                   }
                 >
-                  <Ionicons
-                    name="create-outline"
-                    size={16}
-                    color="#111827"
-                  />
+                  <View style={styles.imageWrap}>
+                    {image ? (
+                      <Image
+                        source={{ uri: image }}
+                        style={styles.image}
+                      />
+                    ) : (
+                      <View style={styles.imagePlaceholder}>
+                        <Ionicons
+                          name="image-outline"
+                          size={24}
+                          color="#9CA3AF"
+                        />
+                      </View>
+                    )}
+
+                    <View
+                      style={[
+                        styles.statusBadge,
+                        item.status === "active"
+                          ? styles.statusBadgeActive
+                          : styles.statusBadgeInactive,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.statusBadgeText,
+                          item.status === "active"
+                            ? styles.statusBadgeTextActive
+                            : styles.statusBadgeTextInactive,
+                        ]}
+                      >
+                        {item.status === "active"
+                          ? "Active"
+                          : "Inactive"}
+                      </Text>
+                    </View>
+
+                    <TouchableOpacity
+                      activeOpacity={0.9}
+                      style={styles.editBtn}
+                      onPress={() =>
+                        router.push({
+                          pathname: "/edit-listing/[id]" as any,
+                          params: { id: item.id },
+                        } as any)
+                      }
+                    >
+                      <Ionicons
+                        name="create-outline"
+                        size={16}
+                        color="#111827"
+                      />
+                    </TouchableOpacity>
+                  </View>
+
+                  <Text numberOfLines={1} style={styles.title}>
+                    {item.title}
+                  </Text>
+
+                  <Text style={styles.price}>
+                    ${Number(item.price ?? 0).toLocaleString()}
+                  </Text>
                 </TouchableOpacity>
               </View>
-
-              <Text numberOfLines={1} style={styles.title}>
-                {item.title}
-              </Text>
-
-              <Text style={styles.price}>
-                ${Number(item.price ?? 0).toLocaleString()}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )
-      }}
-    />
+            )
+          }}
+        />
+      )}
+    </View>
   )
 }
 
 const styles = StyleSheet.create({
+  wrapper: {
+    width: "100%",
+  },
+
   loadingWrap: {
     paddingTop: 50,
     alignItems: "center",
@@ -291,23 +333,50 @@ const styles = StyleSheet.create({
     color: "#111827",
   },
 
-  /* 🔥 MATCH TOP CARD PADDING */
+  topTabsWrap: {
+    flexDirection: "row",
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 18,
+    backgroundColor: "#E5E7EB",
+    borderRadius: 14,
+    padding: 4,
+  },
+
+  topTab: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: "center",
+    borderRadius: 10,
+  },
+
+  topTabActive: {
+    backgroundColor: "#D97732",
+  },
+
+  topTabText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#6B7280",
+  },
+
+  topTabTextActive: {
+    color: "#fff",
+  },
+
   listContent: {
-    marginTop: 16,
-    paddingHorizontal: 16, // ← THIS matches your UI above
+    paddingHorizontal: 16,
     paddingBottom: 10,
   },
 
-  /* 🔥 CLEAN ROW SPACING */
   columnWrap: {
     justifyContent: "space-between",
     marginBottom: 14,
   },
 
-  /* 🔥 FLEX GRID (NO % WIDTH ANYMORE) */
   card: {
     flex: 1,
-    marginHorizontal: 4, // ← spacing BETWEEN cards
+    marginHorizontal: 4,
   },
 
   imageWrap: {
@@ -387,5 +456,20 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "800",
     color: "#111827",
+  },
+
+  loadMoreBtn: {
+    marginTop: 10,
+    marginBottom: 20,
+    alignSelf: "center",
+    backgroundColor: "#D97732",
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+
+  loadMoreText: {
+    color: "#fff",
+    fontWeight: "700",
   },
 })

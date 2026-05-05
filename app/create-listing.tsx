@@ -7,6 +7,7 @@ import CreateListingSelectors from "@/components/create-listing/CreateListingSel
 import CreateListingShipping from "@/components/create-listing/CreateListingShipping"
 import FullScreenSelector from "@/components/create-listing/FullScreenSelector"
 import ImageUpload from "@/components/create-listing/ImageUpload"
+import SKUInput from "@/components/listing-v2/sku"
 import * as FileSystem from "expo-file-system/legacy"
 
 import { Video as VideoCompressor } from "react-native-compressor"
@@ -202,6 +203,7 @@ const [height, setHeight] = useState("")
 
   const [allowOffers, setAllowOffers] = useState(false)
   const [minOffer, setMinOffer] = useState("")
+  const [sku, setSku] = useState("")
 
   const [submitting, setSubmitting] = useState(false)
 
@@ -680,6 +682,8 @@ const { data, error } = await supabase
       category === "clothing_apparel"
         ? totalQty
         : safeQuantity,
+
+        sku: sku || null,
   })
   .select("id")
   .single()
@@ -867,6 +871,11 @@ return (
             minOffer={minOffer}
             setMinOffer={setMinOffer}
           />
+
+          <SKUInput
+  value={sku}
+  onChange={setSku}
+/>
 
           <CreateListingBoost
             selectedBoost={

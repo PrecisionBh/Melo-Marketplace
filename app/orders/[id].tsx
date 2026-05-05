@@ -634,6 +634,15 @@ return (
     <ScrollView contentContainerStyle={styles.content}>
       <OrderSummaryCard order={order} />
 
+      {isSeller && order.listing_snapshot?.sku && (
+  <View style={styles.skuCard}>
+    <Text style={styles.skuLabel}>SKU</Text>
+    <Text style={styles.skuValue}>
+      {order.listing_snapshot.sku}
+    </Text>
+  </View>
+)}
+
       {needsPayment && (
         <View style={styles.payNowCard}>
           <Text style={styles.payNowTitle}>
@@ -1158,6 +1167,28 @@ loadingText: {
     borderRadius: 999,
     backgroundColor: "#F3F4F6",
   },
+
+  skuCard: {
+  backgroundColor: "#fff",
+  borderRadius: 16,
+  borderWidth: 1,
+  borderColor: "#E5E7EB",
+  padding: 14,
+  marginBottom: 14,
+},
+
+skuLabel: {
+  fontSize: 12,
+  fontWeight: "700",
+  color: "#6B7280",
+  marginBottom: 4,
+},
+
+skuValue: {
+  fontSize: 14,
+  fontWeight: "800",
+  color: "#111",
+},
 
   carrierPillActive: {
     backgroundColor: "#D97732",

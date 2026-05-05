@@ -1,8 +1,5 @@
 import { Ionicons } from "@expo/vector-icons"
-import {
-  usePathname,
-  useRouter,
-} from "expo-router"
+import { usePathname, useRouter } from "expo-router"
 import React from "react"
 import {
   Alert,
@@ -13,13 +10,10 @@ import {
 } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
-import { useCart } from "@/context/CartContext"
 import { supabase } from "@/lib/supabase"
 
 type IoniconName =
-  React.ComponentProps<
-    typeof Ionicons
-  >["name"]
+  React.ComponentProps<typeof Ionicons>["name"]
 
 const NAV_ITEMS: {
   path: string
@@ -34,16 +28,16 @@ const NAV_ITEMS: {
     label: "Home",
   },
   {
+    path: "/profile",
+    icon: "person-outline",
+    activeIcon: "person",
+    label: "Profile",
+  },
+  {
     path: "/create-listing",
     icon: "add-circle-outline",
     activeIcon: "add-circle",
     label: "Sell",
-  },
-  {
-    path: "/cart",
-    icon: "cart-outline",
-    activeIcon: "cart",
-    label: "Cart",
   },
   {
     path: "/orders",
@@ -52,10 +46,10 @@ const NAV_ITEMS: {
     label: "Orders",
   },
   {
-    path: "/profile",
-    icon: "person-outline",
-    activeIcon: "person",
-    label: "Profile",
+    path: "/offers",
+    icon: "pricetag-outline",
+    activeIcon: "pricetag",
+    label: "Offers",
   },
 ]
 
@@ -64,47 +58,26 @@ export default function GlobalFooter() {
   const pathname = usePathname()
   const insets = useSafeAreaInsets()
 
-  const { cartCount } = useCart()
+  const isActive = (path: string) =>
+    pathname === path || pathname.startsWith(path + "/")
 
-  const isActive = (path: string) => {
-    return (
-      pathname === path ||
-      pathname.startsWith(path + "/")
-    )
-  }
-
-  // 🔥 AUTH GUARD
   const requireAuth = async (path: string) => {
-    const { data } =
-      await supabase.auth.getSession()
+    const { data } = await supabase.auth.getSession()
+    const isAuthed = !!data.session?.user
 
-    const isAuthed =
-      !!data.session?.user
-
-    // 🔓 allow home browsing
     if (path === "/home") {
       router.push(path as any)
       return
     }
 
     if (!isAuthed) {
-      Alert.alert(
-        "Sign in required",
-        "Please sign in to access this feature.",
-        [
-          {
-            text: "Cancel",
-            style: "cancel",
-          },
-          {
-            text: "Sign In",
-            onPress: () =>
-              router.push(
-                "/signinscreen"
-              ),
-          },
-        ]
-      )
+      Alert.alert("Sign in required", "Please sign in.", [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Sign In",
+          onPress: () => router.push("/signinscreen"),
+        },
+      ])
       return
     }
 
@@ -115,68 +88,29 @@ export default function GlobalFooter() {
     <View
       style={[
         styles.wrapper,
-        {
-          paddingBottom: Math.max(
-            insets.bottom,
-            8
-          ),
-        },
+        { paddingBottom: Math.max(insets.bottom, 8) },
       ]}
     >
       <View style={styles.inner}>
         {NAV_ITEMS.map((item) => {
-          const active =
-            isActive(item.path)
+          const active = isActive(item.path)
 
           return (
             <TouchableOpacity
               key={item.path}
-              onPress={() =>
-                requireAuth(item.path)
-              }
-              activeOpacity={0.8}
+              onPress={() => requireAuth(item.path)}
               style={styles.navItem}
             >
-              <View style={styles.iconWrap}>
-                <Ionicons
-                  name={
-                    active
-                      ? item.activeIcon
-                      : item.icon
-                  }
-                  size={22}
-                  color={
-                    active
-                      ? "#D97732"
-                      : "#6B7280"
-                  }
-                />
-
-                {item.path === "/cart" &&
-                  cartCount > 0 && (
-                    <View
-                      style={
-                        styles.cartBadge
-                      }
-                    >
-                      <Text
-                        style={
-                          styles.cartBadgeText
-                        }
-                      >
-                        {cartCount > 99
-                          ? "99+"
-                          : cartCount}
-                      </Text>
-                    </View>
-                  )}
-              </View>
+              <Ionicons
+                name={active ? item.activeIcon : item.icon}
+                size={22}
+                color={active ? "#D97732" : "#6B7280"}
+              />
 
               <Text
                 style={[
                   styles.label,
-                  active &&
-                    styles.labelActive,
+                  active && styles.labelActive,
                 ]}
               >
                 {item.label}
@@ -195,63 +129,24 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    zIndex: 999,
-    elevation: 20,
-    backgroundColor:
-      "rgba(255,255,255,0.96)",
+    backgroundColor: "#fff",
     borderTopWidth: 1,
     borderTopColor: "#E5E7EB",
   },
-
   inner: {
     height: 64,
-    paddingHorizontal: 8,
     flexDirection: "row",
-    alignItems: "center",
     justifyContent: "space-around",
+    alignItems: "center",
   },
-
   navItem: {
-    flex: 1,
     alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 6,
-    borderRadius: 12,
   },
-
-  iconWrap: {
-    position: "relative",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
   label: {
-    marginTop: 2,
     fontSize: 10,
-    fontWeight: "500",
     color: "#6B7280",
   },
-
   labelActive: {
     color: "#D97732",
-  },
-
-  cartBadge: {
-    position: "absolute",
-    top: -4,
-    right: -10,
-    minWidth: 16,
-    height: 16,
-    paddingHorizontal: 3,
-    borderRadius: 999,
-    backgroundColor: "#EF4444",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  cartBadgeText: {
-    color: "#FFFFFF",
-    fontSize: 9,
-    fontWeight: "800",
   },
 })

@@ -1,8 +1,11 @@
+import { useState } from "react"
 import {
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Modal,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native"
 
 export default function OfferActionButtons({
@@ -16,45 +19,123 @@ export default function OfferActionButtons({
   primaryText?: string
   secondaryText?: string
   tertiaryText?: string
-  onPrimary?: () => void
-  onSecondary?: () => void
-  onTertiary?: () => void
+  onPrimary?: () => Promise<void> | void
+  onSecondary?: () => Promise<void> | void
+  onTertiary?: () => Promise<void> | void
 }) {
+  const [loading, setLoading] = useState<
+    "primary" | "secondary" | "tertiary" | null
+  >(null)
+
+  const [successVisible, setSuccessVisible] = useState(false)
+  const [successMessage, setSuccessMessage] = useState("")
+
+  const handlePress = async (
+    type: "primary" | "secondary" | "tertiary",
+    action?: () => Promise<void> | void,
+    successText?: string
+  ) => {
+    if (!action || loading) return
+
+    try {
+      setLoading(type)
+
+      await action()
+
+      setSuccessMessage(successText || "Success!")
+      setSuccessVisible(true)
+
+      setTimeout(() => {
+        setSuccessVisible(false)
+      }, 1500)
+    } catch (err) {
+      console.log("❌ Action error:", err)
+    } finally {
+      setLoading(null)
+    }
+  }
+
   return (
-    <View style={styles.stack}>
-      {primaryText && (
-        <TouchableOpacity
-          style={styles.primary}
-          onPress={onPrimary}
-        >
-          <Text style={styles.primaryText}>
-            {primaryText}
-          </Text>
-        </TouchableOpacity>
-      )}
+    <>
+      <View style={styles.stack}>
+        {/* PRIMARY */}
+        {primaryText && (
+          <TouchableOpacity
+            style={[
+              styles.primary,
+              loading && styles.disabled,
+            ]}
+            disabled={!!loading}
+            onPress={() =>
+              handlePress("primary", onPrimary, "Offer Accepted")
+            }
+          >
+            {loading === "primary" ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.primaryText}>
+                {primaryText}
+              </Text>
+            )}
+          </TouchableOpacity>
+        )}
 
-      {secondaryText && (
-        <TouchableOpacity
-          style={styles.secondary}
-          onPress={onSecondary}
-        >
-          <Text style={styles.secondaryText}>
-            {secondaryText}
-          </Text>
-        </TouchableOpacity>
-      )}
+        {/* SECONDARY */}
+        {secondaryText && (
+          <TouchableOpacity
+            style={[
+              styles.secondary,
+              loading && styles.disabled,
+            ]}
+            disabled={!!loading}
+            onPress={() =>
+              handlePress("secondary", onSecondary, "Counter Sent")
+            }
+          >
+            {loading === "secondary" ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.secondaryText}>
+                {secondaryText}
+              </Text>
+            )}
+          </TouchableOpacity>
+        )}
 
-      {tertiaryText && (
-        <TouchableOpacity
-          style={styles.tertiary}
-          onPress={onTertiary}
-        >
-          <Text style={styles.tertiaryText}>
-            {tertiaryText}
-          </Text>
-        </TouchableOpacity>
-      )}
-    </View>
+        {/* TERTIARY */}
+        {tertiaryText && (
+          <TouchableOpacity
+            style={[
+              styles.tertiary,
+              loading && styles.disabled,
+            ]}
+            disabled={!!loading}
+            onPress={() =>
+              handlePress("tertiary", onTertiary, "Offer Declined")
+            }
+          >
+            {loading === "tertiary" ? (
+              <ActivityIndicator color="#DC2626" />
+            ) : (
+              <Text style={styles.tertiaryText}>
+                {tertiaryText}
+              </Text>
+            )}
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* 🔥 SUCCESS MODAL */}
+      <Modal transparent visible={successVisible} animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <Text style={styles.successText}>
+              {successMessage}
+            </Text>
+          </View>
+        </View>
+      </Modal>
+    </>
   )
 }
 
@@ -102,5 +183,29 @@ const styles = StyleSheet.create({
     color: "#DC2626",
     fontWeight: "800",
     fontSize: 14,
+  },
+
+  disabled: {
+    opacity: 0.6,
+  },
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  modalBox: {
+    backgroundColor: "#111827",
+    paddingVertical: 20,
+    paddingHorizontal: 30,
+    borderRadius: 20,
+  },
+
+  successText: {
+    color: "#fff",
+    fontWeight: "800",
+    fontSize: 16,
   },
 })

@@ -26,6 +26,7 @@ import { useAuth } from "../../context/AuthContext"
 import { handleAppError } from "../../lib/errors/appError"
 import { supabase } from "../../lib/supabase"
 
+
 type ListingSize = {
   size: string
   qty: number | string
@@ -49,6 +50,8 @@ type Listing = {
   quantity_available: number
   status: string
   subcategory?: string | null
+  sku?: string | null
+  
 }
 
 export default function ListingDetailScreen() {
@@ -88,6 +91,7 @@ const [offerAmount, setOfferAmount] =
 
 const [offerMessage, setOfferMessage] =
   useState("")
+  const [sendingOffer, setSendingOffer] = useState(false)
 
   const requireAuth = (action?: () => void) => {
     if (!session?.user) {
@@ -500,38 +504,35 @@ setIsSellerPro(!!data?.is_pro)
   })
 }
 
- const handleMakeOffer = async () => {
+const handleMakeOffer = async () => {
   requireAuth(async () => {
+    if (sendingOffer) return
+
     try {
       if (!listing) return
 
-      if (!offerAmount.trim()) {
-        Alert.alert(
-          "Missing Offer",
-          "Enter an offer amount."
-        )
+      if (!offerAmount || !offerAmount.trim()) {
+        Alert.alert("Missing Offer", "Enter an offer amount.")
         return
       }
 
-      const parsed = parseFloat(offerAmount)
+      // 🔥 SAFE PARSE (FIXES YOUR ERROR)
+      const parsed = Number(offerAmount.replace(/[^0-9.]/g, ""))
 
-      if (isNaN(parsed) || parsed <= 0) {
-        Alert.alert(
-          "Invalid Offer",
-          "Enter a valid offer."
-        )
+      if (!parsed || isNaN(parsed) || parsed <= 0) {
+        Alert.alert("Invalid Offer", "Enter a valid offer.")
         return
       }
 
-      // 🔥 OPTIONAL (but important for apparel)
       if (isApparel && !selectedSize) {
         Alert.alert("Select Size", "Please choose a size.")
         return
       }
 
-      // 🔥 STANDARDIZED CALCULATIONS (UNIT-BASED SYSTEM)
-      const unitOffer = parsed
+      // 🔥 ONLY SET LOADING AFTER VALIDATION
+      setSendingOffer(true)
 
+      const unitOffer = parsed
       const totalItemPrice = unitOffer * quantity
 
       const shippingCost =
@@ -554,45 +555,39 @@ setIsSellerPro(!!data?.is_pro)
             listing_id: listing.id,
             buyer_id: session!.user.id,
             seller_id: listing.user_id,
-
-            // 🔥 UNIT PRICE (CRITICAL)
             offer_amount: unitOffer,
             original_offer: unitOffer,
             current_amount: unitOffer,
-
-            quantity: quantity,
+            quantity,
             size: selectedSize ?? null,
             subcategory: listing.subcategory ?? null,
-
             counter_count: 0,
             last_actor: "buyer",
-
-            // 🔥 CLEAN CALCULATIONS
             buyer_fee: buyerFee,
             total_due: totalDue,
-
             message: offerMessage.trim() || null,
+           listing_snapshot: {
+  title: listing.title,
+  image_url: listing.image_urls?.[0] ?? null,
+  price: listing.price,
 
-            // 🔥 SNAPSHOT (aligned with checkout)
-            listing_snapshot: {
-              title: listing.title,
-              image_url: listing.image_urls?.[0] ?? null,
-              price: listing.price,
+  quantity,
+  size: selectedSize ?? null,
 
-              quantity: quantity,
-              size: selectedSize ?? null,
+  category: listing.category ?? null,
+  subcategory: listing.subcategory ?? null,
 
-              category: listing.category ?? null,
-              subcategory: listing.subcategory ?? null,
+  shipping_type: listing.shipping_type,
+  shipping_price: listing.shipping_price ?? 0,
 
-              shipping_type: listing.shipping_type,
+  // 🔥 NEW
+  sku: listing.sku ?? null,
 
-              metadata: {
-                captured_at: new Date().toISOString(),
-                source: "offer_created",
-              },
-            },
-
+  metadata: {
+    captured_at: new Date().toISOString(),
+    source: "offer_created",
+  },
+},
             status: "pending",
             expires_at: new Date(
               Date.now() + 24 * 60 * 60 * 1000
@@ -601,21 +596,10 @@ setIsSellerPro(!!data?.is_pro)
           .select("id, seller_id")
           .single()
 
-      console.log("CREATE OFFER:", { newOffer, error })
-
       if (error) throw error
 
-      // 🔥 SEND NOTIFICATION TO SELLER
-try {
-  console.log("📤 SENDING NEW OFFER NOTIFICATION")
-  console.log("➡️ seller_id:", newOffer?.seller_id)
-  console.log("➡️ offer_id:", newOffer?.id)
-  console.log("➡️ listing:", listing.title)
-
-  const { data: notifData, error: notifError } =
-    await supabase.functions.invoke(
-      "send-notification",
-      {
+      // 🔔 NOTIFICATION
+      await supabase.functions.invoke("send-notification", {
         body: {
           userId: newOffer.seller_id,
           type: "offer_received",
@@ -623,29 +607,28 @@ try {
           body: `You received a new offer on "${listing.title}"`,
           data: {
             route: "/offers/[id]",
-            params: {
-              id: newOffer.id,
-            },
+            params: { id: newOffer.id },
           },
           email: true,
         },
-      }
-    )
+      })
 
-  console.log("🔔 NOTIF RESPONSE:", {
-    notifData,
-    notifError,
-  })
+      // ✅ SUCCESS
+      Alert.alert(
+        "Offer Sent 🎉",
+        "Your offer was successfully sent!"
+      )
 
-} catch (notifErr) {
-  console.log("❌ Notification crashed:", notifErr)
-}
+      // 🔥 RESET INPUTS
+      setOfferAmount("")
+      setOfferMessage("")
 
     } catch (err) {
       handleAppError(err, {
-        fallbackMessage:
-          "Failed to submit offer.",
+        fallbackMessage: "Failed to submit offer.",
       })
+    } finally {
+      setSendingOffer(false)
     }
   })
 }
@@ -957,6 +940,7 @@ setSelectedSize={(val) => {
     setOfferAmount={setOfferAmount}
     offerMessage={offerMessage}
     setOfferMessage={setOfferMessage}
+    sendingOffer={sendingOffer}
     onBuyNow={handleBuyNow}
     onAddToCart={handleAddToCart}
     onMakeOffer={handleMakeOffer}

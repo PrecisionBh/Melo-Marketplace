@@ -37,6 +37,7 @@ type CartItem = {
   shipping_type: "buyer_pays" | "seller_pays"
   subcategory?: string | null
 category?: string | null
+ sku?: string | null
 }
 
 export default function CartCheckoutScreen() {
@@ -535,7 +536,7 @@ for (const item of cart) {
         tax_cents: 0,
         escrow_amount_cents: escrowCents,
 
-        listing_snapshot: {
+       listing_snapshot: {
   title: item.title,
   image_url: item.image_url,
   price: item.price,
@@ -547,6 +548,9 @@ for (const item of cart) {
   subcategory: item.subcategory ?? null,
 
   shipping_type: item.shipping_type,
+
+  // 🔥 NEW
+  sku: item.sku ?? null,
 
   // 🔥 future-safe structure
   metadata: {

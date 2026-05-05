@@ -1,6 +1,7 @@
 import GlobalFooter from "@/components/global/globalfooter"
 import GlobalHeader from "@/components/global/globalheader"
 
+import OrderFilterModal from "@/components/filters/OrderFilterModal"
 import { useAuth } from "@/context/AuthContext"
 import { handleAppError } from "@/lib/errors/appError"
 import { supabase } from "@/lib/supabase"
@@ -74,7 +75,8 @@ export default function OrdersScreen() {
   const [activeTab, setActiveTab] = useState<
     "selling" | "buying"
   >("selling")
-
+const [showFilters, setShowFilters] = useState(false)
+const [selectedStatuses, setSelectedStatuses] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [sellingOrders, setSellingOrders] = useState<any[]>([])
   const [buyingOrders, setBuyingOrders] = useState<any[]>([])
@@ -137,17 +139,33 @@ setBuyingOrders(filteredBuyingOrders)
     }
   }
 
-  const activeOrders =
-    activeTab === "selling"
-      ? sellingOrders
-      : buyingOrders
+ const baseOrders =
+  activeTab === "selling"
+    ? sellingOrders
+    : buyingOrders
+
+const activeOrders =
+  selectedStatuses.length === 0
+    ? baseOrders
+    : baseOrders.filter((order) =>
+        selectedStatuses.includes(order.status)
+      )
 
   return (
     <View style={styles.screen}>
       <GlobalHeader />
 
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.title}>Orders</Text>
+        <View style={styles.headerRow}>
+  <Text style={styles.title}>Orders</Text>
+
+  <TouchableOpacity
+    style={styles.filterBtn}
+    onPress={() => setShowFilters(true)}
+  >
+    <Text style={styles.filterText}>Filter</Text>
+  </TouchableOpacity>
+</View>
 
         <View style={styles.tabsWrap}>
           <TouchableOpacity
@@ -218,6 +236,14 @@ setBuyingOrders(filteredBuyingOrders)
 ))
         )}
       </ScrollView>
+
+      <OrderFilterModal
+  visible={showFilters}
+  onClose={() => setShowFilters(false)}
+  selectedStatuses={selectedStatuses}
+  setSelectedStatuses={setSelectedStatuses}
+  STATUS_CONFIG={STATUS_CONFIG}
+/>
 
       <GlobalFooter />
     </View>
@@ -443,6 +469,26 @@ const styles = StyleSheet.create({
     color: "#111",
     marginTop: 4,
   },
+
+  headerRow: {
+  flexDirection: "row",
+  justifyContent: "space-between",
+  alignItems: "center",
+  marginBottom: 18,
+},
+
+filterBtn: {
+  backgroundColor: "#111827",
+  paddingHorizontal: 14,
+  paddingVertical: 8,
+  borderRadius: 10,
+},
+
+filterText: {
+  color: "#fff",
+  fontWeight: "700",
+  fontSize: 12,
+},
 
   statusPill: {
     paddingHorizontal: 10,

@@ -1,10 +1,10 @@
 import { Ionicons } from "@expo/vector-icons"
 import {
-  StyleSheet,
+  ActivityIndicator, StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from "react-native"
 
 export default function ListingPurchaseActions({
@@ -32,6 +32,7 @@ export default function ListingPurchaseActions({
   onAddToCart,
   onMakeOffer,
   onMessageSeller,
+  sendingOffer = false,
 }: {
   isSeller: boolean
   allowOffers: boolean
@@ -57,6 +58,7 @@ export default function ListingPurchaseActions({
   onAddToCart: () => void
   onMakeOffer: () => void
   onMessageSeller: () => void
+  sendingOffer?: boolean
 }) {
   if (isSeller) return null
 
@@ -226,13 +228,21 @@ export default function ListingPurchaseActions({
           />
 
           <TouchableOpacity
-            style={styles.sendOfferBtn}
-            onPress={onMakeOffer}
-          >
-            <Text style={styles.sendOfferText}>
-              Send Offer
-            </Text>
-          </TouchableOpacity>
+  style={[
+    styles.sendOfferBtn,
+    sendingOffer && { opacity: 0.6 },
+  ]}
+  onPress={onMakeOffer}
+  disabled={sendingOffer}
+>
+  {sendingOffer ? (
+    <ActivityIndicator color="#fff" />
+  ) : (
+    <Text style={styles.sendOfferText}>
+      Send Offer
+    </Text>
+  )}
+</TouchableOpacity>
         </View>
       )}
     </View>

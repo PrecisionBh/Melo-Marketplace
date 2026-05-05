@@ -63,12 +63,42 @@ export default function ListingsGrid({
     return listings.filter((l) => !megaIds.has(l.id))
   }, [listings, megaBoostListings])
 
+  const shuffledRef = useRef<Listing[]>([])
+
+const shuffledListings = useMemo(() => {
+  // 🔥 FIRST LOAD
+  if (shuffledRef.current.length === 0) {
+    shuffledRef.current = shuffleArray(filteredListings)
+    return shuffledRef.current
+  }
+
+  // 🔥 GET EXISTING IDS
+  const existingIds = new Set(shuffledRef.current.map(l => l.id))
+
+  // 🔥 ONLY ADD NEW ITEMS
+  const newItems = filteredListings.filter(
+    l => !existingIds.has(l.id)
+  )
+
+  if (newItems.length > 0) {
+    const shuffledNew = shuffleArray(newItems)
+
+    shuffledRef.current = [
+      ...shuffledRef.current,
+      ...shuffledNew,
+    ]
+  }
+
+  return shuffledRef.current
+}, [filteredListings])
+
   const rows: GridRowItem[] = useMemo(() => {
     const baseRows: GridRowItem[] = []
     let rowIndex = 0
 
-    for (let i = 0; i < filteredListings.length; i += NUM_COLUMNS) {
-      const chunk = filteredListings.slice(i, i + NUM_COLUMNS)
+    for (let i = 0; i < shuffledListings.length; i += NUM_COLUMNS)
+       {
+      const chunk = shuffledListings.slice(i, i + NUM_COLUMNS)
 
       baseRows.push({
         type: "row",

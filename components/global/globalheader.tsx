@@ -12,7 +12,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context"
 type GlobalHeaderProps = {
   cartCount?: number
   notifCount?: number
-  messageCount?: number // 🔥 ADDED
+  messageCount?: number
   onNotificationsPress?: () => void
   onMessagesPress?: () => void
 }
@@ -20,7 +20,7 @@ type GlobalHeaderProps = {
 export default function GlobalHeader({
   cartCount = 0,
   notifCount = 0,
-  messageCount = 0, // 🔥 ADDED
+  messageCount = 0,
   onNotificationsPress,
   onMessagesPress,
 }: GlobalHeaderProps) {
@@ -37,17 +37,14 @@ export default function GlobalHeader({
     <View
       style={[
         styles.wrapper,
-        {
-          paddingTop: insets.top,
-        },
+        { paddingTop: insets.top },
       ]}
     >
       <View style={styles.inner}>
-        {/* LEFT SETTINGS */}
+        {/* LEFT */}
         <View style={styles.leftActions}>
           <TouchableOpacity
             onPress={() => router.push("/settings")}
-            activeOpacity={0.8}
             style={styles.iconButton}
           >
             <Ionicons
@@ -66,34 +63,25 @@ export default function GlobalHeader({
           </TouchableOpacity>
         </View>
 
-        {/* CENTER BRAND */}
+        {/* CENTER */}
         <Link href="/" asChild>
-          <TouchableOpacity
-            activeOpacity={0.8}
-            style={styles.centerBrandWrap}
-          >
+          <TouchableOpacity style={styles.centerBrandWrap}>
             <Text style={styles.brandText}>Melo</Text>
           </TouchableOpacity>
         </Link>
 
-        {/* RIGHT ACTIONS */}
+        {/* RIGHT */}
         <View style={styles.rightActions}>
-          {/* 🔔 NOTIFICATIONS */}
+          {/* NOTIFICATIONS */}
           <TouchableOpacity
-            onPress={() => {
-              if (onNotificationsPress)
-                onNotificationsPress()
-              else
-                router.push("/notifications")
-            }}
-            activeOpacity={0.8}
+            onPress={() =>
+              onNotificationsPress
+                ? onNotificationsPress()
+                : router.push("/notifications")
+            }
             style={styles.iconButton}
           >
-            <Ionicons
-              name="notifications-outline"
-              size={22}
-              color="#0F172A"
-            />
+            <Ionicons name="notifications-outline" size={22} />
 
             {notifCount > 0 && (
               <View style={styles.badge}>
@@ -104,14 +92,13 @@ export default function GlobalHeader({
             )}
           </TouchableOpacity>
 
-          {/* 💬 MESSAGES (UPDATED) */}
+          {/* MESSAGES */}
           <TouchableOpacity
-            onPress={() => {
-              if (onMessagesPress)
-                onMessagesPress()
-              else router.push("/messages")
-            }}
-            activeOpacity={0.8}
+            onPress={() =>
+              onMessagesPress
+                ? onMessagesPress()
+                : router.push("/messages")
+            }
             style={styles.iconButton}
           >
             <Ionicons
@@ -121,18 +108,35 @@ export default function GlobalHeader({
                   : "chatbubble-outline"
               }
               size={22}
-              color={
-                isActive("/messages")
-                  ? "#D97732"
-                  : "#0F172A"
-              }
             />
 
-            {/* 🔥 MESSAGE BADGE */}
             {messageCount > 0 && (
               <View style={styles.badge}>
                 <Text style={styles.badgeText}>
                   {messageCount > 99 ? "99+" : messageCount}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+
+          {/* 🛒 CART (NEW) */}
+          <TouchableOpacity
+            onPress={() => router.push("/cart")}
+            style={styles.iconButton}
+          >
+            <Ionicons
+              name={
+                isActive("/cart")
+                  ? "cart"
+                  : "cart-outline"
+              }
+              size={22}
+            />
+
+            {cartCount > 0 && (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>
+                  {cartCount > 99 ? "99+" : cartCount}
                 </Text>
               </View>
             )}
@@ -149,67 +153,44 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#D97732",
   },
-
   inner: {
     height: 64,
     paddingHorizontal: 16,
     flexDirection: "row",
     alignItems: "center",
-    position: "relative",
   },
-
-  leftActions: {
-    flex: 1,
-    flexDirection: "row",
-    justifyContent: "flex-start",
-    alignItems: "center",
-  },
-
+  leftActions: { flex: 1 },
   centerBrandWrap: {
     position: "absolute",
     left: "50%",
     transform: [{ translateX: -24 }],
   },
-
   brandText: {
     fontSize: 28,
     fontWeight: "800",
-    color: "#111827",
-    letterSpacing: -0.5,
   },
-
   rightActions: {
     flex: 1,
     flexDirection: "row",
     justifyContent: "flex-end",
-    alignItems: "center",
-    gap: 4,
   },
-
   iconButton: {
     width: 40,
     height: 40,
     borderRadius: 999,
     alignItems: "center",
     justifyContent: "center",
-    position: "relative",
   },
-
   badge: {
     position: "absolute",
     top: 2,
     right: 2,
-    minWidth: 18,
-    height: 18,
-    paddingHorizontal: 4,
-    borderRadius: 999,
     backgroundColor: "#EF4444",
-    alignItems: "center",
-    justifyContent: "center",
+    borderRadius: 999,
+    paddingHorizontal: 4,
   },
-
   badgeText: {
-    color: "#FFFFFF",
+    color: "#fff",
     fontSize: 10,
     fontWeight: "800",
   },

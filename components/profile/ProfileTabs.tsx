@@ -1,7 +1,6 @@
 import { useFocusEffect } from "expo-router"
-import { useCallback, useState } from "react"
+import { useCallback } from "react"
 import {
-  ActivityIndicator,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -9,12 +8,9 @@ import {
 } from "react-native"
 
 import { useAuth } from "@/context/AuthContext"
-import { supabase } from "@/lib/supabase"
 
 type TabKey =
   | "listings"
-  | "sent"
-  | "received"
   | "reviews"
 
 type Props = {
@@ -22,29 +18,11 @@ type Props = {
   onChange: (tab: TabKey) => void
 }
 
-type OfferStatus =
-  | "pending"
-  | "countered"
-  | "accepted"
-  | "declined"
-  | "cancelled"
-  | "expired"
-
-type OfferRow = {
-  status: OfferStatus
-  created_at: string
-  listings: {
-    is_sold?: boolean | null
-  } | null
-}
-
 const TABS: {
   key: TabKey
   label: string
 }[] = [
   { key: "listings", label: "Listings" },
-  { key: "sent", label: "Sent" },
-  { key: "received", label: "Received" },
   { key: "reviews", label: "Reviews" },
 ]
 
@@ -54,111 +32,49 @@ export default function ProfileTabs({
 }: Props) {
   const { session } = useAuth()
 
-  const [sentCount, setSentCount] = useState(0)
-  const [receivedCount, setReceivedCount] =
-    useState(0)
-  const [loadingCounts, setLoadingCounts] =
-    useState(false)
-
-  const loadActionCounts = useCallback(async () => {
-    if (!session?.user?.id) {
-      setSentCount(0)
-      setReceivedCount(0)
-      return
-    }
-
-    try {
-      setLoadingCounts(true)
-
-      const [sentRes, receivedRes] =
-        await Promise.all([
-          supabase
-            .from("offers")
-            .select(`status, created_at, listings ( is_sold )`)
-            .eq("buyer_id", session.user.id)
-            .returns<OfferRow[]>(),
-          supabase
-            .from("offers")
-            .select(`status, created_at, listings ( is_sold )`)
-            .eq("seller_id", session.user.id)
-            .returns<OfferRow[]>(),
-        ])
-
-      if (sentRes.error) throw sentRes.error
-      if (receivedRes.error) throw receivedRes.error
-
-      const sentOffers = sentRes.data ?? []
-      const receivedOffers = receivedRes.data ?? []
-
-      setSentCount(sentOffers.length)
-      setReceivedCount(receivedOffers.length)
-    } catch (error) {
-      console.error("❌ Failed loading counts", error)
-      setSentCount(0)
-      setReceivedCount(0)
-    } finally {
-      setLoadingCounts(false)
-    }
-  }, [session?.user?.id])
-
   useFocusEffect(
     useCallback(() => {
-      loadActionCounts()
-    }, [loadActionCounts])
+      // no-op now
+    }, [])
   )
 
   return (
     <View style={styles.wrapper}>
-      {TABS.map((tab) => {
-        const active = activeTab === tab.key
+      <View style={styles.tabsRow}>
+        {TABS.map((tab) => {
+          const active = activeTab === tab.key
 
-        const badgeCount =
-          tab.key === "sent"
-            ? sentCount
-            : tab.key === "received"
-            ? receivedCount
-            : 0
-
-        return (
-          <TouchableOpacity
-            key={tab.key}
-            activeOpacity={0.85}
-            style={styles.tab}
-            onPress={() => onChange(tab.key)}
-          >
-            <View style={styles.tabInner}>
+          return (
+            <TouchableOpacity
+              key={tab.key}
+              activeOpacity={0.85}
+              style={styles.tab}
+              onPress={() => onChange(tab.key)}
+            >
               <Text
                 style={[
                   styles.tabText,
                   active && styles.activeTabText,
                 ]}
-                numberOfLines={1}
-                adjustsFontSizeToFit
               >
                 {tab.label}
               </Text>
+            </TouchableOpacity>
+          )
+        })}
+      </View>
 
-              {badgeCount > 0 && (
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>
-                    {badgeCount}
-                  </Text>
-                </View>
-              )}
-
-              {loadingCounts &&
-                (tab.key === "sent" ||
-                  tab.key === "received") && (
-                  <ActivityIndicator
-                    size="small"
-                    color="#D97732"
-                    style={styles.badgeLoader}
-                  />
-                )}
-            </View>
-          </TouchableOpacity>
-        )
-      })}
+      {/* 🔥 FULL WIDTH UNDERLINE TRACK */}
+      <View style={styles.underlineWrap}>
+        <View
+          style={[
+            styles.activeUnderline,
+            activeTab === "listings"
+              ? { left: "0%" }
+              : { left: "50%" },
+          ]}
+        />
+      </View>
     </View>
   )
 }
@@ -167,22 +83,16 @@ const styles = StyleSheet.create({
   wrapper: {
     marginTop: 22,
     marginHorizontal: 20,
+  },
+
+  tabsRow: {
     flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
   },
 
   tab: {
     flex: 1,
     alignItems: "center",
-    justifyContent: "center",
     paddingVertical: 10,
-  },
-
-  tabInner: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
   },
 
   tabText: {
@@ -192,27 +102,33 @@ const styles = StyleSheet.create({
   },
 
   activeTabText: {
-    color: "#D97732", // 🔥 orange when active
+    color: "#D97732",
     fontWeight: "700",
   },
 
-  badge: {
-    minWidth: 20,
-    height: 20,
-    borderRadius: 10,
-    paddingHorizontal: 6,
-    backgroundColor: "#D97732",
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  underlineWrap: {
+  marginTop: 8,
+  height: 4,
+  width: "100%",
+  backgroundColor: "#E5E7EB",
+  borderRadius: 10,
+  overflow: "hidden",
 
-  badgeText: {
-    color: "#FFFFFF",
-    fontSize: 11,
-    fontWeight: "800",
-  },
+  // 🔥 FIX: keep it above listings
+  zIndex: 10,
+  elevation: 10, // Android
 
-  badgeLoader: {
-    marginLeft: 2,
-  },
+  // 🔥 FIX: add separation
+  borderBottomWidth: 1,
+  borderBottomColor: "#E5E7EB",
+
+  marginBottom: 10, // spacing from listings
+},
+
+activeUnderline: {
+  position: "absolute",
+  height: "100%",
+  width: "50%",
+  backgroundColor: "#D97732",
+},
 })

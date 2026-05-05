@@ -14,6 +14,7 @@ import FilterBar from "../components/home/FilterBar"
 import ListingsGrid from "../components/home/ListingsGrid"
 import SearchBar from "../components/home/SearchBar"
 
+import { useCart } from "@/context/CartContext"
 import { Ionicons } from "@expo/vector-icons"
 import { Listing } from "../components/home/ListingCard"
 import { useAuth } from "../context/AuthContext"
@@ -56,6 +57,7 @@ type ListingRow = {
 export default function HomeScreen() {
   const router = useRouter()
   const { session } = useAuth()
+  const { cartCount } = useCart()
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [notifCount, setNotifCount] = useState(0)
   const [messageCount, setMessageCount] = useState(0)
@@ -545,6 +547,8 @@ const hasResults = filteredListings.length > 0
   <GlobalHeader
     notifCount={notifCount}
     messageCount={messageCount}
+    cartCount={cartCount}
+    
 onNotificationsPress={() =>
   requireAuth(() => router.push("/notifications"))
 }

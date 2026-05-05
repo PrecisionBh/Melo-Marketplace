@@ -64,17 +64,28 @@ function NotificationRouter() {
 
     console.log("🔔 Routing from notification:", data)
 
+    // 🔥 OFFERS → ROUTE TO INDEX
+    if (
+      data.route === "/offers/[id]" ||
+      data.type?.includes("offer")
+    ) {
+      router.replace("/offers")
+      return
+    }
+
+    // 🔥 MESSAGES
     if (data.conversationId) {
       router.replace("/messages")
       return
     }
 
+    // 🔥 FALLBACK
     if (data.route) {
       router.replace(data.route)
     }
   }
 
-  // 🔥 FOREGROUND / BACKGROUND TAP HANDLING
+  // 🔥 FOREGROUND / BACKGROUND
   useEffect(() => {
     const sub =
       Notifications.addNotificationResponseReceivedListener(
@@ -91,7 +102,7 @@ function NotificationRouter() {
     return () => sub.remove()
   }, [loading, session])
 
-  // 🔥 COLD START HANDLING
+  // 🔥 COLD START
   useEffect(() => {
     if (loading) return
     if (!session) return
@@ -106,7 +117,12 @@ function NotificationRouter() {
       const data =
         response?.notification?.request?.content?.data
 
-      routeFromData(data)
+      if (!data) return
+
+      // 🔥 slight delay = prevents navigation race issues
+      setTimeout(() => {
+        routeFromData(data)
+      }, 300)
     }
 
     run()
@@ -116,8 +132,7 @@ function NotificationRouter() {
 }
 
 export default function RootLayout() {
-
-  // 🔥 CORRECT NOTIFICATION HANDLER (NEW EXPO API)
+  // 🔥 NOTIFICATION DISPLAY HANDLER
   useEffect(() => {
     Notifications.setNotificationHandler({
       handleNotification: async () => ({
@@ -154,6 +169,7 @@ export default function RootLayout() {
               <Stack.Screen name="reset-password" />
               <Stack.Screen name="home" />
               <Stack.Screen name="messages/[id]" />
+              <Stack.Screen name="offers/index" />
             </Stack>
           </CartProvider>
         </AuthProvider>
