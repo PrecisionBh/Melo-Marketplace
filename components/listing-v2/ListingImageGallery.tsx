@@ -26,6 +26,9 @@ export default function ListingImageGallery({
   const [activeIndex, setActiveIndex] =
     useState(0)
 
+    const [closingModal, setClosingModal] =
+  useState(false)
+
   const fullscreenScrollRef =
     useRef<ScrollView>(null)
 
@@ -96,9 +99,10 @@ export default function ListingImageGallery({
                 {item.type === "image" ? (
                   <TouchableOpacity
                     activeOpacity={0.9}
-                    onPress={() =>
-                      setFullscreenIndex(i)
-                    }
+                    onPress={() => {
+  if (closingModal) return
+  setFullscreenIndex(i)
+}}
                     style={{ flex: 1 }}
                   >
                     <Image
@@ -160,84 +164,104 @@ export default function ListingImageGallery({
       </View>
 
       <Modal
-        visible={fullscreenIndex !== null}
-        transparent
-        animationType="fade"
-      >
-        <View style={styles.modal}>
-          <TouchableOpacity
-            style={styles.closeBtn}
-            onPress={() =>
-              setFullscreenIndex(null)
-            }
-          >
-            <Ionicons
-              name="close"
-              size={28}
-              color="#fff"
-            />
-          </TouchableOpacity>
+  visible={fullscreenIndex !== null}
+  transparent
+  animationType="fade"
+  statusBarTranslucent
+  onRequestClose={() => {
+    setClosingModal(true)
+    setFullscreenIndex(null)
 
-          <ScrollView
-            ref={fullscreenScrollRef}
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            onMomentumScrollEnd={(e) => {
-              const index = Math.round(
-                e.nativeEvent.contentOffset.x /
-                  SCREEN_WIDTH
-              )
-              setFullscreenIndex(index)
-            }}
-          >
-            {media.map((item, i) => (
-              <View
-                key={i}
-                style={styles.fullscreenPage}
-              >
-                {item.type === "image" ? (
-                  <Image
-                    source={{ uri: item.uri }}
-                    style={styles.fullImage}
-                    resizeMode="contain"
-                    onLoad={() =>
-                      console.log(
-                        "✅ FULL IMAGE LOADED:",
-                        item.uri
-                      )
-                    }
-                    onError={(e) =>
-                      console.log(
-                        "❌ FULL IMAGE ERROR:",
-                        item.uri,
-                        e.nativeEvent
-                      )
-                    }
-                  />
-                ) : (
-                  <Video
-                    source={{ uri: item.uri }}
-                    style={styles.fullImage}
-                    resizeMode={ResizeMode.CONTAIN}
-                    shouldPlay
-                    isLooping
-                    isMuted
-                    useNativeControls
-                    onError={(e) =>
-                      console.log(
-                        "❌ FULL VIDEO ERROR:",
-                        item.uri,
-                        e
-                      )
-                    }
-                  />
-                )}
-              </View>
-            ))}
-          </ScrollView>
+    setTimeout(() => {
+      setClosingModal(false)
+    }, 500)
+  }}
+>
+  <View style={styles.modal}>
+    <TouchableOpacity
+      style={styles.closeBtn}
+      hitSlop={{
+        top: 20,
+        bottom: 20,
+        left: 20,
+        right: 20,
+      }}
+      onPress={() => {
+        setClosingModal(true)
+        setFullscreenIndex(null)
+
+        setTimeout(() => {
+          setClosingModal(false)
+        }, 500)
+      }}
+    >
+      <Ionicons
+        name="close"
+        size={34}
+        color="#fff"
+      />
+    </TouchableOpacity>
+
+    <ScrollView
+      ref={fullscreenScrollRef}
+      horizontal
+      pagingEnabled
+      showsHorizontalScrollIndicator={false}
+      onMomentumScrollEnd={(e) => {
+        const index = Math.round(
+          e.nativeEvent.contentOffset.x /
+            SCREEN_WIDTH
+        )
+        setFullscreenIndex(index)
+      }}
+    >
+      {media.map((item, i) => (
+        <View
+          key={i}
+          style={styles.fullscreenPage}
+        >
+          {item.type === "image" ? (
+            <Image
+              source={{ uri: item.uri }}
+              style={styles.fullImage}
+              resizeMode="contain"
+              onLoad={() =>
+                console.log(
+                  "✅ FULL IMAGE LOADED:",
+                  item.uri
+                )
+              }
+              onError={(e) =>
+                console.log(
+                  "❌ FULL IMAGE ERROR:",
+                  item.uri,
+                  e.nativeEvent
+                )
+              }
+            />
+          ) : (
+            <Video
+              source={{ uri: item.uri }}
+              style={styles.fullImage}
+              resizeMode={ResizeMode.CONTAIN}
+              shouldPlay
+              isLooping
+              isMuted
+              useNativeControls
+              onError={(e) =>
+                console.log(
+                  "❌ FULL VIDEO ERROR:",
+                  item.uri,
+                  e
+                )
+              }
+            />
+          )}
         </View>
-      </Modal>
+      ))}
+    </ScrollView>
+  </View>
+</Modal>
     </>
   )
 }
@@ -299,11 +323,17 @@ const styles = StyleSheet.create({
   },
 
   closeBtn: {
-    position: "absolute",
-    top: 55,
-    right: 20,
-    zIndex: 10,
-  },
+  position: "absolute",
+  top: 60,
+  right: 20,
+  zIndex: 999,
+  width: 44,
+  height: 44,
+  borderRadius: 22,
+  backgroundColor: "rgba(0,0,0,0.6)",
+  justifyContent: "center",
+  alignItems: "center",
+},
 
   fullscreenPage: {
     width: SCREEN_WIDTH,

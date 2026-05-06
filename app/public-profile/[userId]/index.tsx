@@ -2,7 +2,7 @@ import { useLocalSearchParams, useRouter } from "expo-router"
 import { useEffect, useState } from "react"
 import {
   ActivityIndicator,
-  ScrollView,
+  FlatList,
   StyleSheet,
   View,
 } from "react-native"
@@ -39,16 +39,29 @@ export default function PublicProfileScreen() {
       ? params.userId[0]
       : undefined
 
-  const [profile, setProfile] = useState<Profile | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [profile, setProfile] =
+    useState<Profile | null>(null)
 
-  const [isFollowing, setIsFollowing] = useState<boolean>(false)
-  const [followLoading, setFollowLoading] = useState(false)
-  const [messageLoading, setMessageLoading] = useState(false)
+  const [loading, setLoading] =
+    useState(true)
 
-  const [soldCount, setSoldCount] = useState(0)
-  const [ratingAvg, setRatingAvg] = useState<number | null>(null)
-  const [ratingCount, setRatingCount] = useState(0)
+  const [isFollowing, setIsFollowing] =
+    useState<boolean>(false)
+
+  const [followLoading, setFollowLoading] =
+    useState(false)
+
+  const [messageLoading, setMessageLoading] =
+    useState(false)
+
+  const [soldCount, setSoldCount] =
+    useState(0)
+
+  const [ratingAvg, setRatingAvg] =
+    useState<number | null>(null)
+
+  const [ratingCount, setRatingCount] =
+    useState(0)
 
   useEffect(() => {
     if (!routeUserId) return
@@ -59,29 +72,41 @@ export default function PublicProfileScreen() {
     try {
       setLoading(true)
 
-      const profileData = await loadProfile()
+      const profileData =
+        await loadProfile()
 
       await Promise.all([
         loadSales(),
         loadRatings(),
       ])
 
-      if (profileData && session?.user?.id) {
-        await loadFollowState(profileData.id)
+      if (
+        profileData &&
+        session?.user?.id
+      ) {
+        await loadFollowState(
+          profileData.id
+        )
       }
     } catch (err) {
-      console.log("Public profile load error:", err)
+      console.log(
+        "Public profile load error:",
+        err
+      )
     } finally {
       setLoading(false)
     }
   }
 
   const loadProfile = async () => {
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("id, display_name, bio, avatar_url, is_pro")
-      .eq("id", routeUserId)
-      .single()
+    const { data, error } =
+      await supabase
+        .from("profiles")
+        .select(
+          "id, display_name, bio, avatar_url, is_pro"
+        )
+        .eq("id", routeUserId)
+        .single()
 
     if (!error && data) {
       setProfile(data)
@@ -93,24 +118,47 @@ export default function PublicProfileScreen() {
   }
 
   const loadSales = async () => {
-    const { count } = await supabase
-      .from("orders")
-      .select("*", { count: "exact", head: true })
-      .eq("seller_id", routeUserId)
-      .eq("status", "completed")
+    const { count } =
+      await supabase
+        .from("orders")
+        .select("*", {
+          count: "exact",
+          head: true,
+        })
+        .eq(
+          "seller_id",
+          routeUserId
+        )
+        .eq("status", "completed")
 
     setSoldCount(count ?? 0)
   }
 
   const loadRatings = async () => {
-    const { data } = await supabase
-      .from("ratings")
-      .select("rating")
-      .eq("to_user_id", routeUserId)
+    const { data } =
+      await supabase
+        .from("ratings")
+        .select("rating")
+        .eq(
+          "to_user_id",
+          routeUserId
+        )
 
     if (data && data.length > 0) {
-      const total = data.reduce((sum, r) => sum + r.rating, 0)
-      setRatingAvg(Number((total / data.length).toFixed(1)))
+      const total = data.reduce(
+        (sum, r) =>
+          sum + r.rating,
+        0
+      )
+
+      setRatingAvg(
+        Number(
+          (
+            total / data.length
+          ).toFixed(1)
+        )
+      )
+
       setRatingCount(data.length)
     } else {
       setRatingAvg(null)
@@ -118,94 +166,147 @@ export default function PublicProfileScreen() {
     }
   }
 
-  const loadFollowState = async (profileId: string) => {
-    const { data } = await supabase
-      .from("followers")
-      .select("id")
-      .eq("follower_id", session!.user.id)
-      .eq("following_id", profileId)
-      .maybeSingle()
-
-    setIsFollowing(!!data)
-  }
-
-  // 🔥 FOLLOW
-  const handleFollowToggle = async () => {
-    if (!session?.user?.id || !profile?.id) return
-
-    try {
-      setFollowLoading(true)
-
-      if (isFollowing) {
+  const loadFollowState =
+    async (profileId: string) => {
+      const { data } =
         await supabase
           .from("followers")
-          .delete()
-          .eq("follower_id", session.user.id)
-          .eq("following_id", profile.id)
+          .select("id")
+          .eq(
+            "follower_id",
+            session!.user.id
+          )
+          .eq(
+            "following_id",
+            profileId
+          )
+          .maybeSingle()
 
-        setIsFollowing(false)
-      } else {
-        await supabase.from("followers").insert({
-          follower_id: session.user.id,
-          following_id: profile.id,
-        })
-
-        setIsFollowing(true)
-      }
-    } catch (err) {
-      console.log("Follow error:", err)
-    } finally {
-      setFollowLoading(false)
+      setIsFollowing(!!data)
     }
-  }
 
-  // 🔥 MESSAGE
-  const handleMessage = async () => {
-  if (!session?.user?.id || !profile?.id) return
-  if (messageLoading) return // 🔥 BLOCK DOUBLE TAP
-
-  try {
-    setMessageLoading(true)
-
-    const { data: existing } = await supabase
-      .from("conversations")
-      .select("id")
-      .or(
-        `and(user_one.eq.${session.user.id},user_two.eq.${profile.id}),and(user_one.eq.${profile.id},user_two.eq.${session.user.id})`
+  const handleFollowToggle =
+    async () => {
+      if (
+        !session?.user?.id ||
+        !profile?.id
       )
-      .maybeSingle()
+        return
 
-    let conversationId = existing?.id
+      try {
+        setFollowLoading(true)
 
-    if (!conversationId) {
-      const { data: newConv } = await supabase
-        .from("conversations")
-        .insert({
-          user_one: session.user.id,
-          user_two: profile.id,
-        })
-        .select("id")
-        .single()
+        if (isFollowing) {
+          await supabase
+            .from("followers")
+            .delete()
+            .eq(
+              "follower_id",
+              session.user.id
+            )
+            .eq(
+              "following_id",
+              profile.id
+            )
 
-      conversationId = newConv?.id
+          setIsFollowing(false)
+        } else {
+          await supabase
+            .from("followers")
+            .insert({
+              follower_id:
+                session.user.id,
+              following_id:
+                profile.id,
+            })
+
+          setIsFollowing(true)
+        }
+      } catch (err) {
+        console.log(
+          "Follow error:",
+          err
+        )
+      } finally {
+        setFollowLoading(false)
+      }
     }
 
-    if (conversationId) {
-      // 🔥 IMPORTANT: replace instead of push
-      router.replace(`/messages/${conversationId}`)
+  const handleMessage =
+    async () => {
+      if (
+        !session?.user?.id ||
+        !profile?.id
+      )
+        return
+
+      if (messageLoading) return
+
+      try {
+        setMessageLoading(true)
+
+        const { data: existing } =
+          await supabase
+            .from("conversations")
+            .select("id")
+            .or(
+              `and(user_one.eq.${session.user.id},user_two.eq.${profile.id}),and(user_one.eq.${profile.id},user_two.eq.${session.user.id})`
+            )
+            .maybeSingle()
+
+        let conversationId =
+          existing?.id
+
+        if (!conversationId) {
+          const {
+            data: newConv,
+          } = await supabase
+            .from(
+              "conversations"
+            )
+            .insert({
+              user_one:
+                session.user.id,
+              user_two:
+                profile.id,
+            })
+            .select("id")
+            .single()
+
+          conversationId =
+            newConv?.id
+        }
+
+        if (conversationId) {
+          router.replace(
+            `/messages/${conversationId}`
+          )
+        }
+      } catch (err) {
+        console.log(
+          "Message error:",
+          err
+        )
+      } finally {
+        setTimeout(
+          () =>
+            setMessageLoading(false),
+          500
+        )
+      }
     }
-  } catch (err) {
-    console.log("Message error:", err)
-  } finally {
-    setTimeout(() => setMessageLoading(false), 500)
-  }
-}
 
   if (loading) {
     return (
       <View style={styles.screen}>
         <GlobalHeader />
-        <ActivityIndicator style={{ marginTop: 60 }} />
+
+        <ActivityIndicator
+          style={{
+            marginTop: 60,
+          }}
+        />
+
         <GlobalFooter />
       </View>
     )
@@ -215,37 +316,73 @@ export default function PublicProfileScreen() {
     <View style={styles.screen}>
       <GlobalHeader />
 
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
+      <FlatList
+        data={[{ id: "profile" }]}
+        keyExtractor={(item) =>
+          item.id
+        }
         showsVerticalScrollIndicator={false}
-      >
-        {profile && (
-          <>
-            <PublicProfileHeader
-              displayName={profile.display_name}
-              bio={profile.bio}
-              avatarUrl={profile.avatar_url}
-              isPro={profile.is_pro}
-            />
+        contentContainerStyle={
+          styles.content
+        }
+        ListHeaderComponent={
+          profile ? (
+            <>
+              <PublicProfileHeader
+                displayName={
+                  profile.display_name
+                }
+                bio={profile.bio}
+                avatarUrl={
+                  profile.avatar_url
+                }
+                isPro={
+                  profile.is_pro
+                }
+              />
 
-            <PublicProfileStats
-              soldCount={soldCount}
-              ratingAvg={ratingAvg}
-              ratingCount={ratingCount}
-            />
+              <PublicProfileStats
+                soldCount={
+                  soldCount
+                }
+                ratingAvg={
+                  ratingAvg
+                }
+                ratingCount={
+                  ratingCount
+                }
+              />
 
-            <PublicProfileActions
-  isFollowing={isFollowing}
-  loading={followLoading}
-  messageLoading={messageLoading}
-  onFollowToggle={handleFollowToggle}
-  onMessage={handleMessage}
-/>
-
-            <PublicProfileListings userId={profile.id} />
-          </>
-        )}
-      </ScrollView>
+              <PublicProfileActions
+                isFollowing={
+                  isFollowing
+                }
+                loading={
+                  followLoading
+                }
+                messageLoading={
+                  messageLoading
+                }
+                onFollowToggle={
+                  handleFollowToggle
+                }
+                onMessage={
+                  handleMessage
+                }
+              />
+            </>
+          ) : null
+        }
+        renderItem={() =>
+  profile ? (
+    <View style={styles.listingsWrap}>
+      <PublicProfileListings
+        userId={profile.id}
+      />
+    </View>
+  ) : null
+}
+      />
 
       <GlobalFooter />
     </View>
@@ -257,7 +394,14 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#EAF4EF",
   },
-  scrollContent: {
+
+  content: {
     paddingBottom: 100,
   },
+
+listingsWrap: {
+  marginTop: 18,
+  paddingHorizontal: 12,
+},
+
 })

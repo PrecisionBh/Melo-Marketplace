@@ -5,6 +5,7 @@ import CreateListingSelectors from "@/components/create-listing/CreateListingSel
 import CreateListingShipping from "@/components/create-listing/CreateListingShipping"
 import FullScreenSelector from "@/components/create-listing/FullScreenSelector"
 import ImageUpload from "@/components/create-listing/ImageUpload"
+import SKUInput from "@/components/listing-v2/sku"
 import * as FileSystem from "expo-file-system/legacy"
 import { Video as VideoCompressor } from "react-native-compressor"
 
@@ -60,6 +61,7 @@ condition: string | null
   is_mega_boost: boolean | null
   size: string | null
 sizes: { size: string; qty: number | string }[] | null
+sku: string | null
 }
 
 const MARKETPLACE_CATEGORIES: SelectorOption[] = [
@@ -163,6 +165,7 @@ const [existingVideoUrl, setExistingVideoUrl] = useState<string | null>(null)
   const [category, setCategory] = useState<
     string | null
   >(null)
+  const [sku, setSku] = useState("")
   const [subcategory, setSubcategory] = useState<string | null>(null)
 const [showSubcategoryModal, setShowSubcategoryModal] = useState(false)
 
@@ -258,14 +261,27 @@ useEffect(() => {
       try {
         setCheckingAddress(true)
 
-        const { data: addressData } = await supabase
-          .from("seller_return_addresses")
-          .select("id")
-          .eq("user_id", session.user.id)
-          .maybeSingle()
+        const { data: profileAddress, error: addressError } = await supabase
+  .from("profiles")
+  .select("address_line1, city, state, postal_code")
+  .eq("id", session.user.id)
+  .maybeSingle()
 
-        setHasReturnAddress(!!addressData)
-        setShowAddressModal(!addressData)
+if (addressError) {
+  console.error(
+    "❌ Failed fetching return address",
+    addressError
+  )
+}
+
+const hasAddress =
+  !!profileAddress?.address_line1 &&
+  !!profileAddress?.city &&
+  !!profileAddress?.state &&
+  !!profileAddress?.postal_code
+
+setHasReturnAddress(hasAddress)
+setShowAddressModal(!hasAddress)
 
         const { data: profile } = await supabase
           .from("profiles")
@@ -373,7 +389,7 @@ if (
           : 1
 
       setQuantity(String(safeLoadedQty))
-
+      setSku(data.sku ?? "")
       setIsBoosted(Boolean(data.is_boosted))
       setIsMegaBoosted(Boolean(data.is_mega_boost))
       setOriginalBoosted(Boolean(data.is_boosted))
@@ -616,6 +632,7 @@ quantity_available:
   category === "clothing_apparel"
     ? totalQty
     : safeQuantity,
+    sku: sku || null,
         boost_locked:
           isBoosted || isMegaBoosted ? false : true,
       }
@@ -783,6 +800,11 @@ quantity_available:
             setMinOffer={setMinOffer}
           />
 
+          <SKUInput
+  value={sku}
+  onChange={setSku}
+/>
+
           <CreateListingBoost
             selectedBoost={
               isMegaBoosted
@@ -806,9 +828,10 @@ quantity_available:
             boostCredits={boostsRemaining}
             megaCredits={megaBoostsRemaining}
             onBuyCredits={() =>
-              router.push("/pro/packages")
+              router.push("/boostcredits")
             }
             onPublish={handleUpdateListing}
+            submitting={submitting}
           />
         </ScrollView>
       )}

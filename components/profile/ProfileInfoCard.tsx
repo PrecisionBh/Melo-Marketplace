@@ -1,4 +1,17 @@
-import { StyleSheet, Text, TextInput, View } from "react-native"
+import { useState } from "react"
+import {
+  ActivityIndicator,
+  Alert,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native"
+
+import { useAuth } from "@/context/AuthContext"
+import { handleAppError } from "@/lib/errors/appError"
+import { supabase } from "@/lib/supabase"
 
 type Props = {
   displayName: string
@@ -13,11 +26,53 @@ export default function ProfileInfoCard({
   bio,
   setBio,
 }: Props) {
+  const { session } = useAuth()
+
+  const [saving, setSaving] = useState(false)
+
+  const saveProfile = async () => {
+    if (!session?.user?.id) return
+
+    try {
+      setSaving(true)
+
+      const cleanName = displayName.trim()
+
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          display_name: cleanName,
+          bio: bio.trim(),
+        })
+        .eq("id", session.user.id)
+
+      if (error) throw error
+
+      Alert.alert(
+        "Success",
+        "Profile updated successfully."
+      )
+    } catch (err) {
+      handleAppError(err, {
+        context: "save_profile_info",
+        fallbackMessage:
+          "Failed to update profile.",
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
     <View style={styles.card}>
-      <Text style={styles.sectionTitle}>Profile Information</Text>
+      <Text style={styles.sectionTitle}>
+        Profile Information
+      </Text>
 
-      <Text style={styles.label}>Display Name</Text>
+      <Text style={styles.label}>
+        Display Name
+      </Text>
+
       <TextInput
         value={displayName}
         onChangeText={setDisplayName}
@@ -27,6 +82,7 @@ export default function ProfileInfoCard({
       />
 
       <Text style={styles.label}>Bio</Text>
+
       <TextInput
         value={bio}
         onChangeText={setBio}
@@ -36,6 +92,20 @@ export default function ProfileInfoCard({
         placeholder="Tell users about yourself..."
         placeholderTextColor="#9BB8AC"
       />
+
+      <TouchableOpacity
+        style={styles.saveButton}
+        onPress={saveProfile}
+        disabled={saving}
+      >
+        {saving ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={styles.saveButtonText}>
+            Save Changes
+          </Text>
+        )}
+      </TouchableOpacity>
     </View>
   )
 }
@@ -85,5 +155,20 @@ const styles = StyleSheet.create({
   bio: {
     height: 110,
     textAlignVertical: "top",
+  },
+
+  saveButton: {
+    marginTop: 6,
+    backgroundColor: "#D97732",
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  saveButtonText: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "800",
   },
 })
