@@ -71,9 +71,6 @@ export default function ListingDetailScreen() {
 const [sellerAvatar, setSellerAvatar] =
   useState<string | null>(null)
 
-const [isSellerPro, setIsSellerPro] =
-  useState(false)
-
   const [sellerRatingAvg, setSellerRatingAvg] =
     useState<number | null>(null)
   const [sellerRatingCount, setSellerRatingCount] =
@@ -199,7 +196,7 @@ await supabase.rpc(
 
       const { data, error } = await supabase
         .from("profiles")
-        .select("display_name, is_pro, avatar_url")
+        .select("display_name, avatar_url")
         .eq("id", listing.user_id)
         .single()
 
@@ -208,7 +205,6 @@ await supabase.rpc(
 
       setSellerName(data?.display_name ?? null)
 setSellerAvatar(data?.avatar_url ?? null)
-setIsSellerPro(!!data?.is_pro)
 
       const { data: ratings, error: ratingsError } =
         await supabase
@@ -236,7 +232,6 @@ setIsSellerPro(!!data?.is_pro)
         fallbackMessage: "Failed to load seller info.",
       })
       setSellerName(null)
-      setIsSellerPro(false)
       setSellerRatingAvg(null)
       setSellerRatingCount(0)
     }
@@ -904,10 +899,9 @@ const maxPurchaseQuantity = isApparel
   listingId={listing.id} // 🔥 THIS WAS MISSING
 />
 
-        <SellerProfileCard
+  <SellerProfileCard
   sellerName={sellerName}
   sellerAvatar={sellerAvatar}
-  isSellerPro={isSellerPro}
   sellerRatingAvg={sellerRatingAvg}
   sellerRatingCount={sellerRatingCount}
   onViewProfile={handleViewPublicProfile}

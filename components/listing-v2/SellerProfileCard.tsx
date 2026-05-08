@@ -1,23 +1,21 @@
 import { Ionicons } from "@expo/vector-icons"
 import {
-    Image,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Image,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native"
 
 export default function SellerProfileCard({
   sellerName,
   sellerAvatar,
-  isSellerPro,
   sellerRatingAvg,
   sellerRatingCount,
   onViewProfile,
 }: {
   sellerName: string | null
   sellerAvatar: string | null
-  isSellerPro: boolean
   sellerRatingAvg: number | null
   sellerRatingCount: number
   onViewProfile: () => void
@@ -29,11 +27,11 @@ export default function SellerProfileCard({
       activeOpacity={0.85}
     >
       {sellerAvatar?.trim() ? (
-  <Image
-    source={{ uri: sellerAvatar }}
-    style={styles.avatarImage}
-    resizeMode="cover"
-  />
+        <Image
+          source={{ uri: sellerAvatar }}
+          style={styles.avatarImage}
+          resizeMode="cover"
+        />
       ) : (
         <View style={styles.avatarFallback}>
           <Text style={styles.avatarText}>
@@ -47,14 +45,6 @@ export default function SellerProfileCard({
           <Text style={styles.name}>
             {sellerName ?? "Seller"}
           </Text>
-
-          {isSellerPro && (
-            <View style={styles.proBadge}>
-              <Text style={styles.proText}>
-                PRO
-              </Text>
-            </View>
-          )}
         </View>
 
         {sellerRatingAvg ? (
@@ -126,7 +116,6 @@ const styles = StyleSheet.create({
   nameRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
     marginBottom: 4,
   },
 
@@ -134,19 +123,6 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: "700",
     color: "#111",
-  },
-
-  proBadge: {
-    backgroundColor: "#FFF7ED",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 999,
-  },
-
-  proText: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: "#D97732",
   },
 
   ratingRow: {

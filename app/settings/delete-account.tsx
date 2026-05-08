@@ -4,7 +4,7 @@ import GlobalHeader from "@/components/global/globalheader"
 import { supabase } from "@/lib/supabase"
 
 import { useRouter } from "expo-router"
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import {
   ActivityIndicator,
   Modal,
@@ -25,38 +25,6 @@ export default function DeleteAccountScreen() {
     useState(false)
   const [loading, setLoading] =
     useState(false)
-  const [isPro, setIsPro] =
-    useState(false)
-
-  useEffect(() => {
-    const loadProfile = async () => {
-      try {
-        const { data: userData } =
-          await supabase.auth.getUser()
-
-        const userId =
-          userData?.user?.id
-
-        if (!userId) return
-
-        const { data } =
-          await supabase
-            .from("profiles")
-            .select("is_pro")
-            .eq("id", userId)
-            .single()
-
-        setIsPro(!!data?.is_pro)
-      } catch (err) {
-        console.error(
-          "Profile load error:",
-          err
-        )
-      }
-    }
-
-    loadProfile()
-  }, [])
 
   const handleDelete = async () => {
     try {
@@ -129,25 +97,6 @@ export default function DeleteAccountScreen() {
               undone.
             </Text>
           </View>
-
-          {isPro && (
-            <View
-              style={styles.proWarningBox}
-            >
-              <Text
-                style={styles.proWarning}
-              >
-                You currently have an
-                active Melo Pro
-                subscription. Deleting
-                your account will NOT
-                cancel your subscription.
-                You must cancel it in
-                your App Store /
-                Play Store settings.
-              </Text>
-            </View>
-          )}
         </View>
 
         <TouchableOpacity
@@ -288,19 +237,6 @@ const styles = StyleSheet.create({
     color: "#DC2626",
     fontWeight: "700",
     fontSize: 13,
-  },
-
-  proWarningBox: {
-    backgroundColor: "#FFF7ED",
-    borderRadius: 16,
-    padding: 14,
-  },
-
-  proWarning: {
-    color: "#EA580C",
-    fontSize: 13,
-    lineHeight: 20,
-    fontWeight: "600",
   },
 
   deleteButton: {

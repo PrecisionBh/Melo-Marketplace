@@ -39,7 +39,7 @@ const offerId =
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [isSellerPro, setIsSellerPro] = useState(false)
+ 
 
   const [offer, setOffer] = useState<any>(null)
 
@@ -90,17 +90,6 @@ const offerId =
       if (error) throw error
 
       setOffer(data)
-
-      // 🔥 GET SELLER PRO STATUS
-const { data: sellerProfile, error: sellerError } = await supabase
-  .from("profiles")
-  .select("is_pro")
-  .eq("id", data.seller_id)
-  .single()
-
-if (!sellerError) {
-  setIsSellerPro(!!sellerProfile?.is_pro)
-}
 
     } catch (err) {
       handleAppError(err, {

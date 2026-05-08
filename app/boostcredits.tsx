@@ -60,9 +60,6 @@ export default function BoostCreditsScreen() {
   const [boostsRemaining, setBoostsRemaining] =
     useState(0)
 
-  const [megaRemaining, setMegaRemaining] =
-    useState(0)
-
   const [rcPackages, setRcPackages] =
     useState<any[]>([])
 
@@ -107,18 +104,12 @@ export default function BoostCreditsScreen() {
 
       const { data } = await supabase
         .from("profiles")
-        .select(
-          "boosts_remaining, mega_boosts_remaining"
-        )
+        .select("boosts_remaining")
         .eq("id", user.id)
         .single()
 
       setBoostsRemaining(
         data?.boosts_remaining ?? 0
-      )
-
-      setMegaRemaining(
-        data?.mega_boosts_remaining ?? 0
       )
 
       const offering =
@@ -207,13 +198,10 @@ export default function BoostCreditsScreen() {
         <BoostHeroCard />
 
         <BoostBalanceCard
-          boostsRemaining={
-            boostsRemaining
-          }
-          megaRemaining={
-            megaRemaining
-          }
-        />
+  boostsRemaining={
+    boostsRemaining
+  }
+/>
 
         {BOOST_PACKS.map(
           (pack) => (

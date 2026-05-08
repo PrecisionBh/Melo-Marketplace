@@ -24,7 +24,6 @@ type Profile = {
   display_name: string | null
   bio: string | null
   avatar_url: string | null
-  is_pro?: boolean
 }
 
 export default function PublicProfileScreen() {
@@ -103,8 +102,8 @@ export default function PublicProfileScreen() {
       await supabase
         .from("profiles")
         .select(
-          "id, display_name, bio, avatar_url, is_pro"
-        )
+  "id, display_name, bio, avatar_url"
+)
         .eq("id", routeUserId)
         .single()
 
@@ -329,17 +328,14 @@ export default function PublicProfileScreen() {
           profile ? (
             <>
               <PublicProfileHeader
-                displayName={
-                  profile.display_name
-                }
-                bio={profile.bio}
-                avatarUrl={
-                  profile.avatar_url
-                }
-                isPro={
-                  profile.is_pro
-                }
-              />
+  displayName={
+    profile.display_name
+  }
+  bio={profile.bio}
+  avatarUrl={
+    profile.avatar_url
+  }
+/>
 
               <PublicProfileStats
                 soldCount={

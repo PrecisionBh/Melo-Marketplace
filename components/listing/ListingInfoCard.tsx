@@ -4,7 +4,6 @@ import { StyleSheet, Text, TouchableOpacity, View } from "react-native"
 type Props = {
   sellerId?: string // ✅ OPTIONAL (prevents TS errors if parent isn't updated yet)
   sellerName: string | null
-  isSellerPro?: boolean
 
   title: string
   price: number
@@ -32,7 +31,6 @@ type Props = {
 export default function ListingInfoCard({
   sellerId,
   sellerName,
-  isSellerPro = false,
 
   title,
   price,
@@ -74,12 +72,6 @@ export default function ListingInfoCard({
         <Text style={[styles.sellerName, canTapSeller && styles.sellerNameLink]}>
           {sellerName ?? "Seller"}
         </Text>
-
-        {isSellerPro && (
-          <View style={styles.proBadge}>
-            <Text style={styles.proBadgeText}>MELO PRO</Text>
-          </View>
-        )}
 
         {/* subtle cue it's clickable (only when sellerId exists) */}
         {canTapSeller && (
@@ -194,27 +186,6 @@ const styles = StyleSheet.create({
   // ✅ subtle link cue (no underline, just brand tint)
   sellerNameLink: {
     color: "#2E5F4F",
-  },
-
-  /* 🟢 MELO PRO BADGE (GLOWING TRUST BADGE) */
-  proBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    backgroundColor: "#7FAF9B",
-
-    shadowColor: "#7FAF9B",
-    shadowOpacity: 0.7,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 6,
-  },
-
-  proBadgeText: {
-    fontSize: 10,
-    fontWeight: "900",
-    color: "#0F1E17",
-    letterSpacing: 0.6,
   },
 
   /* TITLE + HEART */

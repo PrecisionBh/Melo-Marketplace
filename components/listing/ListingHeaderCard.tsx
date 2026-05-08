@@ -3,7 +3,6 @@ import { StyleSheet, Text, TouchableOpacity, View } from "react-native"
 
 type Props = {
   sellerName: string | null
-  isSellerPro: boolean
   sellerRatingAvg: number | null
   sellerRatingCount: number
   title: string
@@ -20,7 +19,6 @@ type Props = {
 
 export default function ListingHeaderCard({
   sellerName,
-  isSellerPro,
   sellerRatingAvg,
   sellerRatingCount,
   title,
@@ -42,12 +40,6 @@ export default function ListingHeaderCard({
           <Text style={styles.sellerName}>
             {sellerName ?? "Seller"}
           </Text>
-
-          {isSellerPro && (
-            <View style={styles.proBadge}>
-              <Text style={styles.proText}>MELO PRO</Text>
-            </View>
-          )}
 
           {sellerRatingCount > 0 && (
             <Text style={styles.rating}>
@@ -140,20 +132,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "800",
     color: "#0F1E17",
-  },
-
-  proBadge: {
-    backgroundColor: "#0F1E17",
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: 999,
-  },
-
-  proText: {
-    color: "#7FAF9B",
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 0.5,
   },
 
   rating: {

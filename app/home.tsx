@@ -158,6 +158,16 @@ const [loadingMore, setLoadingMore] = useState(false)
         followedSellerIds =
           followsData?.map((f: any) => f.following_id) ?? []
 
+          const { data: boostedData } = await supabase
+  .from("listings")
+  .select(
+    "id,title,description,price,category,image_urls,video_url,shipping_type,user_id,is_boosted,created_at"
+  )
+  .eq("status", "active")
+  .eq("is_sold", false)
+  .eq("is_removed", false)
+  .eq("is_boosted", true)
+
       const { data, error } = await supabase
         .from("listings")
         .select(
@@ -166,12 +176,16 @@ const [loadingMore, setLoadingMore] = useState(false)
         .eq("status", "active")
         .eq("is_sold", false)
         .eq("is_removed", false)
-        .order("created_at", { ascending: false })
+        .eq("is_boosted", false)
+.order("created_at", { ascending: false })
         .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1)
 
       if (error) throw error
 
-      const rows = (data ?? []) as ListingRow[]
+      const rows = [
+  ...((boostedData ?? []) as ListingRow[]),
+  ...((data ?? []) as ListingRow[]),
+]
 
 const mergedAllListings =
   page === 0
@@ -199,27 +213,33 @@ const validRows = mergedAllListings.filter(
 )
 
 
-const boostedRows = validRows.filter(
-  (l) => l.is_boosted === true
-)
-
-const nonBoostedRows = validRows.filter(
-  (l) => !l.is_boosted
-)
-// 🔥 SHUFFLE NORMAL LISTINGS
 const shuffle = (array: ListingRow[]) => {
   return [...array].sort(() => Math.random() - 0.5)
 }
 
-const shuffledNonBoosted = shuffle(nonBoostedRows)
+/* ---------------- BUCKETS ---------------- */
 
-const followedRows = shuffledNonBoosted.filter((l) =>
-  followedSellerIds.includes(l.user_id ?? "")
+const boostedRows = shuffle(
+  validRows.filter((l) => l.is_boosted === true)
 )
 
-const newRows = shuffledNonBoosted.filter(
-  (l) => !followedSellerIds.includes(l.user_id ?? "")
+const followedRows = shuffle(
+  validRows.filter(
+    (l) =>
+      !l.is_boosted &&
+      followedSellerIds.includes(l.user_id ?? "")
+  )
 )
+
+const normalRows = shuffle(
+  validRows.filter(
+    (l) =>
+      !l.is_boosted &&
+      !followedSellerIds.includes(l.user_id ?? "")
+  )
+)
+
+/* ---------------- FEED BUILD ---------------- */
 
 const orderedRows: ListingRow[] = []
 
@@ -227,60 +247,105 @@ let bIndex = 0
 let fIndex = 0
 let nIndex = 0
 
+const takeItems = (
+  source: ListingRow[],
+  count: number,
+  indexRef: { value: number }
+) => {
+  const items: ListingRow[] = []
+
+  for (let i = 0; i < count; i++) {
+    if (indexRef.value < source.length) {
+      items.push(source[indexRef.value++])
+    }
+  }
+
+  return items
+}
+
 while (
   bIndex < boostedRows.length ||
   fIndex < followedRows.length ||
-  nIndex < newRows.length
+  nIndex < normalRows.length
 ) {
-  for (let i = 0; i < 3; i++) {
-    if (bIndex < boostedRows.length) {
-      orderedRows.push(boostedRows[bIndex++])
-    } else if (fIndex < followedRows.length) {
-      orderedRows.push(followedRows[fIndex++])
-    } else if (nIndex < newRows.length) {
-      orderedRows.push(newRows[nIndex++])
-    }
+  /* ---------------- BOOSTED ROW ---------------- */
+
+  let boostedChunk = takeItems(
+    boostedRows,
+    3,
+    { value: bIndex }
+  )
+
+  bIndex += boostedChunk.length
+
+  if (boostedChunk.length < 3) {
+    const filler = takeItems(
+      normalRows,
+      3 - boostedChunk.length,
+      { value: nIndex }
+    )
+
+    nIndex += filler.length
+
+    boostedChunk = [...boostedChunk, ...filler]
   }
 
-  for (let i = 0; i < 3; i++) {
-    if (fIndex < followedRows.length) {
-      orderedRows.push(followedRows[fIndex++])
-    } else if (nIndex < newRows.length) {
-      orderedRows.push(newRows[nIndex++])
-    } else if (bIndex < boostedRows.length) {
-      orderedRows.push(boostedRows[bIndex++])
-    }
+  orderedRows.push(...boostedChunk)
+
+  /* ---------------- FOLLOWED ROW ---------------- */
+
+  let followedChunk = takeItems(
+    followedRows,
+    3,
+    { value: fIndex }
+  )
+
+  fIndex += followedChunk.length
+
+  if (followedChunk.length < 3) {
+    const filler = takeItems(
+      normalRows,
+      3 - followedChunk.length,
+      { value: nIndex }
+    )
+
+    nIndex += filler.length
+
+    followedChunk = [...followedChunk, ...filler]
   }
 
-  for (let i = 0; i < 3; i++) {
-    if (nIndex < newRows.length) {
-      orderedRows.push(newRows[nIndex++])
-    } else if (fIndex < followedRows.length) {
-      orderedRows.push(followedRows[fIndex++])
-    } else if (bIndex < boostedRows.length) {
-      orderedRows.push(boostedRows[bIndex++])
-    }
-  }
+  orderedRows.push(...followedChunk)
 
-  if (
-    bIndex >= boostedRows.length &&
-    fIndex >= followedRows.length &&
-    nIndex >= newRows.length
-  ) {
-    break
-  }
+  /* ---------------- NORMAL ROW ---------------- */
+
+  const normalChunk = takeItems(
+    normalRows,
+    3,
+    { value: nIndex }
+  )
+
+  nIndex += normalChunk.length
+
+  orderedRows.push(...normalChunk)
 }
 
-const normalizedListings: Listing[] = orderedRows.map((l) => ({
-  id: l.id,
-  title: l.title,
-  description: l.description ?? "",
-  price: Number(l.price),
-  category: l.category ?? "",
-  image_url: l.image_urls?.[0] ?? null,
-  allow_offers: false,
-  shipping_type: l.shipping_type ?? null,
-}))
+const uniqueOrderedRows = Array.from(
+  new Map(
+    orderedRows.map((item) => [item.id, item])
+  ).values()
+)
+
+const normalizedListings: Listing[] =
+  uniqueOrderedRows.map((l) => ({
+    id: l.id,
+    title: l.title,
+    description: l.description ?? "",
+    price: Number(l.price),
+    category: l.category ?? "",
+    image_url: l.image_urls?.[0] ?? null,
+    allow_offers: false,
+    shipping_type: l.shipping_type ?? null,
+  }))
 
 const uniqueListings = Array.from(
   new Map(
