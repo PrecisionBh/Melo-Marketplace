@@ -1,10 +1,11 @@
 import { Ionicons } from "@expo/vector-icons"
+import { LinearGradient } from "expo-linear-gradient"
 import {
-    ActivityIndicator,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native"
 
 type Pack = {
@@ -12,7 +13,7 @@ type Pack = {
   title: string
   subtitle: string
   badge?: string
-  accent?: "boost" | "mega"
+  accent?: "boost"
 }
 
 export default function BoostPackCard({
@@ -26,134 +27,144 @@ export default function BoostPackCard({
   loading: boolean
   onPress: () => void
 }) {
-  const isMega =
-    pack.accent === "mega"
-
   return (
-    <View
-      style={[
-        styles.card,
-        isMega
-          ? styles.megaCard
-          : styles.boostCard,
+    <LinearGradient
+      colors={[
+        "#FFB347",
+        "#FF8C42",
+        "#FF6B00",
       ]}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={styles.gradient}
     >
-      {pack.badge && (
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>
-            {pack.badge}
-          </Text>
-        </View>
-      )}
-
-      <View style={styles.topRow}>
-        <View
-          style={[
-            styles.iconWrap,
-            isMega
-              ? styles.megaIconWrap
-              : styles.boostIconWrap,
-          ]}
-        >
-          <Ionicons
-            name={
-              isMega
-                ? "rocket"
-                : "flash"
-            }
-            size={18}
-            color={
-              isMega
-                ? "#9333EA"
-                : "#D97732"
-            }
-          />
-        </View>
-
-        <View style={styles.info}>
-          <Text style={styles.title}>
-            {pack.title}
-          </Text>
-
-          <Text style={styles.subtitle}>
-            {pack.subtitle}
-          </Text>
-        </View>
-      </View>
-
-      <TouchableOpacity
-        style={styles.buyBtn}
-        onPress={onPress}
-        disabled={loading}
-      >
-        {loading ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.buyText}>
-            {price}
-          </Text>
+      <View style={styles.card}>
+        {pack.badge && (
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>
+              {pack.badge}
+            </Text>
+          </View>
         )}
-      </TouchableOpacity>
-    </View>
+
+        <View style={styles.topRow}>
+          <View style={styles.iconWrap}>
+            <Ionicons
+              name="flash"
+              size={22}
+              color="#FF7A00"
+            />
+          </View>
+
+          <View style={styles.info}>
+            <Text style={styles.title}>
+              {pack.title}
+            </Text>
+
+            <Text style={styles.subtitle}>
+              {pack.subtitle}
+            </Text>
+          </View>
+        </View>
+
+        <TouchableOpacity
+          style={styles.buyBtn}
+          onPress={onPress}
+          disabled={loading}
+          activeOpacity={0.9}
+        >
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <>
+              <Ionicons
+                name="flash"
+                size={16}
+                color="#fff"
+                style={{
+                  marginRight: 6,
+                }}
+              />
+
+              <Text style={styles.buyText}>
+                Buy Boost Credits • {price}
+              </Text>
+            </>
+          )}
+        </TouchableOpacity>
+      </View>
+    </LinearGradient>
   )
 }
 
 const styles = StyleSheet.create({
+  gradient: {
+    borderRadius: 28,
+    marginBottom: 18,
+
+    shadowColor: "#FF7A00",
+    shadowOffset: {
+      width: 0,
+      height: 8,
+    },
+    shadowOpacity: 0.35,
+    shadowRadius: 14,
+
+    elevation: 10,
+  },
+
   card: {
-    position: "relative",
-    borderRadius: 22,
-    padding: 16,
-    borderWidth: 2,
-    marginBottom: 14,
-  },
+    borderRadius: 28,
 
-  boostCard: {
-    backgroundColor: "#FFF7ED",
-    borderColor: "#FED7AA",
-  },
+    padding: 20,
 
-  megaCard: {
-    backgroundColor: "#FAF5FF",
-    borderColor: "#E9D5FF",
+    backgroundColor: "rgba(255,255,255,0.12)",
+
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.18)",
   },
 
   badge: {
     position: "absolute",
-    top: 12,
-    right: 12,
+    top: 14,
+    right: 14,
+
     backgroundColor: "#111827",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+
     borderRadius: 999,
   },
 
   badgeText: {
     color: "#fff",
+
     fontSize: 11,
-    fontWeight: "800",
+    fontWeight: "900",
+
+    letterSpacing: 0.4,
   },
 
   topRow: {
     flexDirection: "row",
     alignItems: "center",
+
     gap: 14,
-    marginBottom: 16,
+
+    marginBottom: 18,
   },
 
   iconWrap: {
-    width: 46,
-    height: 46,
-    borderRadius: 14,
+    width: 56,
+    height: 56,
+
+    borderRadius: 18,
+
+    backgroundColor: "#FFFFFF",
+
     alignItems: "center",
     justifyContent: "center",
-  },
-
-  boostIconWrap: {
-    backgroundColor: "#FFFFFF",
-  },
-
-  megaIconWrap: {
-    backgroundColor: "#FFFFFF",
   },
 
   info: {
@@ -162,28 +173,43 @@ const styles = StyleSheet.create({
   },
 
   title: {
-    fontSize: 15,
-    fontWeight: "800",
+    fontSize: 20,
+    fontWeight: "900",
+
     color: "#111827",
+
+    marginBottom: 4,
   },
 
   subtitle: {
-    fontSize: 12,
-    color: "#6B7280",
-    marginTop: 4,
-    lineHeight: 17,
+    fontSize: 13,
+    lineHeight: 20,
+
+    color: "#1F2937",
+
+    fontWeight: "600",
   },
 
   buyBtn: {
-    backgroundColor: "#D97732",
-    borderRadius: 16,
-    paddingVertical: 14,
+    backgroundColor: "#111827",
+
+    borderRadius: 18,
+
+    paddingVertical: 16,
+
     alignItems: "center",
+    justifyContent: "center",
+
+    flexDirection: "row",
   },
 
   buyText: {
     color: "#fff",
-    fontWeight: "800",
+
+    fontWeight: "900",
+
     fontSize: 14,
+
+    letterSpacing: 0.3,
   },
 })

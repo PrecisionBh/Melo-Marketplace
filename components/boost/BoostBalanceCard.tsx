@@ -1,109 +1,132 @@
 import { Ionicons } from "@expo/vector-icons"
+import { LinearGradient } from "expo-linear-gradient"
 import {
-    StyleSheet,
-    Text,
-    View,
+  StyleSheet,
+  Text,
+  View,
 } from "react-native"
 
 export default function BoostBalanceCard({
   boostsRemaining,
-  megaRemaining,
 }: {
   boostsRemaining: number
-  megaRemaining: number
 }) {
   return (
-    <View style={styles.row}>
-      <View style={styles.boostCard}>
-        <View style={styles.labelRow}>
-          <Ionicons
-            name="flash"
-            size={14}
-            color="#D97732"
-          />
-          <Text style={styles.boostLabel}>
-            Boost Credits
-          </Text>
+    <LinearGradient
+      colors={[
+        "#FFB347",
+        "#FF8C42",
+        "#FF6B00",
+      ]}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={styles.gradient}
+    >
+      <View style={styles.card}>
+        <View style={styles.left}>
+          <View style={styles.iconWrap}>
+            <Ionicons
+              name="flash"
+              size={18}
+              color="#FF7A00"
+            />
+          </View>
+
+          <View>
+            <Text style={styles.label}>
+              Boost Credits
+            </Text>
+
+            <Text style={styles.subLabel}>
+              Push listings higher in the
+              feed
+            </Text>
+          </View>
         </View>
 
-        <Text style={styles.boostValue}>
+        <Text style={styles.value}>
           {boostsRemaining}
         </Text>
       </View>
-
-      <View style={styles.megaCard}>
-        <View style={styles.labelRow}>
-          <Ionicons
-            name="rocket"
-            size={14}
-            color="#9333EA"
-          />
-          <Text style={styles.megaLabel}>
-            Mega Boosts
-          </Text>
-        </View>
-
-        <Text style={styles.megaValue}>
-          {megaRemaining}
-        </Text>
-      </View>
-    </View>
+    </LinearGradient>
   )
 }
 
 const styles = StyleSheet.create({
-  row: {
-    flexDirection: "row",
-    gap: 12,
-    marginBottom: 24,
+  gradient: {
+    borderRadius: 24,
+    marginBottom: 18,
+
+    shadowColor: "#FF7A00",
+    shadowOffset: {
+      width: 0,
+      height: 6,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+
+    elevation: 6,
   },
 
-  boostCard: {
-    flex: 1,
-    backgroundColor: "#FFF7ED",
-    borderWidth: 1,
-    borderColor: "#FED7AA",
-    borderRadius: 22,
-    padding: 16,
-  },
+  card: {
+    borderRadius: 24,
 
-  megaCard: {
-    flex: 1,
-    backgroundColor: "#FAF5FF",
-    borderWidth: 1,
-    borderColor: "#E9D5FF",
-    borderRadius: 22,
-    padding: 16,
-  },
+    paddingVertical: 16,
+    paddingHorizontal: 18,
 
-  labelRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    marginBottom: 8,
+    justifyContent: "space-between",
+
+    backgroundColor:
+      "rgba(255,255,255,0.08)",
+
+    borderWidth: 1,
+    borderColor:
+      "rgba(255,255,255,0.16)",
   },
 
-  boostLabel: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#C2410C",
+  left: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
   },
 
-  megaLabel: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#7E22CE",
+  iconWrap: {
+    width: 44,
+    height: 44,
+
+    borderRadius: 14,
+
+    backgroundColor: "#FFFFFF",
+
+    alignItems: "center",
+    justifyContent: "center",
+
+    marginRight: 12,
   },
 
-  boostValue: {
-    fontSize: 28,
+  label: {
+    fontSize: 16,
     fontWeight: "900",
-    color: "#D97732",
+
+    color: "#111827",
   },
 
-  megaValue: {
-    fontSize: 28,
+  subLabel: {
+    fontSize: 12,
+
+    color: "#1F2937",
+
+    marginTop: 2,
+  },
+
+  value: {
+    fontSize: 32,
     fontWeight: "900",
-    color: "#9333EA",
+
+    color: "#111827",
+
+    marginLeft: 14,
   },
 })

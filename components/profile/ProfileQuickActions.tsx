@@ -1,10 +1,10 @@
 import { Ionicons } from "@expo/vector-icons"
 import { useRouter } from "expo-router"
 import {
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native"
 
 export default function ProfileQuickActions() {
@@ -12,54 +12,32 @@ export default function ProfileQuickActions() {
 
   return (
     <View style={styles.row}>
-      {/* MELO PRO */}
-      <TouchableOpacity
-        style={styles.card}
-        activeOpacity={0.85}
-        onPress={() => router.push("/melo-pro")}
-      >
-        <View style={styles.iconBubble}>
-          <Ionicons
-            name="diamond-outline"
-            size={22}
-            color="#D97732"
-          />
-        </View>
-
-        <View style={styles.content}>
-          <Text style={styles.title}>Melo Pro</Text>
-          <Text style={styles.sub}>1% fees • Unlimited</Text>
-        </View>
-
-        <Ionicons
-          name="chevron-forward"
-          size={18}
-          color="#6B7280"
-        />
-      </TouchableOpacity>
-
       {/* BOOKKEEPING */}
       <TouchableOpacity
-        style={styles.card}
+        style={styles.fullCard}
         activeOpacity={0.85}
         onPress={() => router.push("/bookkeeping")}
       >
-        <View style={styles.iconBubble}>
-          <Ionicons
-            name="book-outline"
-            size={20}
-            color="#111827"
-          />
-        </View>
+        <View style={styles.left}>
+          <View style={styles.iconBubble}>
+            <Ionicons
+              name="book-outline"
+              size={22}
+              color="#111827"
+            />
+          </View>
 
-        <View style={styles.content}>
-          <Text style={styles.title}>Bookkeeping</Text>
-          <Text style={styles.sub}>Sales & earnings</Text>
+          <View style={styles.content}>
+            <Text style={styles.title}>Bookkeeping</Text>
+            <Text style={styles.sub}>
+              Track sales, earnings, payouts, and business activity.
+            </Text>
+          </View>
         </View>
 
         <Ionicons
           name="chevron-forward"
-          size={18}
+          size={20}
           color="#6B7280"
         />
       </TouchableOpacity>
@@ -69,31 +47,38 @@ export default function ProfileQuickActions() {
 
 const styles = StyleSheet.create({
   row: {
-    flexDirection: "row",
-    gap: 14,
     paddingHorizontal: 20,
     marginTop: 24,
   },
 
-  card: {
-    flex: 1,
+  fullCard: {
+    width: "100%",
     backgroundColor: "#F8F1EA",
     borderRadius: 24,
     borderWidth: 1,
     borderColor: "#E9D6C7",
-    padding: 18,
-    minHeight: 132,
+    padding: 20,
+
+    flexDirection: "row",
+    alignItems: "center",
     justifyContent: "space-between",
   },
 
+  left: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    paddingRight: 12,
+  },
+
   iconBubble: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     backgroundColor: "#F3E4D8",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 14,
+    marginRight: 16,
   },
 
   content: {
@@ -101,7 +86,7 @@ const styles = StyleSheet.create({
   },
 
   title: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "800",
     color: "#111827",
   },

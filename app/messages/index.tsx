@@ -1,16 +1,20 @@
 import GlobalFooter from "@/components/global/globalfooter"
 import GlobalHeader from "@/components/global/globalheader"
+import { Ionicons } from "@expo/vector-icons"
 import { useRouter } from "expo-router"
 import { useEffect, useRef, useState } from "react"
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Image,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native"
+import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable"
 
 import { useAuth } from "../../context/AuthContext"
 import { handleAppError } from "../../lib/errors/appError"
@@ -34,6 +38,7 @@ export default function MessagesScreen() {
 
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState("")
 
   const conversationChannelRef = useRef<any>(null)
 
@@ -195,21 +200,109 @@ export default function MessagesScreen() {
     }
   }
 
-  /* ---------------- RENDER ---------------- */
-
-  const renderItem = ({ item }: { item: Conversation }) => {
-    console.log("🧾 Rendering conversation:", item.id)
+  const filteredConversations =
+  conversations.filter((c) => {
+    const searchLower =
+      search.toLowerCase()
 
     return (
+      c.other_user.display_name
+        ?.toLowerCase()
+        .includes(searchLower) ||
+      c.last_message
+        ?.toLowerCase()
+        .includes(searchLower)
+    )
+  })
+
+const deleteConversation = async (
+  conversationId: string
+) => {
+  try {
+    Alert.alert(
+      "Delete Conversation",
+      "Are you sure you want to delete this conversation?",
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            if (!session?.user?.id) return
+
+            const { error } =
+              await supabase.rpc(
+                "delete_conversation_for_me",
+                {
+                  conversation_id_input:
+                    conversationId,
+                  user_id_input:
+                    session.user.id,
+                }
+              )
+
+            if (error) throw error
+
+            setConversations((prev) =>
+              prev.filter(
+                (c) =>
+                  c.id !==
+                  conversationId
+              )
+            )
+          },
+        },
+      ]
+    )
+  } catch (err) {
+    handleAppError(err, {
+      fallbackMessage:
+        "Failed to delete conversation.",
+    })
+  }
+}
+
+/* ---------------- RENDER ---------------- */
+
+  const renderItem = ({
+  item,
+}: {
+  item: Conversation
+}) => {
+  return (
+    <Swipeable
+      renderRightActions={() => (
+        <TouchableOpacity
+          style={styles.deleteBtn}
+          onPress={() =>
+            deleteConversation(item.id)
+          }
+        >
+          <Ionicons
+            name="trash-outline"
+            size={22}
+            color="#fff"
+          />
+        </TouchableOpacity>
+      )}
+    >
       <TouchableOpacity
         style={styles.card}
         activeOpacity={0.85}
-        onPress={() => openConversation(item.id)}
+        onPress={() =>
+          openConversation(item.id)
+        }
       >
         <Image
           source={
             item.other_user.avatar_url
-              ? { uri: item.other_user.avatar_url }
+              ? {
+                  uri:
+                    item.other_user.avatar_url,
+                }
               : require("../../assets/images/avatar-placeholder.png")
           }
           style={styles.avatar}
@@ -217,44 +310,78 @@ export default function MessagesScreen() {
 
         <View style={styles.center}>
           <View style={styles.topRow}>
-            <Text style={styles.name} numberOfLines={1}>
-              {item.other_user.display_name}
+            <Text
+              style={styles.name}
+              numberOfLines={1}
+            >
+              {
+                item.other_user
+                  .display_name
+              }
             </Text>
 
             <Text style={styles.time}>
-              {formatTime(item.last_message_at)}
+              {formatTime(
+                item.last_message_at
+              )}
             </Text>
           </View>
 
-          <Text style={styles.preview} numberOfLines={1}>
+          <Text
+            style={styles.preview}
+            numberOfLines={1}
+          >
             {item.last_message}
           </Text>
         </View>
 
         {item.unread_count > 0 && (
           <View style={styles.unreadBadge}>
-            <Text style={styles.unreadText}>
+            <Text
+              style={styles.unreadText}
+            >
               {item.unread_count}
             </Text>
           </View>
         )}
       </TouchableOpacity>
-    )
-  }
+    </Swipeable>
+  )
+}
 
   return (
     <View style={styles.screen}>
       <GlobalHeader />
 
       <FlatList
-        data={conversations}
+        data={filteredConversations}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={
-          <Text style={styles.pageTitle}>Messages</Text>
-        }
+  <View>
+    <Text style={styles.pageTitle}>
+      Messages
+    </Text>
+
+    <View style={styles.searchWrap}>
+      <Ionicons
+        name="search-outline"
+        size={18}
+        color="#9CA3AF"
+      />
+
+      <TextInput
+        placeholder="Search messages..."
+        placeholderTextColor="#9CA3AF"
+        value={search}
+        onChangeText={setSearch}
+        style={styles.searchInput}
+      />
+    </View>
+  </View>
+}
         ListEmptyComponent={
           loading ? (
             <ActivityIndicator
@@ -315,6 +442,42 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   unreadText: { color: "#fff", fontSize: 11, fontWeight: "800" },
+  searchWrap: {
+  flexDirection: "row",
+  alignItems: "center",
+
+  backgroundColor: "#fff",
+
+  borderRadius: 16,
+
+  paddingHorizontal: 14,
+  paddingVertical: 12,
+
+  marginBottom: 16,
+},
+
+searchInput: {
+  flex: 1,
+
+  marginLeft: 8,
+
+  fontSize: 14,
+
+  color: "#111827",
+},
+
+deleteBtn: {
+  width: 80,
+
+  backgroundColor: "#EF4444",
+
+  borderRadius: 20,
+
+  marginBottom: 10,
+
+  alignItems: "center",
+  justifyContent: "center",
+},
   emptyWrap: { alignItems: "center", marginTop: 80 },
   emptyTitle: { fontSize: 17, fontWeight: "700" },
   emptySub: { marginTop: 6, fontSize: 13 },

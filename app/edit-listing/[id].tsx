@@ -29,9 +29,7 @@ import {
 } from "react-native"
 
 type ProfileRow = {
-  is_pro: boolean | null
   boosts_remaining: number | null
-  mega_boosts_remaining?: number | null
 }
 
 type SelectorOption = {
@@ -58,7 +56,6 @@ condition: string | null
   quantity: number | null
   quantity_available: number | null
   is_boosted: boolean | null
-  is_mega_boost: boolean | null
   size: string | null
 sizes: { size: string; qty: number | string }[] | null
 sku: string | null
@@ -202,21 +199,14 @@ useEffect(() => {
 
   const [isBoosted, setIsBoosted] =
     useState(false)
-  const [isMegaBoosted, setIsMegaBoosted] =
-    useState(false)
+
   const [originalBoosted, setOriginalBoosted] =
     useState(false)
-  const [
-    originalMegaBoosted,
-    setOriginalMegaBoosted,
-  ] = useState(false)
 
   const [quantity, setQuantity] = useState("1")
   const [size, setSize] = useState<string | null>(null)
   const [sizes, setSizes] = useState<{ size: string; qty: string }[]>([])
   const [boostsRemaining, setBoostsRemaining] =
-    useState<number>(0)
-  const [megaBoostsRemaining, setMegaBoostsRemaining] =
     useState<number>(0)
 
   const [shippingType, setShippingType] =
@@ -243,7 +233,6 @@ useEffect(() => {
   const [showAddressModal, setShowAddressModal] =
     useState(false)
 
-  const [isPro, setIsPro] = useState(false)
 
   useEffect(() => {
     if (id) {
@@ -284,20 +273,14 @@ setHasReturnAddress(hasAddress)
 setShowAddressModal(!hasAddress)
 
         const { data: profile } = await supabase
-          .from("profiles")
-          .select(
-            "is_pro, boosts_remaining, mega_boosts_remaining"
-          )
-          .eq("id", session.user.id)
-          .single<ProfileRow>()
+  .from("profiles")
+  .select("boosts_remaining")
+  .eq("id", session.user.id)
+  .single<ProfileRow>()
 
-        setIsPro(Boolean(profile?.is_pro))
-        setBoostsRemaining(
-          profile?.boosts_remaining ?? 0
-        )
-        setMegaBoostsRemaining(
-          profile?.mega_boosts_remaining ?? 0
-        )
+setBoostsRemaining(
+  profile?.boosts_remaining ?? 0
+)
       } catch (err) {
         handleAppError(err, {
           fallbackMessage:
@@ -391,11 +374,9 @@ if (
       setQuantity(String(safeLoadedQty))
       setSku(data.sku ?? "")
       setIsBoosted(Boolean(data.is_boosted))
-      setIsMegaBoosted(Boolean(data.is_mega_boost))
+    
       setOriginalBoosted(Boolean(data.is_boosted))
-      setOriginalMegaBoosted(
-        Boolean(data.is_mega_boost)
-      )
+     
     } catch (err) {
       handleAppError(err, {
         fallbackMessage:
@@ -422,12 +403,10 @@ if (
         : 0
 
       const rawQty = parseInt(quantity, 10)
-      const safeQuantity = isPro
-        ? Math.max(
-            1,
-            Number.isFinite(rawQty) ? rawQty : 1
-          )
-        : 1
+     const safeQuantity = Math.max(
+  1,
+  Number.isFinite(rawQty) ? rawQty : 1
+)
 
       if (
   !title.trim() ||
@@ -632,10 +611,11 @@ quantity_available:
   category === "clothing_apparel"
     ? totalQty
     : safeQuantity,
-    sku: sku || null,
-        boost_locked:
-          isBoosted || isMegaBoosted ? false : true,
-      }
+
+sku: sku || null,
+
+boost_locked: !isBoosted,
+}
 
       const { error } = await supabase
         .from("listings")
@@ -645,51 +625,32 @@ quantity_available:
       if (error) throw error
 
       if (id) {
-        try {
-          if (
-            originalBoosted ||
-            originalMegaBoosted
-          ) {
-            console.log(
-              "Already boosted — skipping"
-            )
-          } else if (isMegaBoosted) {
-            const { error: megaError } =
-              await supabase.rpc(
-                "mega_boost_listing",
-                {
-                  listing_id: id,
-                  user_id: session.user.id,
-                }
-              )
-
-            if (megaError) {
-              console.warn(
-                "Mega Boost failed:",
-                megaError.message
-              )
-            }
-          } else if (isBoosted) {
-            const { error: boostError } =
-              await supabase.rpc(
-                "boost_listing",
-                {
-                  listing_id: id,
-                  user_id: session.user.id,
-                }
-              )
-
-            if (boostError) {
-              console.warn(
-                "Boost failed:",
-                boostError.message
-              )
-            }
+  try {
+    if (originalBoosted) {
+      console.log(
+        "Already boosted — skipping"
+      )
+    } else if (isBoosted) {
+      const { error: boostError } =
+        await supabase.rpc(
+          "boost_listing",
+          {
+            listing_id: id,
+            user_id: session.user.id,
           }
-        } catch (err) {
-          console.warn("Boost RPC error:", err)
-        }
+        )
+
+      if (boostError) {
+        console.warn(
+          "Boost failed:",
+          boostError.message
+        )
       }
+    }
+  } catch (err) {
+    console.warn("Boost RPC error:", err)
+  }
+}
 
       Alert.alert(
         "Success",
@@ -775,7 +736,6 @@ quantity_available:
   }
   sizes={sizes}
   setSizes={setSizes}
-  isPro={isPro}
 />
 
           <CreateListingShipping
@@ -806,33 +766,28 @@ quantity_available:
 />
 
           <CreateListingBoost
-            selectedBoost={
-              isMegaBoosted
-                ? "mega"
-                : isBoosted
-                ? "boost"
-                : "none"
-            }
-            setSelectedBoost={(val) => {
-              if (
-                originalBoosted ||
-                originalMegaBoosted
-              ) {
-                showAlreadyBoosted()
-                return
-              }
+  selectedBoost={
+    isBoosted
+      ? "boost"
+      : "none"
+  }
+  setSelectedBoost={(val) => {
+    if (originalBoosted) {
+      showAlreadyBoosted()
+      return
+    }
 
-              setIsBoosted(val === "boost")
-              setIsMegaBoosted(val === "mega")
-            }}
-            boostCredits={boostsRemaining}
-            megaCredits={megaBoostsRemaining}
-            onBuyCredits={() =>
-              router.push("/boostcredits")
-            }
-            onPublish={handleUpdateListing}
-            submitting={submitting}
-          />
+    setIsBoosted(
+      val === "boost"
+    )
+  }}
+  boostCredits={boostsRemaining}
+  onBuyCredits={() =>
+    router.push("/boostcredits")
+  }
+  onPublish={handleUpdateListing}
+  submitting={submitting}
+/>
         </ScrollView>
       )}
 

@@ -1,5 +1,11 @@
 import { useFocusEffect, useRouter } from "expo-router"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
 import {
   ActivityIndicator,
   StyleSheet,
@@ -41,6 +47,7 @@ const CASE_CATEGORIES = [
 type ListingRow = {
   id: string
   title: string
+  description?: string | null
   price: number
   category: string
   image_urls: string[] | null
@@ -48,7 +55,6 @@ type ListingRow = {
   shipping_type?: "seller_pays" | "buyer_pays" | null
   user_id?: string
   is_boosted?: boolean | null
-  is_mega_boost?: boolean | null
   created_at?: string
 }
 
@@ -66,7 +72,7 @@ export default function HomeScreen() {
   const [allListings, setAllListings] = useState<ListingRow[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
-  const [scrollOffset, setScrollOffset] = useState(0)
+  const scrollOffsetRef = useRef(0)
 
   const [search, setSearch] = useState("")
   const [showFilters, setShowFilters] = useState(false)
@@ -86,20 +92,13 @@ const [draftMaxPrice, setDraftMaxPrice] = useState("")
   const [hasUnreadNotifications, setHasUnreadNotifications] =
     useState(false)
 
-  const [isPro, setIsPro] = useState(false)
-  const [megaBoostListings, setMegaBoostListings] = useState<Listing[]>([])
+  
   const [page, setPage] = useState(0)
 const PAGE_SIZE = 30
 const [hasMore, setHasMore] = useState(true)
 const [loadingMore, setLoadingMore] = useState(false)
 
-useEffect(() => {
-  const threshold = 1000
 
-  if (scrollOffset > threshold && hasMore && !loadingMore) {
-    loadMoreListings()
-  }
-}, [scrollOffset, hasMore, loadingMore])
 
   const requireAuth = (action?: () => void) => {
     if (!session?.user) {
@@ -159,25 +158,10 @@ useEffect(() => {
         followedSellerIds =
           followsData?.map((f: any) => f.following_id) ?? []
 
-        const { data: proData, error: proErr } = await supabase
-          .from("profiles")
-          .select("is_pro")
-          .eq("id", user.id)
-          .maybeSingle()
-
-        if (proErr) {
-          console.log("[HOME] is_pro fetch error:", proErr.message)
-        }
-
-        setIsPro(proData?.is_pro === true)
-      } else {
-        setIsPro(false)
-      }
-
       const { data, error } = await supabase
         .from("listings")
         .select(
-  "id,title,price,category,image_urls,video_url,shipping_type,user_id,is_boosted,is_mega_boost,created_at"
+  "id,title,description,price,category,image_urls,video_url,shipping_type,user_id,is_boosted,created_at"
 )
         .eq("status", "active")
         .eq("is_sold", false)
@@ -214,9 +198,6 @@ const validRows = mergedAllListings.filter(
     Number(l.price) > 0
 )
 
-const activeMegaBoostRows = validRows.filter(
-  (l) => l.is_mega_boost === true
-)
 
 const boostedRows = validRows.filter(
   (l) => l.is_boosted === true
@@ -293,6 +274,7 @@ while (
 const normalizedListings: Listing[] = orderedRows.map((l) => ({
   id: l.id,
   title: l.title,
+  description: l.description ?? "",
   price: Number(l.price),
   category: l.category ?? "",
   image_url: l.image_urls?.[0] ?? null,
@@ -306,26 +288,10 @@ const uniqueListings = Array.from(
   ).values()
 )
 
-const normalizedMegaBoosts: Listing[] = activeMegaBoostRows.map((l) => ({
-  id: l.id,
-  title: l.title,
-  price: Number(l.price),
-  category: l.category ?? "",
-  image_url: l.image_urls?.[0] ?? null,
-  video_url: l.video_url ?? null, // 🔥 ONLY HERE
-  allow_offers: false,
-  shipping_type: l.shipping_type ?? null,
-}))
 
-const uniqueMegaBoosts = Array.from(
-  new Map(
-    normalizedMegaBoosts.map((item) => [item.id, item])
-  ).values()
-)
 
 if (page === 0) {
   setListings(uniqueListings)
-  setMegaBoostListings(uniqueMegaBoosts)
 } else {
   setListings((prev) =>
     Array.from(
@@ -335,14 +301,9 @@ if (page === 0) {
     )
   )
 
-  setMegaBoostListings((prev) =>
-    Array.from(
-      new Map(
-        [...prev, ...uniqueMegaBoosts].map((item) => [item.id, item])
-      ).values()
-    )
-  )
+  
 }
+      }
     } catch (err) {
       handleAppError(err, {
         fallbackMessage:
@@ -365,7 +326,6 @@ const loadMoreListings = async () => {
   setHasMore(true)
   setAllListings([])
   setListings([])
-  setMegaBoostListings([])
   await loadListings()
   setRefreshing(false)
 }
@@ -454,71 +414,57 @@ const checkUnreadMessages = async () => {
 }
 
   const filteredListings = useMemo(() => {
-  // 🔥 normalize both sources into same shape
-  let result: any[] =
-    activeCategory === "all"
-      ? [...listings]
-      : allListings.map((l) => ({
-          id: l.id,
-          title: l.title,
-          price: Number(l.price),
-          category: l.category ?? "",
-          image_url: l.image_urls?.[0] ?? null,
-          allow_offers: false,
-          shipping_type: l.shipping_type ?? null,
-          is_mega_boost: l.is_mega_boost ?? false,
-        }))
+  const source =
+    search.trim() || activeCategory !== "all" || minPrice.trim() || maxPrice.trim()
+      ? allListings
+      : listings
 
-  // 🔥 SEARCH
+  let result: any[] = source.map((l: any) => ({
+    id: l.id,
+    title: l.title,
+    description: l.description ?? "",
+    price: Number(l.price),
+    category: l.category ?? "",
+    image_url: l.image_url ?? l.image_urls?.[0] ?? null,
+    allow_offers: false,
+    shipping_type: l.shipping_type ?? null,
+  }))
+
   if (search.trim()) {
     const q = search.toLowerCase().trim()
 
     result = result.filter((l) => {
       const title = (l.title ?? "").toLowerCase()
+      const description = (l.description ?? "").toLowerCase()
       const category = (l.category ?? "").toLowerCase()
 
-      return title.includes(q) || category.includes(q)
+      return (
+        title.includes(q) ||
+        description.includes(q) ||
+        category.includes(q)
+      )
     })
   }
 
-  // 🔥 PRICE FILTERS
   if (minPrice.trim()) {
     const min = parseFloat(minPrice)
-
     if (!isNaN(min)) {
-      result = result.filter(
-        (l) => Number(l.price) >= min
-      )
+      result = result.filter((l) => Number(l.price) >= min)
     }
   }
 
   if (maxPrice.trim()) {
     const max = parseFloat(maxPrice)
-
     if (!isNaN(max)) {
-      result = result.filter(
-        (l) => Number(l.price) <= max
-      )
+      result = result.filter((l) => Number(l.price) <= max)
     }
   }
 
-  // 🔥 CATEGORY FILTER
   if (activeCategory !== "all") {
-    const active = (activeCategory ?? "").toLowerCase()
-
-    result = result.filter((l) => {
-      const cat = (l.category ?? "").toLowerCase()
-      return cat === active
-    })
-  }
-
-  // 🔥 SORT BOOSTS (AFTER filtering)
-  if (activeCategory !== "all") {
-    result.sort((a, b) => {
-      if (b.is_mega_boost && !a.is_mega_boost) return 1
-      if (!b.is_mega_boost && a.is_mega_boost) return -1
-      return 0
-    })
+    const active = String(activeCategory).toLowerCase()
+    result = result.filter(
+      (l) => String(l.category ?? "").toLowerCase() === active
+    )
   }
 
   return result
@@ -627,17 +573,14 @@ onMessagesPress={() =>
     )}
 
     <ListingsGrid
-     key={activeCategory}
+  key={`${activeCategory}-${search}`}
   listings={filteredListings}
   refreshing={refreshing}
   onRefresh={refreshListings}
-  showUpgradeRow={!isPro}
-  megaBoostListings={
-    activeCategory === "all"
-      ? megaBoostListings
-      : [] // 🚨 THIS IS THE FIX
-  }
-  onScrollOffsetChange={setScrollOffset}
+  onScrollOffsetChange={(y) => {
+    scrollOffsetRef.current = y
+  }}
+  onEndReached={loadMoreListings}
 />
 
     {loadingMore && (

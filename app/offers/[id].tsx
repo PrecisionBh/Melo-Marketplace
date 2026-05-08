@@ -167,7 +167,7 @@ const showTimer =
     ).toFixed(2)
   )
 
-  const sellerFeeRate = isSellerPro ? 0.01 : 0.05
+  const sellerFeeRate = 0.01
 
 const sellerFee = Number(
   (

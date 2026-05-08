@@ -32,14 +32,11 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
-  View,
+  View
 } from "react-native"
 
 type ProfileRow = {
-  is_pro: boolean | null
   boosts_remaining: number | null
-  mega_boosts_remaining?: number | null
 }
 
 type SelectorOption = {
@@ -182,12 +179,10 @@ useEffect(() => {
   const [showConditionModal, setShowConditionModal] = useState(false)
 
   const [isBoosted, setIsBoosted] = useState(false)
-  const [isMegaBoosted, setIsMegaBoosted] = useState(false)
 
   const [quantity, setQuantity] = useState("1")
   const [size, setSize] = useState<string | null>(null)
   const [boostsRemaining, setBoostsRemaining] = useState<number>(0)
-  const [megaBoostsRemaining, setMegaBoostsRemaining] = useState<number>(0)
 
 const [shippingType, setShippingType] = useState<"seller_pays" | "buyer_pays">("seller_pays")
 const [weight, setWeight] = useState("")
@@ -210,10 +205,6 @@ const [height, setHeight] = useState("")
   const [checkingAddress, setCheckingAddress] = useState(true)
   const [hasReturnAddress, setHasReturnAddress] = useState(false)
   const [showAddressModal, setShowAddressModal] = useState(false)
-
-  const [checkingPro, setCheckingPro] = useState(true)
-  const [isPro, setIsPro] = useState<boolean>(false)
-  const [showLimitModal, setShowLimitModal] = useState(false)
   const { duplicate, data } = useLocalSearchParams()
 
   useEffect(() => {
@@ -470,32 +461,16 @@ const handleCreateListing = async () => {
   try {
     setSubmitting(true)
 
-    // 🔒 FREE PLAN GUARD
-    if (!isPro) {
-      const { count, error: countError } = await supabase
-        .from("listings")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", session.user.id)
-        .eq("status", "active")
-        .eq("is_sold", false)
-
-      if (countError) throw countError
-
-      if ((count ?? 0) >= 50) {
-        setShowLimitModal(true)
-        setSubmitting(false)
-        return
-      }
-    }
-
     const parsedPrice = parseFloat(price)
     const parsedMinOffer = minOffer ? parseFloat(minOffer) : null
     const parsedShippingPrice = shippingPrice ? parseFloat(shippingPrice) : 0
 
-    const rawQty = parseInt(quantity, 10)
-    const safeQuantity = isPro
-      ? Math.max(1, Number.isFinite(rawQty) ? rawQty : 1)
-      : 1
+        const rawQty = parseInt(quantity, 10)
+
+    const safeQuantity = Math.max(
+      1,
+      Number.isFinite(rawQty) ? rawQty : 1
+    )
 
       if (!title.trim() || !category || !condition || images.length === 0) {
   Alert.alert(
@@ -692,26 +667,15 @@ if (error) throw error
 
    /* ---------------- BOOST LOGIC ---------------- */
 
-if (data?.id) {
+if (data?.id && isBoosted) {
   try {
-    if (isMegaBoosted) {
-      const { error: megaError } = await supabase.rpc("mega_boost_listing", {
-        listing_id: data.id,
-        user_id: session.user.id,
-      })
+    const { error: boostError } = await supabase.rpc("boost_listing", {
+      listing_id: data.id,
+      user_id: session.user.id,
+    })
 
-      if (megaError) {
-        console.warn("Mega Boost failed:", megaError.message)
-      }
-    } else if (isBoosted) {
-      const { error: boostError } = await supabase.rpc("boost_listing", {
-        listing_id: data.id,
-        user_id: session.user.id,
-      })
-
-      if (boostError) {
-        console.warn("Boost failed:", boostError.message)
-      }
+    if (boostError) {
+      console.warn("Boost failed:", boostError.message)
     }
   } catch (err) {
     console.warn("Boost RPC error:", err)
@@ -735,13 +699,11 @@ useCallback(() => {
   const loadGuards = async () => {
     if (!session?.user) {
       setCheckingAddress(false)
-      setCheckingPro(false)
       return
     }
 
     try {
       setCheckingAddress(true)
-      setCheckingPro(true)
 
       const { data: profileAddress, error: addressError } = await supabase
   .from("profiles")
@@ -764,7 +726,7 @@ setShowAddressModal(!hasAddress)
 
 const { data: profile, error: profileError } = await supabase
   .from("profiles")
-  .select("is_pro, boosts_remaining, mega_boosts_remaining")
+  .select("boosts_remaining")
   .eq("id", session.user.id)
   .single<ProfileRow>()
 
@@ -772,12 +734,9 @@ if (profileError) {
   console.error("❌ Failed fetching profile", profileError)
 }
 
-setIsPro(Boolean(profile?.is_pro))
 setBoostsRemaining(profile?.boosts_remaining ?? 0)
-setMegaBoostsRemaining(profile?.mega_boosts_remaining ?? 0)
     } finally {
       setCheckingAddress(false)
-      setCheckingPro(false)
     }
   }
 
@@ -847,7 +806,6 @@ return (
             onPressCondition={() => setShowConditionModal(true)}
             sizes={sizes}
             setSizes={setSizes}
-            isPro={isPro}
           />
 
           <CreateListingShipping
@@ -878,19 +836,23 @@ return (
 />
 
           <CreateListingBoost
-            selectedBoost={
-              isMegaBoosted ? "mega" : isBoosted ? "boost" : "none"
-            }
-            setSelectedBoost={(val) => {
-              setIsBoosted(val === "boost")
-              setIsMegaBoosted(val === "mega")
-            }}
-            boostCredits={boostsRemaining}
-            megaCredits={megaBoostsRemaining}
-            onBuyCredits={() => router.push("/boostcredits")}
-            onPublish={handleCreateListing}
-            submitting={submitting}
-          />
+  selectedBoost={
+    isBoosted
+      ? "boost"
+      : "none"
+  }
+  setSelectedBoost={(val) => {
+    setIsBoosted(
+      val === "boost"
+    )
+  }}
+  boostCredits={boostsRemaining}
+  onBuyCredits={() =>
+    router.push("/boostcredits")
+  }
+  onPublish={handleCreateListing}
+  submitting={submitting}
+/>
         </>
       )}
 
@@ -955,37 +917,6 @@ return (
     }}
     onClose={() => setShowSubcategoryModal(false)}
   />
-
-  <Modal visible={showLimitModal} transparent animationType="fade">
-    <View style={styles.modalOverlay}>
-      <View style={styles.modalCard}>
-        <Text style={styles.modalTitle}>
-          You have reached your free plan limit
-        </Text>
-
-        <Text style={styles.modalText}>
-          Free accounts can have up to 50 active listings.
-          Upgrade to Melo Pro to unlock unlimited listings and more Pro features.
-        </Text>
-
-        <TouchableOpacity
-          style={styles.upgradeButton}
-          onPress={() => {
-            setShowLimitModal(false)
-            router.push("/melo-pro")
-          }}
-        >
-          <Text style={styles.upgradeButtonText}>
-            Upgrade to Pro
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity onPress={() => setShowLimitModal(false)}>
-          <Text style={styles.laterText}>Maybe Later</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  </Modal>
 
   <ReturnAddressRequiredModal
     visible={showAddressModal}

@@ -49,6 +49,7 @@ type Listing = {
   sizes: ListingSize[] | null
   quantity_available: number
   status: string
+  is_sold?: boolean
   subcategory?: string | null
   sku?: string | null
   
@@ -158,7 +159,8 @@ const [offerMessage, setOfferMessage] =
           quantity_available,
           sizes,
           subcategory,
-          status
+          status,
+          is_sold
         `
         )
         .eq("id", id)
@@ -172,6 +174,14 @@ const [offerMessage, setOfferMessage] =
 
 console.log("RAW image_urls:", data.image_urls)
 console.log("RAW video_url:", data.video_url)
+
+// 🔥 INCREMENT VIEWS
+await supabase.rpc(
+  "increment_listing_views",
+  {
+    listing_id_input: id,
+  }
+)
 
     } catch (err) {
       handleAppError(err, {
@@ -817,6 +827,12 @@ const deleteListing = () => {
     ]
   )
 }
+
+const isUnavailable =
+  listing?.is_sold === true ||
+  listing?.status !== "active" ||
+  Number(listing?.quantity_available ?? 0) <= 0
+  
 // 🔥 SAFE CALCULATIONS (MUST BE ABOVE RETURNS)
 const isSeller =
   session?.user?.id === listing?.user_id
@@ -903,7 +919,7 @@ const maxPurchaseQuantity = isApparel
   description={listing.description}
 />
 
-       {isSeller ? (
+      {isSeller ? (
   <OwnerListingActions
     isActive={listing.status === "active"}
     onEdit={() =>
@@ -921,6 +937,22 @@ const maxPurchaseQuantity = isApparel
       deleteListing()
     }
   />
+) : isUnavailable ? (
+  <View style={styles.unavailableCard}>
+    <Ionicons
+      name="lock-closed-outline"
+      size={22}
+      color="#6B7280"
+    />
+
+    <Text style={styles.unavailableTitle}>
+      This listing is no longer available
+    </Text>
+
+    <Text style={styles.unavailableSub}>
+      This item may have already sold or been removed by the seller.
+    </Text>
+  </View>
 ) : (
   <ListingPurchaseActions
     isSeller={false}
@@ -928,12 +960,16 @@ const maxPurchaseQuantity = isApparel
     quantity={quantity}
     setQuantity={setQuantity}
     maxQuantity={maxPurchaseQuantity}
-sizes={Array.isArray(listing.sizes) ? listing.sizes : []}
-selectedSize={selectedSize}
-setSelectedSize={(val) => {
-  setSelectedSize(val)
-  setQuantity(1)
-}}
+    sizes={
+      Array.isArray(listing.sizes)
+        ? listing.sizes
+        : []
+    }
+    selectedSize={selectedSize}
+    setSelectedSize={(val) => {
+      setSelectedSize(val)
+      setQuantity(1)
+    }}
     following={following}
     onToggleFollow={toggleFollow}
     offerAmount={offerAmount}
@@ -1037,6 +1073,44 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#111",
   },
+
+  unavailableCard: {
+  backgroundColor: "#FFFFFF",
+  marginHorizontal: 16,
+  marginTop: 14,
+
+  borderRadius: 18,
+
+  borderWidth: 1,
+  borderColor: "#E5E7EB",
+
+  paddingVertical: 24,
+  paddingHorizontal: 18,
+
+  alignItems: "center",
+},
+
+unavailableTitle: {
+  marginTop: 10,
+
+  fontSize: 15,
+  fontWeight: "800",
+
+  color: "#111827",
+
+  textAlign: "center",
+},
+
+unavailableSub: {
+  marginTop: 6,
+
+  fontSize: 13,
+  lineHeight: 20,
+
+  color: "#6B7280",
+
+  textAlign: "center",
+},
 
   authOverlay: {
     position: "absolute",

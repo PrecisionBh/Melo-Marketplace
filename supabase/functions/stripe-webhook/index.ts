@@ -120,46 +120,27 @@ if (!Array.isArray(params) && typeof amountTotal === "number") {
   const escrowAmountCents =
     order.item_price_cents + (order.shipping_amount_cents ?? 0)
 
-  // 🔥 Fetch seller Pro status (DO NOT change escrow math)
-const { data: sellerProfile, error: sellerErr } = await supabase
-  .from("profiles")
-  .select("is_pro")
-  .eq("id", order.seller_id)
-  .single()
 
-if (sellerErr) {
-  console.error("❌ Failed to fetch seller profile for fee calc:", sellerErr)
-  throw new Error("Seller profile fetch failed")
-}
+// 🎯 Global Melo seller fee
+// Everyone pays 1%
 
-// 🎯 Dynamic Melo seller fee
-// Pro = 1%
-// Free = 5%
-// (Fee applies to item + shipping as per your architecture)
-const isProSeller = sellerProfile?.is_pro === true
-const sellerFeeRate = isProSeller ? 0.01 : 0.05
+const sellerFeeRate = 0.01
 
-const sellerFeeCents = Math.round(escrowAmountCents * sellerFeeRate)
-const sellerNetCents = escrowAmountCents - sellerFeeCents
+const sellerFeeCents = Math.round(
+  escrowAmountCents * sellerFeeRate
+)
 
-console.log("💰 Dynamic seller fee applied", {
+const sellerNetCents =
+  escrowAmountCents - sellerFeeCents
+
+console.log("💰 Global 1% seller fee applied", {
   orderId,
   seller_id: order.seller_id,
-  is_pro: isProSeller,
   fee_rate: sellerFeeRate,
   escrow_amount_cents: escrowAmountCents,
   seller_fee_cents: sellerFeeCents,
   seller_net_cents: sellerNetCents,
 })
-
-  console.log("🧮 Escrow calculation (fee includes shipping, excludes tax)", {
-    orderId,
-    item_price_cents: order.item_price_cents,
-    shipping_amount_cents: order.shipping_amount_cents ?? 0,
-    escrow_amount_cents: escrowAmountCents,
-    seller_fee_cents: sellerFeeCents,
-    seller_net_cents: sellerNetCents,
-  })
 
   const { error: updateErr } = await supabase
     .from("orders")

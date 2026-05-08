@@ -10,10 +10,10 @@ import { supabase } from "@/lib/supabase"
 import { useRouter } from "expo-router"
 import { useEffect, useState } from "react"
 import {
-    ScrollView,
-    StyleSheet,
-    Text,
-    View,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from "react-native"
 import Purchases from "react-native-purchases"
 
@@ -22,52 +22,32 @@ type Pack = {
   title: string
   subtitle: string
   badge?: string
-  accent?: "boost" | "mega"
+  accent?: "boost"
 }
 
 const BOOST_PACKS: Pack[] = [
   {
     id: "boost_pack_3",
-    title: "Starter Pack",
-    subtitle: "3 Boosts • 7 days each",
+    title: "Get Seen Faster",
+    subtitle:
+      "3 Listing Boosts • Push your items higher in the feed for 7 full days each.",
     accent: "boost",
   },
+
   {
     id: "boost_pack_10",
-    title: "Growth Pack",
-    subtitle: "10 Boosts • 7 days each",
-    badge: "Most Popular",
+    title: "Seller Growth Pack",
+    subtitle:
+      "10 Listing Boosts • Great for active sellers wanting more profile traffic, likes, and buyers.",
     accent: "boost",
   },
+
   {
     id: "boost_pack_25",
-    title: "Power Pack",
-    subtitle: "25 Boosts • 7 days each",
-    badge: "Best Value",
+    title: "Full Store Exposure",
+    subtitle:
+      "25 Listing Boosts • Keep your inventory constantly circulating through the marketplace feed.",
     accent: "boost",
-  },
-]
-
-const MEGA_PACKS: Pack[] = [
-  {
-    id: "mega_boost_1",
-    title: "Mega Boost",
-    subtitle: "1 Mega • 14 days",
-    accent: "mega",
-  },
-  {
-    id: "mega_boost_3",
-    title: "Mega Pack",
-    subtitle: "3 Megas • 14 days each",
-    badge: "Most Popular",
-    accent: "mega",
-  },
-  {
-    id: "mega_boost_8",
-    title: "Mega Pro Pack",
-    subtitle: "8 Megas • 14 days each",
-    badge: "Best Value",
-    accent: "mega",
   },
 ]
 
@@ -235,7 +215,7 @@ export default function BoostCreditsScreen() {
           }
         />
 
-        {[...BOOST_PACKS, ...MEGA_PACKS].map(
+        {BOOST_PACKS.map(
           (pack) => (
             <BoostPackCard
               key={pack.id}
@@ -254,18 +234,32 @@ export default function BoostCreditsScreen() {
         )}
 
         <View style={styles.refundNotice}>
-          <Text style={styles.refundTitle}>
-            Boost Protection Included
-          </Text>
+  <Text style={styles.refundTitle}>
+    🚀 Why Sellers Use Boosts
+  </Text>
 
-          <Text style={styles.refundText}>
-            All boost credits are refunded
-            back to your account if the
-            boosted listing does not sell
-            during the boost period.
-            Reuse them until the item sells.
-          </Text>
-        </View>
+  <Text style={styles.refundText}>
+    Boosted listings are shown higher in
+    the marketplace feed, helping more
+    buyers discover your items faster.
+    Great for limited drops, high-value
+    items, or listings that deserve more
+    visibility.
+  </Text>
+
+  <View style={styles.divider} />
+
+  <Text style={styles.refundTitle}>
+    ♻️ Boost Protection
+  </Text>
+
+  <Text style={styles.refundText}>
+    If your boosted listing does not sell
+    during the boost period, your boost
+    credit is automatically returned to
+    your account so you can use it again.
+  </Text>
+</View>
       </ScrollView>
 
       <GlobalFooter />
@@ -307,6 +301,12 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     padding: 18,
   },
+
+  divider: {
+  height: 1,
+  backgroundColor: "#FED7AA",
+  marginVertical: 14,
+},
 
   refundTitle: {
     fontSize: 15,

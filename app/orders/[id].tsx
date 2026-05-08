@@ -11,6 +11,7 @@ import SellerShippingActions from "@/components/orders/SellerShippingActions"
 import ShippingRatesModal from "@/components/orders/ShippingRatesModal"
 import TrackPackageButton from "@/components/orders/TrackPackageButton"
 import VoidLabelModal from "@/components/orders/VoidLabelModal"
+import OrderButtons from "@/components/orders/orderbuttons"
 
 import { useAuth } from "@/context/AuthContext"
 import { handleAppError } from "@/lib/errors/appError"
@@ -633,6 +634,7 @@ return (
 
     <ScrollView contentContainerStyle={styles.content}>
       <OrderSummaryCard order={order} />
+      <OrderButtons order={order} />
 
       {isSeller && order.listing_snapshot?.sku && (
   <View style={styles.skuCard}>
