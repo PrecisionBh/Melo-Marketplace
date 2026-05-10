@@ -372,18 +372,42 @@ setSellerAvatar(data?.avatar_url ?? null)
         setLiked(false)
         setLikesCount((c) => Math.max(0, c - 1))
       } else {
-        const { error } = await supabase
-          .from("watchlist")
-          .insert({
-            listing_id: listing.id,
-            user_id: session.user.id,
-          })
+  const { error } = await supabase
+    .from("watchlist")
+    .insert({
+      listing_id: listing.id,
+      user_id: session.user.id,
+    })
 
-        if (error) throw error
+  if (error) throw error
 
-        setLiked(true)
-        setLikesCount((c) => c + 1)
+  setLiked(true)
+  setLikesCount((c) => c + 1)
+
+  // 🔔 SEND LIKE NOTIFICATION
+  if (listing.user_id !== session.user.id) {
+    await supabase.functions.invoke(
+      "send-notification",
+      {
+        body: {
+          userId: listing.user_id,
+          type: "listing_like",
+          title: "New Like ❤️",
+          body: `${
+            session.user.user_metadata
+              ?.display_name || "Someone"
+          } liked your post`,
+          data: {
+            route: "/listing/[id]",
+            params: {
+              id: listing.id,
+            },
+          },
+        },
       }
+    )
+  }
+}
     } catch (err) {
       handleAppError(err, {
         fallbackMessage:

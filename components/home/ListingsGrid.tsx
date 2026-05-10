@@ -159,7 +159,7 @@ export default function ListingsGrid({
 
       showsVerticalScrollIndicator={false}
 
-      initialNumToRender={20}
+      initialNumToRender={30}
 
       maxToRenderPerBatch={12}
 
