@@ -3,15 +3,16 @@ import GlobalHeader from "@/components/global/globalheader"
 
 import AddTrackingModal from "@/components/orders/AddTrackingModal"
 import BuyerActions from "@/components/orders/BuyerActions"
+import OrderButtons from "@/components/orders/orderbuttons"
 import OrderStepIndicator from "@/components/orders/OrderStepIndicator"
 import OrderSummaryCard from "@/components/orders/OrderSummaryCard"
+import Receipt from "@/components/orders/receipt"
 import ReturnActions from "@/components/orders/ReturnActions"
 import ReturnStepIndicator from "@/components/orders/ReturnStepIndicator"
 import SellerShippingActions from "@/components/orders/SellerShippingActions"
 import ShippingRatesModal from "@/components/orders/ShippingRatesModal"
 import TrackPackageButton from "@/components/orders/TrackPackageButton"
 import VoidLabelModal from "@/components/orders/VoidLabelModal"
-import OrderButtons from "@/components/orders/orderbuttons"
 
 import { useAuth } from "@/context/AuthContext"
 import { handleAppError } from "@/lib/errors/appError"
@@ -92,34 +93,64 @@ const [showReturnForm, setShowReturnForm] =
   }, [id])
 
   /* ------------------------------------------------ */
-  /* ---------------- LOAD ORDER --------------------- */
-  /* ------------------------------------------------ */
+ /* ---------------- LOAD ORDER --------------------- */
+/* ------------------------------------------------ */
 
-  const loadOrder = async () => {
-    try {
-      setLoading(true)
+const loadOrder = async () => {
+  try {
+    setLoading(true)
 
-      const { data, error } = await supabase
-        .from("orders")
-        .select("*")
-        .eq("id", id)
-        .single()
+    const { data, error } = await supabase
+      .from("orders")
+      .select("*")
+      .eq("id", id)
+      .single()
 
-      if (error) throw error
+    if (error) throw error
 
-      setOrder(data)
-      setCarrier(data.carrier ?? "")
-      setTracking(data.tracking_number ?? "")
-    } catch (err) {
-      handleAppError(err, {
-        fallbackMessage: "Failed to load order.",
-      })
-    } finally {
-      setLoading(false)
+    let sellerProfile = null
+
+    if (data?.seller_id) {
+      const { data: sellerData } =
+        await supabase
+          .from("profiles")
+          .select(`
+            shipping_name,
+            address_line1,
+            address_line2,
+            city,
+            state,
+            postal_code,
+            country
+          `)
+          .eq("id", data.seller_id)
+          .single()
+
+      sellerProfile = sellerData
     }
-  }
 
-  /* ------------------------------------------------ */
+    const mergedOrder = {
+      ...data,
+      seller: sellerProfile,
+    }
+
+    setOrder(mergedOrder)
+
+    setCarrier(data.carrier ?? "")
+    setTracking(
+      data.tracking_number ?? ""
+    )
+  } catch (err) {
+    handleAppError(err, {
+      fallbackMessage:
+        "Failed to load order.",
+    })
+  } finally {
+    setLoading(false)
+  }
+}
+
+/* ------------------------------------------------ */
 /* ------------ SELLER SHIPPING ACTIONS ----------- */
 /* ------------------------------------------------ */
 
@@ -771,6 +802,13 @@ return (
           }}
         />
       )}
+
+      <Receipt
+  order={order}
+  currentUserId={session?.user?.id}
+/>
+
+      
     </ScrollView>
 
     <AddTrackingModal

@@ -1,5 +1,12 @@
 import { useRouter } from "expo-router"
-import { useEffect, useMemo, useRef } from "react"
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+} from "react"
+
 import {
   FlatList,
   NativeScrollEvent,
@@ -26,18 +33,10 @@ type GridRowItem = {
   listings: Listing[]
 }
 
-function shuffleArray<T>(array: T[]): T[] {
-  const copy = [...array]
+const NUM_COLUMNS = 3
+const ROW_HEIGHT = 210
 
-  for (let i = copy.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
-    ;[copy[i], copy[j]] = [copy[j], copy[i]]
-  }
-
-  return copy
-}
-
-export default function ListingsGrid({
+function ListingsGrid({
   listings,
   refreshing,
   onRefresh,
@@ -53,43 +52,14 @@ export default function ListingsGrid({
   const hasRestoredScroll =
     useRef(false)
 
-  const NUM_COLUMNS = 3
+  /* ---------------- NAVIGATION ---------------- */
 
-  /* ---------------- STABLE SHUFFLE ---------------- */
-
-  const shuffledRef = useRef<Listing[]>([])
-
-  const shuffledListings = useMemo(() => {
-    // 🔥 INITIAL LOAD
-    if (shuffledRef.current.length === 0) {
-      shuffledRef.current =
-        shuffleArray(listings)
-
-      return shuffledRef.current
-    }
-
-    // 🔥 EXISTING IDS
-    const existingIds = new Set(
-      shuffledRef.current.map((l) => l.id)
-    )
-
-    // 🔥 ONLY NEW ITEMS
-    const newItems = listings.filter(
-      (l) => !existingIds.has(l.id)
-    )
-
-    if (newItems.length > 0) {
-      const shuffledNew =
-        shuffleArray(newItems)
-
-      shuffledRef.current = [
-        ...shuffledRef.current,
-        ...shuffledNew,
-      ]
-    }
-
-    return shuffledRef.current
-  }, [listings])
+  const handlePress = useCallback(
+    (id: string) => {
+      router.push(`/listing/${id}`)
+    },
+    [router]
+  )
 
   /* ---------------- BUILD ROWS ---------------- */
 
@@ -100,23 +70,21 @@ export default function ListingsGrid({
 
     for (
       let i = 0;
-      i < shuffledListings.length;
+      i < listings.length;
       i += NUM_COLUMNS
     ) {
-      const chunk = shuffledListings.slice(
-        i,
-        i + NUM_COLUMNS
-      )
-
       builtRows.push({
         type: "row",
         id: `row-${rowIndex++}`,
-        listings: chunk,
+        listings: listings.slice(
+          i,
+          i + NUM_COLUMNS
+        ),
       })
     }
 
     return builtRows
-  }, [shuffledListings])
+  }, [listings])
 
   /* ---------------- RESTORE SCROLL ---------------- */
 
@@ -143,47 +111,96 @@ export default function ListingsGrid({
     return () => clearTimeout(timeout)
   }, [rows.length, initialScrollOffset])
 
+  /* ---------------- RENDER ROW ---------------- */
+
+  const renderRow = useCallback(
+    ({
+      item,
+    }: {
+      item: GridRowItem
+    }) => {
+      try {
+        return (
+          <View style={styles.row}>
+            {item.listings.map(
+              (l, index) => (
+                <View
+                  key={l.id}
+                  style={[
+                    styles.cardWrap,
+                    index !==
+                      NUM_COLUMNS - 1 && {
+                      marginRight: 4,
+                    },
+                  ]}
+                >
+                  <ListingCard
+                    listing={l}
+                    onPress={() =>
+                      handlePress(l.id)
+                    }
+                  />
+                </View>
+              )
+            )}
+
+            {item.listings.length <
+            NUM_COLUMNS
+              ? Array.from({
+                  length:
+                    NUM_COLUMNS -
+                    item.listings.length,
+                }).map((_, idx) => (
+                  <View
+                    key={idx}
+                    style={styles.cardWrap}
+                  />
+                ))
+              : null}
+          </View>
+        )
+      } catch (err) {
+        console.log(
+          "❌ ListingsGrid render error:",
+          err
+        )
+
+        return null
+      }
+    },
+    [handlePress]
+  )
+
   /* ---------------- RENDER ---------------- */
 
   return (
     <FlatList
       ref={flatListRef}
-
       data={rows}
-
-      extraData={rows.length}
-
+      renderItem={renderRow}
       keyExtractor={(item) => item.id}
-
-      contentContainerStyle={styles.grid}
-
       showsVerticalScrollIndicator={false}
-
-      initialNumToRender={30}
-
-      maxToRenderPerBatch={12}
-
-      windowSize={15}
-
-      removeClippedSubviews={true}
-
+      contentContainerStyle={styles.grid}
       scrollEventThrottle={16}
-
-      onEndReached={() => {
-        onEndReached?.()
-      }}
-
+      initialNumToRender={6}
+      maxToRenderPerBatch={4}
+      windowSize={5}
+      updateCellsBatchingPeriod={50}
+      removeClippedSubviews={false}
       onEndReachedThreshold={0.7}
-
+      onEndReached={onEndReached}
+      getItemLayout={(_, index) => ({
+        length: ROW_HEIGHT,
+        offset: ROW_HEIGHT * index,
+        index,
+      })}
       onScroll={(
         e: NativeSyntheticEvent<NativeScrollEvent>
       ) => {
-        const y =
+        onScrollOffsetChange?.(
           e.nativeEvent.contentOffset.y
-
-        onScrollOffsetChange?.(y)
+        )
       }}
-
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
@@ -191,65 +208,11 @@ export default function ListingsGrid({
           tintColor="#0F1E17"
         />
       }
-
-      renderItem={({ item }) => {
-        try {
-          return (
-            <View style={styles.row}>
-              {item.listings.map(
-                (l, index) => (
-                  <View
-                    key={l.id}
-                    style={[
-                      styles.cardWrap,
-                      {
-                        marginRight:
-                          index !==
-                          NUM_COLUMNS - 1
-                            ? 4
-                            : 0,
-                      },
-                    ]}
-                  >
-                    <ListingCard
-                      listing={l}
-                      onPress={() =>
-                        router.push(
-                          `/listing/${l.id}`
-                        )
-                      }
-                    />
-                  </View>
-                )
-              )}
-
-              {item.listings.length <
-              NUM_COLUMNS
-                ? Array.from({
-                    length:
-                      NUM_COLUMNS -
-                      item.listings.length,
-                  }).map((_, idx) => (
-                    <View
-                      key={idx}
-                      style={styles.cardWrap}
-                    />
-                  ))
-                : null}
-            </View>
-          )
-        } catch (err) {
-          console.log(
-            "❌ ListingsGrid render error:",
-            err
-          )
-
-          return null
-        }
-      }}
     />
   )
 }
+
+export default memo(ListingsGrid)
 
 const styles = StyleSheet.create({
   grid: {

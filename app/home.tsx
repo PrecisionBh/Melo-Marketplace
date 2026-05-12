@@ -94,7 +94,7 @@ const [draftMaxPrice, setDraftMaxPrice] = useState("")
 
   
   const [page, setPage] = useState(0)
-const PAGE_SIZE = 30
+const PAGE_SIZE = 18
 const [hasMore, setHasMore] = useState(true)
 const [loadingMore, setLoadingMore] = useState(false)
 
@@ -115,18 +115,20 @@ const [loadingMore, setLoadingMore] = useState(false)
 
   /* ---------------- LOAD DATA ---------------- */
 
-  useFocusEffect(
-    useCallback(() => {
-      if (listings.length === 0) {
-        loadListings()
-      }
+useFocusEffect(
+  useCallback(() => {
+    checkUnreadMessages()
+    checkUnreadNotifications()
+  }, [])
+)
 
-      checkUnreadMessages()
-      checkUnreadNotifications()
-    }, [listings.length])
-  )
+useEffect(() => {
+  if (listings.length === 0) {
+    loadListings()
+  }
+}, [])
 
-  useEffect(() => {
+useEffect(() => {
   if (page === 0) return
 
   const fetchMore = async () => {
@@ -157,11 +159,13 @@ const [loadingMore, setLoadingMore] = useState(false)
 
         followedSellerIds =
           followsData?.map((f: any) => f.following_id) ?? []
+      }
+      
 
           const { data: boostedData } = await supabase
   .from("listings")
   .select(
-    "id,title,description,price,category,image_urls,video_url,shipping_type,user_id,is_boosted,created_at"
+    "id,title,description,price,category,image_urls,shipping_type,user_id,is_boosted,created_at"
   )
   .eq("status", "active")
   .eq("is_sold", false)
@@ -171,7 +175,7 @@ const [loadingMore, setLoadingMore] = useState(false)
       const { data, error } = await supabase
         .from("listings")
         .select(
-  "id,title,description,price,category,image_urls,video_url,shipping_type,user_id,is_boosted,created_at"
+  "id,title,description,price,category,image_urls,shipping_type,user_id,is_boosted,created_at"
 )
         .eq("status", "active")
         .eq("is_sold", false)
@@ -182,21 +186,32 @@ const [loadingMore, setLoadingMore] = useState(false)
 
       if (error) throw error
 
-      const rows = [
-  ...((boostedData ?? []) as ListingRow[]),
-  ...((data ?? []) as ListingRow[]),
-]
+      const rows =
+  page === 0
+    ? [
+        ...((boostedData ?? []) as ListingRow[]),
+        ...((data ?? []) as ListingRow[]),
+      ]
+    : ((data ?? []) as ListingRow[])
 
-const mergedAllListings =
+const merged =
   page === 0
     ? rows
     : Array.from(
         new Map(
-          [...allListings, ...rows].map((item) => [item.id, item])
+          [...allListings, ...rows].map((item) => [
+            item.id,
+            item,
+          ])
         ).values()
       )
 
-setAllListings(mergedAllListings)
+setAllListings(merged)
+
+console.log(
+  "📦 mergedAllListings:",
+  merged.length
+)
 
 if (rows.length < PAGE_SIZE) {
   setHasMore(false)
@@ -204,7 +219,8 @@ if (rows.length < PAGE_SIZE) {
   setHasMore(true)
 }
 
-const validRows = mergedAllListings.filter(
+
+const validRows = merged.filter(
   (l) =>
     Array.isArray(l.image_urls) &&
     l.image_urls.length > 0 &&
@@ -212,163 +228,148 @@ const validRows = mergedAllListings.filter(
     Number(l.price) > 0
 )
 
+console.log("✅ validRows:", validRows.length)
 
 const shuffle = (array: ListingRow[]) => {
-  return [...array].sort(() => Math.random() - 0.5)
+  const copy = [...array]
+
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[copy[i], copy[j]] = [copy[j], copy[i]]
+  }
+
+  return copy
 }
 
-/* ---------------- BUCKETS ---------------- */
+/* ---------------- BUILD FINAL FEED ---------------- */
 
-const boostedRows = shuffle(
-  validRows.filter((l) => l.is_boosted === true)
-)
+let finalRows: ListingRow[] = []
 
-const followedRows = shuffle(
-  validRows.filter(
-    (l) =>
-      !l.is_boosted &&
-      followedSellerIds.includes(l.user_id ?? "")
+if (page === 0) {
+  const boostedRows = shuffle(
+    validRows.filter((l) => l.is_boosted === true)
   )
-)
 
-const normalRows = shuffle(
-  validRows.filter(
-    (l) =>
-      !l.is_boosted &&
-      !followedSellerIds.includes(l.user_id ?? "")
+  const followedRows = shuffle(
+    validRows.filter(
+      (l) =>
+        !l.is_boosted &&
+        followedSellerIds.includes(l.user_id ?? "")
+    )
   )
-)
 
-/* ---------------- FEED BUILD ---------------- */
+  const normalRows = shuffle(
+    validRows.filter(
+      (l) =>
+        !l.is_boosted &&
+        !followedSellerIds.includes(l.user_id ?? "")
+    )
+  )
 
-const orderedRows: ListingRow[] = []
+  const orderedRows: ListingRow[] = []
 
-let bIndex = 0
-let fIndex = 0
-let nIndex = 0
+  let bIndex = 0
+  let fIndex = 0
+  let nIndex = 0
 
-const takeItems = (
-  source: ListingRow[],
-  count: number,
-  indexRef: { value: number }
-) => {
-  const items: ListingRow[] = []
+  const takeItems = (
+    source: ListingRow[],
+    count: number,
+    indexRef: { value: number }
+  ) => {
+    const items: ListingRow[] = []
 
-  for (let i = 0; i < count; i++) {
-    if (indexRef.value < source.length) {
-      items.push(source[indexRef.value++])
+    for (let i = 0; i < count; i++) {
+      if (indexRef.value < source.length) {
+        items.push(source[indexRef.value++])
+      }
     }
+
+    return items
   }
 
-  return items
+  while (
+    bIndex < boostedRows.length ||
+    fIndex < followedRows.length ||
+    nIndex < normalRows.length
+  ) {
+    let boostedChunk = takeItems(boostedRows, 3, {
+      value: bIndex,
+    })
+
+    bIndex += boostedChunk.length
+
+    if (boostedChunk.length < 3) {
+      const filler = takeItems(normalRows, 3 - boostedChunk.length, {
+        value: nIndex,
+      })
+
+      nIndex += filler.length
+      boostedChunk = [...boostedChunk, ...filler]
+    }
+
+    orderedRows.push(...boostedChunk)
+
+    let followedChunk = takeItems(followedRows, 3, {
+      value: fIndex,
+    })
+
+    fIndex += followedChunk.length
+
+    if (followedChunk.length < 3) {
+      const filler = takeItems(normalRows, 3 - followedChunk.length, {
+        value: nIndex,
+      })
+
+      nIndex += filler.length
+      followedChunk = [...followedChunk, ...filler]
+    }
+
+    orderedRows.push(...followedChunk)
+
+    const normalChunk = takeItems(normalRows, 3, {
+      value: nIndex,
+    })
+
+    nIndex += normalChunk.length
+    orderedRows.push(...normalChunk)
+  }
+
+  finalRows = Array.from(
+    new Map(orderedRows.map((item) => [item.id, item])).values()
+  )
+} else {
+  finalRows = shuffle(validRows)
 }
 
-while (
-  bIndex < boostedRows.length ||
-  fIndex < followedRows.length ||
-  nIndex < normalRows.length
-) {
-  /* ---------------- BOOSTED ROW ---------------- */
-
-  let boostedChunk = takeItems(
-    boostedRows,
-    3,
-    { value: bIndex }
-  )
-
-  bIndex += boostedChunk.length
-
-  if (boostedChunk.length < 3) {
-    const filler = takeItems(
-      normalRows,
-      3 - boostedChunk.length,
-      { value: nIndex }
-    )
-
-    nIndex += filler.length
-
-    boostedChunk = [...boostedChunk, ...filler]
-  }
-
-  orderedRows.push(...boostedChunk)
-
-  /* ---------------- FOLLOWED ROW ---------------- */
-
-  let followedChunk = takeItems(
-    followedRows,
-    3,
-    { value: fIndex }
-  )
-
-  fIndex += followedChunk.length
-
-  if (followedChunk.length < 3) {
-    const filler = takeItems(
-      normalRows,
-      3 - followedChunk.length,
-      { value: nIndex }
-    )
-
-    nIndex += filler.length
-
-    followedChunk = [...followedChunk, ...filler]
-  }
-
-  orderedRows.push(...followedChunk)
-
-  /* ---------------- NORMAL ROW ---------------- */
-
-  const normalChunk = takeItems(
-    normalRows,
-    3,
-    { value: nIndex }
-  )
-
-  nIndex += normalChunk.length
-
-  orderedRows.push(...normalChunk)
-}
-
-const uniqueOrderedRows = Array.from(
-  new Map(
-    orderedRows.map((item) => [item.id, item])
-  ).values()
-)
-
-const normalizedListings: Listing[] =
-  uniqueOrderedRows.map((l) => ({
-    id: l.id,
-    title: l.title,
-    description: l.description ?? "",
-    price: Number(l.price),
-    category: l.category ?? "",
-    image_url: l.image_urls?.[0] ?? null,
-    allow_offers: false,
-    shipping_type: l.shipping_type ?? null,
-  }))
+const normalizedListings: Listing[] = finalRows.map((l) => ({
+  id: l.id,
+  title: l.title,
+  description: l.description ?? "",
+  price: Number(l.price),
+  category: l.category ?? "",
+  image_url: l.image_urls?.[0] ?? null,
+  allow_offers: false,
+  shipping_type: l.shipping_type ?? null,
+}))
 
 const uniqueListings = Array.from(
-  new Map(
-    normalizedListings.map((item) => [item.id, item])
-  ).values()
+  new Map(normalizedListings.map((item) => [item.id, item])).values()
 )
-
-
 
 if (page === 0) {
   setListings(uniqueListings)
 } else {
-  setListings((prev) =>
-    Array.from(
-      new Map(
-        [...prev, ...uniqueListings].map((item) => [item.id, item])
-      ).values()
-    )
-  )
+  setListings((prev) => {
+    const existingIds = new Set(prev.map((l) => l.id))
 
-  
+    const onlyNew = uniqueListings.filter(
+      (l) => !existingIds.has(l.id)
+    )
+
+    return [...prev, ...onlyNew]
+  })
 }
-      }
     } catch (err) {
       handleAppError(err, {
         fallbackMessage:
@@ -638,7 +639,6 @@ onMessagesPress={() =>
     )}
 
     <ListingsGrid
-  key={`${activeCategory}-${search}`}
   listings={filteredListings}
   refreshing={refreshing}
   onRefresh={refreshListings}

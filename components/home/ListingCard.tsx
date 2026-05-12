@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons"
-import { ResizeMode, Video } from "expo-av"
 import { Image } from "expo-image"
+import React from "react"
 import {
   StyleSheet,
   Text,
@@ -27,23 +27,16 @@ type Props = {
   mode?: "buyer" | "seller"
   onEdit?: () => void
   onPress?: () => void
-  isMegaBoost?: boolean
-  megaHero?: boolean
 }
 
-export default function ListingCard({
+function ListingCard({
   listing,
   mode = "buyer",
   onEdit,
   onPress,
-  isMegaBoost = false,
-  megaHero = false,
 }: Props) {
-
   const showFreeShipping =
     listing.shipping_type === "seller_pays"
-
-  const isHero = isMegaBoost || megaHero
 
   const imageUri =
     listing.image_url && listing.image_url.trim() !== ""
@@ -52,67 +45,27 @@ export default function ListingCard({
 
   return (
     <TouchableOpacity
-      style={[
-        styles.card,
-        isHero && styles.heroCard,
-      ]}
+      style={styles.card}
       onPress={onPress}
       activeOpacity={0.85}
     >
       {/* IMAGE WRAP */}
-<View
-  style={[
-    styles.imageWrap,
-    isMegaBoost && styles.megaGlowWrap,
-  ]}
->
-  {isMegaBoost && listing.video_url ? (
-    <Video
-      source={{ uri: listing.video_url }}
-      style={styles.image}
-      resizeMode={ResizeMode.COVER}
-      shouldPlay
-      isLooping
-      isMuted
-    />
-  ) : imageUri ? (
-    <Image
-      source={imageUri}
-      style={styles.image}
-      contentFit="cover"
-      cachePolicy="memory-disk"
-      transition={100}
-      onError={(e) => {
-      }}
-      onLoad={() => {
-      }}
-    />
-  ) : (
-    <View style={styles.placeholder}>
-      <Ionicons
-        name="image-outline"
-        size={22}
-        color="#9FB8AC"
-      />
-    </View>
-  )}
-
-        {/* MEGA BOOST BADGE */}
-        {isMegaBoost && (
-          <View
-            style={[
-              styles.megaBoostBadge,
-              isHero && styles.megaBoostBadgeHero,
-            ]}
-          >
-            <Text
-              style={[
-                styles.megaBoostText,
-                isHero && styles.megaBoostTextHero,
-              ]}
-            >
-              Mega Boosted
-            </Text>
+      <View style={styles.imageWrap}>
+        {imageUri ? (
+          <Image
+            source={imageUri}
+            style={styles.image}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            transition={100}
+          />
+        ) : (
+          <View style={styles.placeholder}>
+            <Ionicons
+              name="image-outline"
+              size={22}
+              color="#9FB8AC"
+            />
           </View>
         )}
 
@@ -133,12 +86,16 @@ export default function ListingCard({
               onPress={onEdit}
               activeOpacity={0.8}
             >
-              <Text style={styles.actionText}>Edit</Text>
+              <Text style={styles.actionText}>
+                Edit
+              </Text>
             </TouchableOpacity>
 
             {listing.allow_offers && (
               <View style={styles.offerBadge}>
-                <Text style={styles.offerText}>Offers</Text>
+                <Text style={styles.offerText}>
+                  Offers
+                </Text>
               </View>
             )}
           </View>
@@ -146,36 +103,24 @@ export default function ListingCard({
       </View>
 
       {/* TEXT BELOW IMAGE */}
-      <View
-  style={[
-    styles.meta,
-    isHero && styles.metaHero,
-    isHero && styles.metaOverlay, // 👈 ADD THIS
-  ]}
->
+      <View style={styles.meta}>
         <Text
-          style={[
-            styles.title,
-            isHero && styles.titleHero,
-          ]}
+          style={styles.title}
           numberOfLines={2}
           ellipsizeMode="tail"
         >
           {listing.title?.trim()}
         </Text>
 
-        <Text
-          style={[
-            styles.price,
-            isHero && styles.priceHero,
-          ]}
-        >
+        <Text style={styles.price}>
           ${listing.price}
         </Text>
       </View>
     </TouchableOpacity>
   )
 }
+
+export default React.memo(ListingCard)
 
 const styles = StyleSheet.create({
   card: {
@@ -185,18 +130,13 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     transform: [{ scale: 0.97 }],
     margin: 0,
+
     shadowColor: "#000",
     shadowOpacity: 0.05,
     shadowRadius: 5,
     shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  },
 
-  heroCard: {
-    transform: [{ scale: 1 }],
-    shadowOpacity: 0.12,
-    shadowRadius: 10,
-    elevation: 6,
+    elevation: 2,
   },
 
   imageWrap: {
@@ -216,60 +156,18 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
-  megaGlowWrap: {
-    borderWidth: 2,
-    borderColor: "#E6C200",
-    shadowColor: "#E6C200",
-    shadowOpacity: 0.35,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 8,
-  },
-
-  megaBoostBadge: {
-    position: "absolute",
-    top: 6,
-    right: 6,
-    backgroundColor: "rgba(0,0,0,0.65)",
-    borderRadius: 8,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderWidth: 1,
-    borderColor: "#E6C200",
-  },
-
-  megaBoostBadgeHero: {
-    top: 8,
-    right: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 10,
-    shadowColor: "#E6C200",
-    shadowOpacity: 0.7,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 0 },
-  },
-
-  megaBoostText: {
-    fontSize: 9,
-    fontWeight: "900",
-    color: "#FFD700",
-    letterSpacing: 0.3,
-  },
-
-  megaBoostTextHero: {
-    fontSize: 12,
-    letterSpacing: 0.5,
-  },
-
   freeShipBadge: {
     position: "absolute",
     top: 6,
     left: 6,
+
     backgroundColor: "#FFFFFF",
+
     borderRadius: 8,
+
     paddingHorizontal: 6,
     paddingVertical: 2,
+
     borderWidth: 1,
     borderColor: "#EB5757",
   },
@@ -291,8 +189,10 @@ const styles = StyleSheet.create({
 
   actionBtn: {
     backgroundColor: "rgba(0,0,0,0.6)",
+
     paddingHorizontal: 8,
     paddingVertical: 4,
+
     borderRadius: 6,
   },
 
@@ -304,8 +204,10 @@ const styles = StyleSheet.create({
 
   offerBadge: {
     backgroundColor: "#7FAF9B",
+
     paddingHorizontal: 6,
     paddingVertical: 3,
+
     borderRadius: 6,
   },
 
@@ -320,41 +222,15 @@ const styles = StyleSheet.create({
     gap: 4,
   },
 
-  metaHero: {
-    padding: 12,
-    gap: 6,
-  },
-
   title: {
     fontSize: 12,
     fontWeight: "700",
     color: "#0F1E17",
   },
 
-  titleHero: {
-  fontSize: 16,
-  fontWeight: "800",
-  color: "#fff", // 👈 change this
-},
-
   price: {
     fontSize: 13,
     fontWeight: "900",
-    color: "#0F1E17",
+    color: "#D97732",
   },
-
-  priceHero: {
-  fontSize: 18,
-  fontWeight: "900",
-  color: "#D97732", // Melo orange
-},
-
-  metaOverlay: {
-  position: "absolute",
-  bottom: 0,
-  left: 0,
-  width: "100%",
-  backgroundColor: "rgba(0,0,0,0.55)",
-  padding: 14,
-},
 })

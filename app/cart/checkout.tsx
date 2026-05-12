@@ -512,54 +512,86 @@ for (const item of cart) {
     itemPriceCents + shippingCents
 
   const { data: order, error } =
-    await supabase
-      .from("orders")
-      .insert({
-        buyer_id: session.user.id,
-        seller_id: item.seller_id,
-        listing_id: item.listing_id,
+  await supabase
+    .from("orders")
+    .insert({
+      buyer_id: session.user.id,
+      seller_id: item.seller_id,
+      listing_id: item.listing_id,
 
-        status: "pending_payment",
+      status: "pending_payment",
+
+      quantity: item.quantity,
+      size: item.size ?? null,
+
+      image_url: item.image_url,
+
+      amount_cents: escrowCents,
+      currency: "usd",
+
+      item_price_cents: itemPriceCents,
+      shipping_amount_cents: shippingCents,
+
+      buyer_fee_cents: buyerFeeCents,
+      tax_cents: taxCents,
+
+      escrow_amount_cents:
+        escrowCents,
+
+      /* ---------------- SHIPPING SNAPSHOT ---------------- */
+
+      shipping_name:
+        name.trim(),
+
+      shipping_line1:
+        line1.trim(),
+
+      shipping_line2:
+        line2.trim() || null,
+
+      shipping_city:
+        city.trim(),
+
+      shipping_state:
+        state.trim(),
+
+      shipping_postal_code:
+        postal.trim(),
+
+      shipping_country: "US",
+
+      shipping_phone:
+        phone.trim() || null,
+
+      /* ---------------- LISTING SNAPSHOT ---------------- */
+
+      listing_snapshot: {
+        title: item.title,
+        image_url: item.image_url,
+        price: item.price,
 
         quantity: item.quantity,
         size: item.size ?? null,
 
-        image_url: item.image_url,
+        category:
+          item.category ?? null,
 
-        amount_cents: escrowCents,
-        currency: "usd",
+        subcategory:
+          item.subcategory ?? null,
 
-        item_price_cents: itemPriceCents,
-        shipping_amount_cents: shippingCents,
+        shipping_type:
+          item.shipping_type,
 
-        buyer_fee_cents: 0,
-        tax_cents: 0,
-        escrow_amount_cents: escrowCents,
+        sku: item.sku ?? null,
 
-       listing_snapshot: {
-  title: item.title,
-  image_url: item.image_url,
-  price: item.price,
-
-  quantity: item.quantity,
-  size: item.size ?? null,
-
-  category: item.category ?? null,
-  subcategory: item.subcategory ?? null,
-
-  shipping_type: item.shipping_type,
-
-  // 🔥 NEW
-  sku: item.sku ?? null,
-
-  // 🔥 future-safe structure
-  metadata: {
-    captured_at: new Date().toISOString(),
-  },
-},
-      })
-      .select("id")
-      .single()
+        metadata: {
+          captured_at:
+            new Date().toISOString(),
+        },
+      },
+    })
+    .select("id")
+    .single()
 
   if (error || !order) {
     console.error("❌ Order insert failed:", error)
