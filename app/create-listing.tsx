@@ -99,6 +99,7 @@ const SIZE_MAP: Record<string, string[]> = {
   bottoms: ["30x30", "32x30", "32x32", "34x32", "36x32"],
   dresses: ["0", "2", "4", "6", "8", "10"],
   shoes: ["7", "8", "9", "10", "11", "12"],
+  accessories: ["ONE SIZE"],
 }
 
 
@@ -126,9 +127,14 @@ useEffect(() => {
   const baseSizes = SIZE_MAP[subcategory]
 
   if (!baseSizes) {
-    setSizes([])
-    return
-  }
+  setSizes([
+    {
+      size: "",
+      qty: "",
+    },
+  ])
+  return
+}
 
   setSizes(
     baseSizes.map((size) => ({

@@ -208,16 +208,17 @@ export default function EditAccountScreen() {
             </Text>
 
             <TextInput
-              value={
-                currentPassword
-              }
-              onChangeText={
-                setCurrentPassword
-              }
-              secureTextEntry
-              placeholder="Current Password"
-              style={styles.input}
-            />
+  value={
+    currentPassword
+  }
+  onChangeText={
+    setCurrentPassword
+  }
+  secureTextEntry
+  placeholder="Current Password"
+  placeholderTextColor="#000000"
+  style={styles.input}
+/>
           </View>
 
           <View style={styles.card}>
@@ -228,26 +229,28 @@ export default function EditAccountScreen() {
             </Text>
 
             <TextInput
-              value={newEmail}
-              onChangeText={
-                setNewEmail
-              }
-              placeholder="New Email"
-              autoCapitalize="none"
-              keyboardType="email-address"
-              style={styles.input}
-            />
+  value={newEmail}
+  onChangeText={
+    setNewEmail
+  }
+  placeholder="New Email"
+  placeholderTextColor="#000000"
+  autoCapitalize="none"
+  keyboardType="email-address"
+  style={styles.input}
+/>
 
             <TextInput
-              value={confirmEmail}
-              onChangeText={
-                setConfirmEmail
-              }
-              placeholder="Confirm New Email"
-              autoCapitalize="none"
-              keyboardType="email-address"
-              style={styles.input}
-            />
+  value={confirmEmail}
+  onChangeText={
+    setConfirmEmail
+  }
+  placeholder="Confirm New Email"
+  placeholderTextColor="#000000"
+  autoCapitalize="none"
+  keyboardType="email-address"
+  style={styles.input}
+/>
           </View>
 
           <View style={styles.card}>
@@ -258,26 +261,28 @@ export default function EditAccountScreen() {
             </Text>
 
             <TextInput
-              value={newPassword}
-              onChangeText={
-                setNewPassword
-              }
-              placeholder="New Password"
-              secureTextEntry
-              style={styles.input}
-            />
+  value={newPassword}
+  onChangeText={
+    setNewPassword
+  }
+  placeholder="New Password"
+  placeholderTextColor="#000000"
+  secureTextEntry
+  style={styles.input}
+/>
 
             <TextInput
-              value={
-                confirmPassword
-              }
-              onChangeText={
-                setConfirmPassword
-              }
-              placeholder="Confirm New Password"
-              secureTextEntry
-              style={styles.input}
-            />
+  value={
+    confirmPassword
+  }
+  onChangeText={
+    setConfirmPassword
+  }
+  placeholder="Confirm New Password"
+  placeholderTextColor="#000000"
+  secureTextEntry
+  style={styles.input}
+/>
           </View>
 
           <TouchableOpacity
@@ -339,16 +344,16 @@ const styles =
     },
 
     input: {
-      backgroundColor:
-        "#F9FAFB",
-      borderWidth: 1,
-      borderColor: "#E5E7EB",
-      borderRadius: 14,
-      paddingHorizontal: 14,
-      paddingVertical: 14,
-      fontSize: 14,
-      marginBottom: 12,
-    },
+  backgroundColor: "#F9FAFB",
+  borderWidth: 1,
+  borderColor: "#E5E7EB",
+  borderRadius: 14,
+  paddingHorizontal: 14,
+  paddingVertical: 14,
+  fontSize: 14,
+  marginBottom: 12,
+  color: "#000000",
+},
 
     saveBtn: {
       backgroundColor:

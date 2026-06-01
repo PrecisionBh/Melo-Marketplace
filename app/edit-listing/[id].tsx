@@ -135,6 +135,7 @@ const SIZE_MAP: Record<string, string[]> = {
   bottoms: ["30x30", "32x30", "32x32", "34x32", "36x32"],
   dresses: ["0", "2", "4", "6", "8", "10"],
   shoes: ["7", "8", "9", "10", "11", "12"],
+  accessories: ["ONE SIZE"]
 }
 
 export default function EditListingScreen() {
@@ -171,20 +172,31 @@ useEffect(() => {
 
   const baseSizes = SIZE_MAP[subcategory]
 
+  // 🔥 EXISTING SAVED SIZES
+  const existingSizesMap = new Map(
+    sizes.map((s) => [s.size, s.qty])
+  )
+
+  // 🔥 NO PRESET SIZES (ACCESSORIES ETC)
   if (!baseSizes) {
-    setSizes([])
+    if (sizes.length === 0) {
+      setSizes([
+        {
+          size: "ONE SIZE",
+          qty: "",
+        },
+      ])
+    }
+
     return
   }
 
-  setSizes((prev) =>
-    baseSizes.map((size) => {
-      const existing = prev.find((s) => s.size === size)
-
-      return {
-        size,
-        qty: existing?.qty ?? "",
-      }
-    })
+  // 🔥 MERGE PRESET + EXISTING
+  setSizes(
+    baseSizes.map((size) => ({
+      size,
+      qty: existingSizesMap.get(size) ?? "",
+    }))
   )
 }, [subcategory])
 

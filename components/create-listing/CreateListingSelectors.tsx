@@ -117,6 +117,20 @@ export default function CreateListingSelectors({
         />
       )}
 
+       {category === "clothing_apparel" && !subcategory && (
+  <Text
+    style={{
+      fontSize: 12,
+      color: "#D97732",
+      marginTop: -4,
+      marginLeft: 4,
+      fontWeight: "600",
+    }}
+  >
+    Select a clothing type to add sizes
+  </Text>
+)}
+
       <SelectorField
         label="Condition"
         value={formatCondition(condition)}
@@ -126,7 +140,7 @@ export default function CreateListingSelectors({
 
       {category === "clothing_apparel" &&
         subcategory &&
-        sizes.length > 0 && (
+        sizes && (
           <View style={styles.section}>
             <Text style={styles.label}>Sizes & Quantity *</Text>
 
@@ -226,12 +240,6 @@ export default function CreateListingSelectors({
 </View>
           </View>
         )}
-
-      {!isPro && (
-        <Text style={styles.lockedText}>
-          Quantity controlled per size
-        </Text>
-      )}
     </View>
   )
 }
@@ -335,11 +343,6 @@ const styles = StyleSheet.create({
   helper: {
     fontSize: 12,
     color: "#666",
-    marginTop: 6,
-  },
-  lockedText: {
-    fontSize: 12,
-    color: "#888",
     marginTop: 6,
   },
 })
