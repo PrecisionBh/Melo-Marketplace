@@ -165,7 +165,7 @@ export default function RegisterScreen() {
 
         <TextInput
           placeholder="Email"
-          placeholderTextColor="#9CA3AF"
+          placeholderTextColor="#000000"
           value={email}
           onChangeText={setEmail}
           style={styles.input}
@@ -184,7 +184,7 @@ export default function RegisterScreen() {
         <View style={styles.passwordWrapper}>
           <TextInput
             placeholder="Password (min 7 characters)"
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor="#000000"
             value={password}
             onChangeText={setPassword}
             secureTextEntry={!showPassword}
@@ -206,7 +206,7 @@ export default function RegisterScreen() {
         <View style={styles.passwordWrapper}>
           <TextInput
             placeholder="Confirm Password"
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor="#000000"
             value={confirmPassword}
             onChangeText={setConfirmPassword}
             secureTextEntry={!showConfirmPassword}

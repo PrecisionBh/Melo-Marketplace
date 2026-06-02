@@ -15,7 +15,7 @@ import { Video as VideoCompressor } from "react-native-compressor"
 import GlobalFooter from "@/components/global/globalfooter"
 import GlobalHeader from "@/components/global/globalheader"
 
-import ReturnAddressRequiredModal from "@/components/modals/ReturnAddressRequiredModal"
+import SellerSetupChecklistModal from "@/components/create-listing/SellerSetupChecklistModal"
 
 import { useAuth } from "@/context/AuthContext"
 import { handleAppError } from "@/lib/errors/appError"
@@ -37,6 +37,8 @@ import {
 
 type ProfileRow = {
   boosts_remaining: number | null
+  stripe_account_id: string | null
+  stripe_onboarding_complete: boolean | null
 }
 
 type SelectorOption = {
@@ -209,8 +211,15 @@ const [height, setHeight] = useState("")
   const [submitting, setSubmitting] = useState(false)
 
   const [checkingAddress, setCheckingAddress] = useState(true)
-  const [hasReturnAddress, setHasReturnAddress] = useState(false)
-  const [showAddressModal, setShowAddressModal] = useState(false)
+
+const [hasReturnAddress, setHasReturnAddress] =
+  useState(false)
+
+const [hasPayoutMethod, setHasPayoutMethod] =
+  useState(false)
+
+const [showSellerSetupModal, setShowSellerSetupModal] =
+  useState(false)
   const { duplicate, data } = useLocalSearchParams()
 
   useEffect(() => {
@@ -458,8 +467,12 @@ const runAI = async (localUri: string) => {
 
 const handleCreateListing = async () => {
   if (!session?.user) return
-  if (!hasReturnAddress) {
-  setShowAddressModal(true)
+
+if (
+  !hasReturnAddress ||
+  !hasPayoutMethod
+) {
+  setShowSellerSetupModal(true)
   return
 }
   if (submitting) return
@@ -728,11 +741,14 @@ const hasAddress =
   !!profileAddress?.postal_code
 
 setHasReturnAddress(hasAddress)
-setShowAddressModal(!hasAddress)
 
 const { data: profile, error: profileError } = await supabase
   .from("profiles")
-  .select("boosts_remaining")
+  .select(`
+  boosts_remaining,
+  stripe_account_id,
+  stripe_onboarding_complete
+`)
   .eq("id", session.user.id)
   .single<ProfileRow>()
 
@@ -741,6 +757,11 @@ if (profileError) {
 }
 
 setBoostsRemaining(profile?.boosts_remaining ?? 0)
+const payoutReady =
+  !!profile?.stripe_account_id &&
+  profile?.stripe_onboarding_complete === true
+
+setHasPayoutMethod(payoutReady)
     } finally {
       setCheckingAddress(false)
     }
@@ -776,9 +797,7 @@ return (
     {/* 🔥 ALWAYS MOUNT SCROLLVIEW */}
     <ScrollView contentContainerStyle={styles.content}>
       
-      {!hasReturnAddress ? (
-        <Text>Checking address...</Text>
-      ) : (
+      {(
         <>
 
           <ImageUpload
@@ -924,10 +943,14 @@ return (
     onClose={() => setShowSubcategoryModal(false)}
   />
 
-  <ReturnAddressRequiredModal
-    visible={showAddressModal}
-    onClose={() => setShowAddressModal(false)}
-  />
+  <SellerSetupChecklistModal
+  visible={showSellerSetupModal}
+  hasAddress={hasReturnAddress}
+  hasPayoutMethod={hasPayoutMethod}
+  onClose={() =>
+    setShowSellerSetupModal(false)
+  }
+/>
 </View>
 )
 }

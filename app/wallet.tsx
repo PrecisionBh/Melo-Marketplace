@@ -5,7 +5,13 @@ import { handleAppError } from "@/lib/errors/appError"
 import { supabase } from "@/lib/supabase"
 import { Ionicons } from "@expo/vector-icons"
 import * as Linking from "expo-linking"
-import { useEffect, useState } from "react"
+import {
+  useCallback,
+  useEffect,
+  useState,
+} from "react"
+
+import { useFocusEffect } from "@react-navigation/native"
 import {
   ActivityIndicator,
   Alert,
@@ -76,6 +82,14 @@ export default function WalletScreen() {
   useEffect(() => {
     if (userId) loadData()
   }, [userId])
+
+useFocusEffect(
+  useCallback(() => {
+    if (userId) {
+      loadData()
+    }
+  }, [userId])
+)
 
   const loadData = async () => {
     try {
@@ -333,16 +347,21 @@ export default function WalletScreen() {
               Withdraw Funds
             </Text>
 
-            {!profile?.stripe_account_id ? (
-              <TouchableOpacity
-                style={styles.primaryBtn}
-                onPress={handlePayoutSetup}
-              >
-                <Text style={styles.primaryBtnText}>
-                  Set Up Payout Method
-                </Text>
-              </TouchableOpacity>
-            ) : (
+            {!(
+  profile?.stripe_account_id &&
+  profile?.stripe_onboarding_complete
+) ? (
+  <TouchableOpacity
+    style={styles.primaryBtn}
+    onPress={handlePayoutSetup}
+  >
+    <Text style={styles.primaryBtnText}>
+      {profile?.stripe_account_id
+        ? "Complete Payout Setup"
+        : "Set Up Payout Method"}
+    </Text>
+  </TouchableOpacity>
+) : (
               <>
                 <TextInput
                   value={formattedAmount}
