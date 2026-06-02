@@ -14,13 +14,20 @@ console.log("🔐 ENV CHECK:", {
   hasServiceKey: !!SUPABASE_SERVICE_ROLE_KEY,
 })
 
-if (!STRIPE_SECRET_KEY || !SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+if (
+  !STRIPE_SECRET_KEY ||
+  !SUPABASE_URL ||
+  !SUPABASE_SERVICE_ROLE_KEY
+) {
   throw new Error("Missing env vars")
 }
 
-const stripe = new Stripe(STRIPE_SECRET_KEY, {
-  apiVersion: "2023-10-16",
-})
+const stripe = new Stripe(
+  STRIPE_SECRET_KEY,
+  {
+    apiVersion: "2023-10-16",
+  }
+)
 
 const supabase = createClient(
   SUPABASE_URL,
@@ -35,126 +42,258 @@ serve(
     })
 
     if (req.method !== "POST") {
-      console.log("❌ INVALID METHOD:", req.method)
-      return new Response("Method Not Allowed", { status: 405 })
+      return new Response(
+        "Method Not Allowed",
+        { status: 405 }
+      )
     }
 
     try {
-      const body = await req.json()
-      console.log("📦 REQUEST BODY:", body)
+      const body =
+        await req.json()
 
-      const { user_id, email } = body
+      console.log(
+        "📦 REQUEST BODY:",
+        body
+      )
 
-      if (!user_id || !email) {
+      const {
+        user_id,
+        email,
+      } = body
+
+      if (
+        !user_id ||
+        !email
+      ) {
         return new Response(
-          JSON.stringify({ error: "Missing user_id or email" }),
-          { status: 400, headers: { "Content-Type": "application/json" } }
+          JSON.stringify({
+            error:
+              "Missing user_id or email",
+          }),
+          {
+            status: 400,
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+          }
         )
       }
 
-      // 1️⃣ Fetch profile
-      const { data: profile, error } = await supabase
+      // Fetch profile
+
+      const {
+        data: profile,
+        error,
+      } = await supabase
         .from("profiles")
-        .select("stripe_account_id")
-        .eq("id", user_id)
+        .select(
+          "stripe_account_id"
+        )
+        .eq(
+          "id",
+          user_id
+        )
         .single()
 
       if (error) throw error
 
-      let stripeAccountId = profile?.stripe_account_id
+      let stripeAccountId =
+        profile?.stripe_account_id
+
       let account: any
 
-      console.log("🏦 EXISTING ACCOUNT:", stripeAccountId)
+      console.log(
+        "🏦 EXISTING ACCOUNT:",
+        stripeAccountId
+      )
 
-      // 2️⃣ CREATE if none exists
+      // Create account if needed
+
       if (!stripeAccountId) {
-        console.log("🆕 CREATING NEW STRIPE ACCOUNT")
+        console.log(
+          "🆕 CREATING STRIPE ACCOUNT"
+        )
 
-        account = await stripe.accounts.create({
-          type: "express",
-          email,
+        account =
+          await stripe.accounts.create(
+            {
+              type: "express",
 
-          capabilities: {
-            card_payments: { requested: true },
-            transfers: { requested: true },
-          },
+              email,
 
-          settings: {
-            payouts: {
-              schedule: { interval: "manual" },
-            },
-          },
-        })
+              capabilities: {
+                card_payments: {
+                  requested: true,
+                },
 
-        stripeAccountId = account.id
+                transfers: {
+                  requested: true,
+                },
+              },
+
+              settings: {
+                payouts: {
+                  schedule: {
+                    interval:
+                      "manual",
+                  },
+                },
+              },
+            }
+          )
+
+        stripeAccountId =
+          account.id
 
         await supabase
           .from("profiles")
-          .update({ stripe_account_id: stripeAccountId })
-          .eq("id", user_id)
-
-        console.log("✅ ACCOUNT CREATED:", stripeAccountId)
-      } else {
-        console.log("♻️ CHECKING EXISTING ACCOUNT")
-
-        account = await stripe.accounts.retrieve(stripeAccountId)
-
-        // 🚨 CRITICAL FIX
-        if (!account.details_submitted) {
-          console.log("⚠️ ACCOUNT INCOMPLETE → RECREATING")
-
-          const newAccount = await stripe.accounts.create({
-            type: "express",
-            email,
-
-            capabilities: {
-              card_payments: { requested: true },
-              transfers: { requested: true },
-            },
-
-            settings: {
-              payouts: {
-                schedule: { interval: "manual" },
-              },
-            },
+          .update({
+            stripe_account_id:
+              stripeAccountId,
           })
+          .eq(
+            "id",
+            user_id
+          )
 
-          stripeAccountId = newAccount.id
+        console.log(
+          "✅ ACCOUNT CREATED:",
+          stripeAccountId
+        )
+      } else {
+        console.log(
+          "♻️ USING EXISTING ACCOUNT"
+        )
 
-          await supabase
-            .from("profiles")
-            .update({ stripe_account_id: stripeAccountId })
-            .eq("id", user_id)
-
-          console.log("✅ NEW ACCOUNT CREATED:", stripeAccountId)
-        }
+        account =
+          await stripe.accounts.retrieve(
+            stripeAccountId
+          )
       }
 
-      // 3️⃣ Create onboarding link
-      const accountLink = await stripe.accountLinks.create({
-        account: stripeAccountId,
-        return_url: "https://melomp-redirect.vercel.app",
-        refresh_url: "https://melomp-redirect.vercel.app",
-        type: "account_onboarding",
-      })
+      // Refresh account data
 
-      console.log("🎉 ONBOARDING LINK:", accountLink.url)
+      account =
+        await stripe.accounts.retrieve(
+          stripeAccountId
+        )
+
+      const onboardingComplete =
+        account.details_submitted &&
+        account.charges_enabled &&
+        account.payouts_enabled
+
+      console.log(
+        "📊 ACCOUNT STATUS",
+        {
+          details_submitted:
+            account.details_submitted,
+
+          charges_enabled:
+            account.charges_enabled,
+
+          payouts_enabled:
+            account.payouts_enabled,
+
+          onboardingComplete,
+        }
+      )
+
+      // Save Stripe status to profile
+
+      // Save Stripe status to profile
+
+await supabase
+  .from("profiles")
+  .update({
+    stripe_onboarded:
+      account.details_submitted,
+
+    stripe_onboarding_complete:
+      account.details_submitted &&
+      account.charges_enabled &&
+      account.payouts_enabled,
+  })
+  .eq(
+    "id",
+    user_id
+  )
+
+      // Generate onboarding link
+
+      const accountLink =
+        await stripe.accountLinks.create(
+          {
+            account:
+              stripeAccountId,
+
+            return_url:
+              "https://melomp-redirect.vercel.app",
+
+            refresh_url:
+              "https://melomp-redirect.vercel.app",
+
+            type:
+              "account_onboarding",
+          }
+        )
+
+      console.log(
+        "🎉 ACCOUNT LINK CREATED"
+      )
 
       return new Response(
         JSON.stringify({
-          url: accountLink.url,
-          stripe_account_id: stripeAccountId,
+          url:
+            accountLink.url,
+
+          stripe_account_id:
+            stripeAccountId,
+
+          onboarding_complete:
+            onboardingComplete,
+
+          details_submitted:
+            account.details_submitted,
+
+          charges_enabled:
+            account.charges_enabled,
+
+          payouts_enabled:
+            account.payouts_enabled,
         }),
-        { status: 200, headers: { "Content-Type": "application/json" } }
+        {
+          status: 200,
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+        }
       )
     } catch (err: any) {
-      console.error("💥 FUNCTION CRASH:", err)
+      console.error(
+        "💥 FUNCTION CRASH:",
+        err
+      )
 
       return new Response(
-        JSON.stringify({ error: err.message }),
-        { status: 500, headers: { "Content-Type": "application/json" } }
+        JSON.stringify({
+          error:
+            err.message,
+        }),
+        {
+          status: 500,
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+        }
       )
     }
   },
-  { verifyJwt: false }
+  {
+    verifyJwt: false,
+  }
 )
